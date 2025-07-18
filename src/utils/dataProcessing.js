@@ -1,5 +1,17 @@
 import { MATERIAL_TYPES, STANDARD_LENGTHS, MATERIALS } from '../constants/materials';
 
+// Helper function to calculate the cost of a single sheet based on its properties
+const calculateSheetCost = (item) => {
+    const material = MATERIALS[item.materialType];
+    if (!material || !item.costPerPound || item.costPerPound <= 0) return 0;
+    // Assume standard width if not specified, for calculation purposes
+    const width = item.width || 48;
+    const weight = (width * item.length * material.thickness * material.density);
+    return weight * item.costPerPound;
+};
+
+
+// --- Existing Functions (Unchanged) ---
 export const getGaugeFromMaterial = (materialType) => {
     const match = materialType.match(/^(\d{2}GA)/);
     if (match) return match[1].replace('GA', '');
@@ -88,12 +100,7 @@ export const calculateMaterialTransactions = (materialsInCategory, inventory, us
     return allTransactions;
 };
 
-const calculateSheetCost = (item) => {
-    const material = MATERIALS[item.materialType];
-    if (!material || !item.costPerPound) return 0;
-    const weight = (item.width * item.length * material.thickness * material.density);
-    return weight * item.costPerPound;
-};
+// --- UPDATED & NEW ANALYTICS FUNCTIONS ---
 
 export const calculateCostBySupplier = (inventory) => {
     const costMap = {};
@@ -106,12 +113,39 @@ export const calculateCostBySupplier = (inventory) => {
     return Object.entries(costMap).map(([name, value]) => ({ name, value }));
 };
 
-export const calculateQuantityByMaterial = (inventory) => {
-    const quantityMap = {};
+// NEW function to group material quantity AND cost by category
+export const calculateAnalyticsByCategory = (inventory) => {
+    const categoryMap = {};
+
+    // First, aggregate quantity and cost for each material type
+    const materialMap = {};
     inventory.forEach(item => {
-        if (item.materialType) {
-            quantityMap[item.materialType] = (quantityMap[item.materialType] || 0) + 1;
+        if (!materialMap[item.materialType]) {
+            materialMap[item.materialType] = {
+                quantity: 0,
+                cost: 0,
+                // Get the category from the main constants file
+                category: MATERIALS[item.materialType]?.category,
+            };
+        }
+        materialMap[item.materialType].quantity += 1;
+        materialMap[item.materialType].cost += calculateSheetCost(item);
+    });
+
+    // Now, group the aggregated materials by their category
+    Object.entries(materialMap).forEach(([materialName, data]) => {
+        const { category, quantity, cost } = data;
+        if (category) {
+            if (!categoryMap[category]) {
+                categoryMap[category] = [];
+            }
+            categoryMap[category].push({
+                name: materialName,
+                quantity,
+                cost,
+            });
         }
     });
-    return Object.entries(quantityMap).map(([name, quantity]) => ({ name, quantity }));
+
+    return categoryMap;
 };

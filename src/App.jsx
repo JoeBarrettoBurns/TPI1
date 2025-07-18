@@ -6,8 +6,8 @@ import {
     calculateInventorySummary,
     calculateIncomingSummary,
     getGaugeFromMaterial,
-    calculateCostBySupplier,      // <-- Import new function
-    calculateQuantityByMaterial   // <-- Import new function
+    calculateCostBySupplier,
+    calculateAnalyticsByCategory
 } from './utils/dataProcessing';
 import { MATERIALS, CATEGORIES, STANDARD_LENGTHS } from './constants/materials';
 
@@ -21,12 +21,13 @@ import { ErrorMessage } from './components/common/ErrorMessage';
 import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
-import { CostAnalyticsView } from './views/CostAnalyticsView'; // <-- Import new view
+import { CostAnalyticsView } from './views/CostAnalyticsView';
 
 // Modals
 import { AddOrderModal } from './components/modals/AddOrderModal';
 import { UseStockModal } from './components/modals/UseStockModal';
 import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
+
 
 export default function App() {
     const { inventory, usageLog, loading, error, userId } = useFirestoreData();
@@ -35,37 +36,82 @@ export default function App() {
     const [isEditMode, setIsEditMode] = useState(false);
     const [scrollToMaterial, setScrollToMaterial] = useState(null);
 
-    // Add Recharts script dynamically to the head
-    useEffect(() => {
-        const script = document.createElement('script');
-        script.src = "https://unpkg.com/recharts/umd/Recharts.min.js";
-        script.async = true;
-        document.body.appendChild(script);
-        return () => {
-            document.body.removeChild(script);
-        }
-    }, []);
-
     // Memoize all data calculations
     const inventorySummary = useMemo(() => calculateInventorySummary(inventory), [inventory]);
     const incomingSummary = useMemo(() => calculateIncomingSummary(inventory), [inventory]);
     const costBySupplier = useMemo(() => calculateCostBySupplier(inventory), [inventory]);
-    const quantityByMaterial = useMemo(() => calculateQuantityByMaterial(inventory), [inventory]);
+    const analyticsByCategory = useMemo(() => calculateAnalyticsByCategory(inventory), [inventory]);
 
     const closeModal = () => setModal({ type: null, data: null });
 
-    // --- Core Data Writing Functions (unchanged) ---
+    // --- Core Data Writing Functions ---
+
     const handleAddOrEditOrder = async (jobs, originalOrderGroup = null) => {
-        // ... function logic
+        const isEditing = !!originalOrderGroup;
+        await runTransaction(db, async (transaction) => {
+            if (isEditing) {
+                originalOrderGroup.details.forEach(item => {
+                    const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
+                    transaction.delete(docRef);
+                });
+            }
+
+            const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+            jobs.forEach(job => {
+                const jobName = job.jobName.trim() || null;
+                job.items.forEach(item => {
+                    const arrivalDateString = job.arrivalDate;
+                    const localDate = arrivalDateString ? new Date(`${arrivalDateString}T00:00:00`) : null;
+
+                    const stockData = {
+                        materialType: item.materialType,
+                        gauge: getGaugeFromMaterial(item.materialType),
+                        supplier: job.supplier,
+                        costPerPound: parseFloat(item.costPerPound || 0),
+                        // FIX: Check for both possible date property names to prevent 'undefined' error
+                        createdAt: isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : new Date().toISOString(),
+                        job: jobName,
+                        status: job.status,
+                        arrivalDate: job.status === 'Ordered' && localDate ? localDate.toISOString() : null,
+                        dateReceived: null,
+                    };
+
+                    STANDARD_LENGTHS.forEach(len => {
+                        const qty = parseInt(item[`qty${len}`] || 0);
+                        for (let i = 0; i < qty; i++) {
+                            const newDocRef = doc(inventoryCollectionRef);
+                            transaction.set(newDocRef, { ...stockData, width: 48, length: len });
+                        }
+                    });
+                });
+            });
+        });
     };
+
     const handleDeleteInventoryGroup = async (group) => {
-        // ... function logic
+        if (!group?.details?.length) return;
+        const batch = writeBatch(db);
+        group.details.forEach(item => {
+            const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
+            batch.delete(docRef);
+        });
+        await batch.commit();
     };
+
     const handleDeleteLog = async (logId) => {
-        // ... function logic
+        const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logId);
+        await deleteDoc(logDocRef);
     };
+
     const handleReceiveOrder = async (orderGroup) => {
-        // ... function logic
+        const batch = writeBatch(db);
+        orderGroup.details.forEach(item => {
+            if (item.id) {
+                const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
+                batch.update(docRef, { status: 'On Hand', dateReceived: new Date().toISOString().split('T')[0] });
+            }
+        });
+        await batch.commit();
     };
 
     const openModalForEdit = (transaction) => {
@@ -73,7 +119,6 @@ export default function App() {
         setModal({ type: modalType, data: transaction });
     };
 
-    // --- Updated View Renderer ---
     const renderActiveView = () => {
         switch (activeView) {
             case 'dashboard':
@@ -95,7 +140,7 @@ export default function App() {
             case 'analytics':
                 return <CostAnalyticsView
                     costBySupplier={costBySupplier}
-                    quantityByMaterial={quantityByMaterial}
+                    analyticsByCategory={analyticsByCategory}
                 />;
             default:
                 if (CATEGORIES.includes(activeView)) {
@@ -126,7 +171,6 @@ export default function App() {
                 </footer>
             </div>
 
-            {/* Modals (unchanged) */}
             {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} />}
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} inventory={inventory} />}

@@ -4,16 +4,22 @@ import { MATERIAL_TYPES, SUPPLIERS, STANDARD_LENGTHS } from '../constants/materi
 const createNewItem = () => ({ materialType: MATERIAL_TYPES[0], qty96: '', qty120: '', qty144: '', customWidth: '', customLength: '', customQty: '', costPerPound: '' });
 const createNewJob = () => ({ jobName: '', customer: '', supplier: SUPPLIERS[0], status: 'Ordered', arrivalDate: '', items: [createNewItem()] });
 
-// Helper to transform fetched data into the form's state shape
+// In src/hooks/useOrderForm.js
+
 const transformInitialData = (initialData) => {
     if (!initialData) return [createNewJob()];
+
+    // Get the saved ISO date string
+    const arrivalDateISO = initialData.details[0]?.arrivalDate;
+    // Convert it back to a YYYY-MM-DD string for the date input field
+    const arrivalDateForInput = arrivalDateISO ? new Date(arrivalDateISO).toISOString().split('T')[0] : '';
 
     const jobData = {
         jobName: initialData.job || '',
         customer: initialData.customer || '',
         supplier: initialData.customer || SUPPLIERS[0],
         status: initialData.isFuture ? 'Ordered' : 'On Hand',
-        arrivalDate: initialData.details[0]?.arrivalDate || '',
+        arrivalDate: arrivalDateForInput, // Use the formatted date
         items: []
     };
 
@@ -32,7 +38,6 @@ const transformInitialData = (initialData) => {
     jobData.items = Object.values(itemsByMaterial);
     return [jobData];
 };
-
 
 export function useOrderForm(initialData) {
     const [jobs, setJobs] = useState(() => transformInitialData(initialData));
