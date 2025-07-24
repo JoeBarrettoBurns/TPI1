@@ -84,4 +84,4 @@ Once installed, start the server with:
 npm start
 ```
 
-The frontend expects this API to be available at `http://localhost:5000`. If the server isn't running or its dependencies are missing you may see `failed to fetch` errors in the browser.
+The frontend expects this API to be available at `http://localhost:3000`. If the server isn't running or its dependencies are missing you may see `failed to fetch` errors in the browser.
