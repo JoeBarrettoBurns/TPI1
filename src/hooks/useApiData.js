@@ -1,7 +1,10 @@
 // src/hooks/useApiData.js
 import { useState, useEffect, useCallback } from 'react';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+// Allow overriding the API base via environment variable and trim any
+// whitespace to avoid malformed URLs.
+const API_BASE_URL =
+    (process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000/api').trim();
 
 export function useApiData() {
     const [inventory, setInventory] = useState([]);
