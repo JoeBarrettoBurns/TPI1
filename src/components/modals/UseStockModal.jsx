@@ -8,7 +8,10 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+// Base URL used for API requests. Trim to ensure no stray whitespace causes
+// malformed URLs.
+const API_BASE_URL =
+    (process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000/api').trim();
 
 export const UseStockModal = ({ onClose, onStockUsed }) => {
     const { jobs, setJobField, setItemField, addJob, removeJob, addMaterial, removeMaterial } = useOrderForm();
