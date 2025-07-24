@@ -1,7 +1,7 @@
 // src/hooks/useApiData.js
 import { useState, useEffect, useCallback } from 'react';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:3000 / api';
 
 export function useApiData() {
     const [inventory, setInventory] = useState([]);

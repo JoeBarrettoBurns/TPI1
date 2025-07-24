@@ -30,7 +30,7 @@ import { UseStockModal } from './components/modals/UseStockModal';
 import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
 
 // Define the base URL for your custom API server
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:3000/api';
 
 export default function App() {
     // State management using the new custom hook
