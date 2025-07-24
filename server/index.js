@@ -20,7 +20,7 @@ mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
 
 // --- API Routes ---
 app.use('/api/inventory', require('./routes/inventory'));
-app.use('/api/logs', require('./routes/logs'));
+app.use('/api/logs', require('./routes/Logs'));
 
 // --- Start Server ---
 app.listen(port, () => {
