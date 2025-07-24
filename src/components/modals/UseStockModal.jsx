@@ -1,15 +1,16 @@
+// src/components/modals/UseStockModal.jsx
 import React, { useState } from 'react';
-import { runTransaction, collection, doc } from 'firebase/firestore';
-import { db, appId } from '../../firebase/config';
-import { BaseModal } from './BaseModal';
 import { useOrderForm } from '../../hooks/useOrderForm';
-import { MATERIAL_TYPES, STANDARD_LENGTHS } from '../../constants/materials';
+import { MATERIAL_TYPES} from '../../constants/materials';
+import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X } from 'lucide-react';
 
-export const UseStockModal = ({ onClose, inventory }) => {
+const API_BASE_URL = 'http://localhost:5000/api';
+
+export const UseStockModal = ({ onClose, onStockUsed }) => {
     const { jobs, setJobField, setItemField, addJob, removeJob, addMaterial, removeMaterial } = useOrderForm();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -24,57 +25,28 @@ export const UseStockModal = ({ onClose, inventory }) => {
         setError('');
 
         try {
-            await runTransaction(db, async (transaction) => {
-                const usageLogCollectionRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
-
-                for (const job of jobs) {
-                    const usedItemsForLog = [];
-                    for (const item of job.items) {
-                        for (const len of STANDARD_LENGTHS) {
-                            const qty = parseInt(item[`qty${len}`] || 0);
-                            if (qty <= 0) continue;
-
-                            const matchingSheets = inventory
-                                .filter(i => i.materialType === item.materialType && i.length === len && i.status !== 'Ordered')
-                                .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-
-                            if (matchingSheets.length < qty) {
-                                throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
-                            }
-
-                            const sheetsToUse = matchingSheets.slice(0, qty);
-                            sheetsToUse.forEach(sheet => {
-                                const stockDocRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
-                                transaction.delete(stockDocRef);
-                                const { id, ...rest } = sheet;
-                                usedItemsForLog.push({ ...rest, qty: 1 });
-                            });
-                        }
-                    }
-
-                    if (usedItemsForLog.length > 0) {
-                        const logDocRef = doc(usageLogCollectionRef);
-                        const logEntry = {
-                            job: job.jobName || '',
-                            customer: job.customer,
-                            usedAt: new Date().toISOString(),
-                            createdAt: new Date().toISOString(),
-                            details: usedItemsForLog,
-                            qty: -usedItemsForLog.length
-                        };
-                        transaction.set(logDocRef, logEntry);
-                    }
-                }
+            const response = await fetch(`${API_BASE_URL}/logs/use`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jobs }),
             });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.message || 'Failed to process stock usage.');
+            }
+
+            await onStockUsed(); // This calls refetchData in App.jsx
             onClose();
         } catch (err) {
             console.error("Transaction failed:", err);
-            setError(err.message || "Failed to update stock.");
+            setError(err.message);
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    // The rest of the component's JSX remains the same...
     return (
         <BaseModal onClose={onClose} title="Use Stock for Jobs">
             <form onSubmit={handleSubmit} className="space-y-6">
