@@ -23,6 +23,7 @@ import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
 import { CostAnalyticsView } from './views/CostAnalyticsView';
+import { parseJsonSafe } from './utils/request';
 
 // Modals
 import { AddOrderModal } from './components/modals/AddOrderModal';
@@ -67,8 +68,14 @@ export default function App() {
             });
 
             if (!response.ok) {
-                const res = await response.json();
-                throw new Error(res.message || 'Failed to save the order.');
+                let message = 'Failed to save the order.';
+                try {
+                    const resData = await parseJsonSafe(response);
+                    if (resData && resData.message) message = resData.message;
+                } catch (err) {
+                    if (typeof err === 'string') message = err;
+                }
+                throw new Error(message);
             }
             await refetchData(); // Refetch data to show changes
         } catch (err) {

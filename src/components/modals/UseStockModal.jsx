@@ -7,6 +7,7 @@ import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X } from 'lucide-react';
+import { parseJsonSafe } from '../../utils/request';
 
 // Base URL used for API requests. Trim to ensure no stray whitespace causes
 // malformed URLs.
@@ -35,8 +36,14 @@ export const UseStockModal = ({ onClose, onStockUsed }) => {
             });
 
             if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.message || 'Failed to process stock usage.');
+                let message = 'Failed to process stock usage.';
+                try {
+                    const errData = await parseJsonSafe(response);
+                    if (errData && errData.message) message = errData.message;
+                } catch (err) {
+                    if (typeof err === 'string') message = err;
+                }
+                throw new Error(message);
             }
 
             await onStockUsed(); // This calls refetchData in App.jsx

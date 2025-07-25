@@ -1,5 +1,6 @@
 // src/hooks/useApiData.js
 import { useState, useEffect, useCallback } from 'react';
+import { parseJsonSafe } from '../utils/request';
 
 // Allow overriding the API base via environment variable and trim any
 // whitespace to avoid malformed URLs.
@@ -26,8 +27,8 @@ export function useApiData() {
                 throw new Error('Failed to fetch data from the server.');
             }
 
-            const inventoryData = await inventoryRes.json();
-            const usageLogData = await usageLogRes.json();
+            const inventoryData = await parseJsonSafe(inventoryRes);
+            const usageLogData = await parseJsonSafe(usageLogRes);
 
             setInventory(inventoryData);
             setUsageLog(usageLogData);
