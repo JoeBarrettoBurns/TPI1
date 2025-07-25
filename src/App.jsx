@@ -23,14 +23,17 @@ import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
 import { CostAnalyticsView } from './views/CostAnalyticsView';
+import { parseJsonSafe } from './utils/request';
 
 // Modals
 import { AddOrderModal } from './components/modals/AddOrderModal';
 import { UseStockModal } from './components/modals/UseStockModal';
 import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
 
-// Define the base URL for your custom API server
-const API_BASE_URL = 'http://localhost:3000/api';
+// Define the base URL for your custom API server. Trim any whitespace in case
+// environment variables contain stray spaces which would break fetch.
+const API_BASE_URL =
+    (process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000/api').trim();
 
 export default function App() {
     // State management using the new custom hook
@@ -65,8 +68,14 @@ export default function App() {
             });
 
             if (!response.ok) {
-                const res = await response.json();
-                throw new Error(res.message || 'Failed to save the order.');
+                let message = 'Failed to save the order.';
+                try {
+                    const resData = await parseJsonSafe(response);
+                    if (resData && resData.message) message = resData.message;
+                } catch (err) {
+                    if (typeof err === 'string') message = err;
+                }
+                throw new Error(message);
             }
             await refetchData(); // Refetch data to show changes
         } catch (err) {
