@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "firebase": "^10.12.2",
     "lucide-react": "^0.395.0",
     "node-modules": "^1.0.1",
     "react": "^18.3.1",

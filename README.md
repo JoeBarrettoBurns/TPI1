@@ -68,20 +68,3 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
-
-## Backend server
-
-The `server` folder hosts a small Express API. Before running it you must install the dependencies:
-
-```bash
-cd server
-npm install
-```
-
-Once installed, start the server with:
-
-```bash
-npm start
-```
-
-The frontend expects this API to be available at `http://localhost:3000`. If the server isn't running or its dependencies are missing you may see `failed to fetch` errors in the browser.

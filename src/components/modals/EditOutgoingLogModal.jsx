@@ -1,4 +1,3 @@
-// src/components/modals/EditOutgoingLogModal.jsx
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
@@ -6,7 +5,7 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { STANDARD_LENGTHS, MATERIAL_TYPES } from '../../constants/materials';
 
-export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave }) => {
+export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory }) => {
     const [jobData, setJobData] = useState({ jobName: '', customer: '', items: [] });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -44,9 +43,7 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave }) => {
         setIsSubmitting(true);
         setError('');
         try {
-            // Note: The logic for editing a log can be complex as it might require
-            // adding/removing inventory. This is a placeholder for the API call.
-            await onSave(logEntry, jobData);
+            await onSave(logEntry, jobData, inventory);
             onClose();
         } catch (err) {
             console.error("Failed to save log:", err);

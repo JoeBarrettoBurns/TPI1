@@ -1,16 +1,15 @@
-import React, { useState, useMemo} from 'react';
-
-// Import the new custom hook for data fetching
-import { useApiData } from './hooks/useApiData';
-
-// Utility and Constant Imports
+import React, { useState, useMemo, useEffect } from 'react';
+import { writeBatch, runTransaction, doc, collection, deleteDoc } from 'firebase/firestore';
+import { db, appId } from './firebase/config';
+import { useFirestoreData } from './hooks/useFirestoreData';
 import {
     calculateInventorySummary,
     calculateIncomingSummary,
+    getGaugeFromMaterial,
     calculateCostBySupplier,
     calculateAnalyticsByCategory
 } from './utils/dataProcessing';
-import { MATERIALS, CATEGORIES } from './constants/materials';
+import { MATERIALS, CATEGORIES, STANDARD_LENGTHS } from './constants/materials';
 
 // Layout & Common Components
 import { Header } from './components/layout/Header';
@@ -23,27 +22,21 @@ import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
 import { CostAnalyticsView } from './views/CostAnalyticsView';
-import { parseJsonSafe } from './utils/request';
 
 // Modals
 import { AddOrderModal } from './components/modals/AddOrderModal';
 import { UseStockModal } from './components/modals/UseStockModal';
 import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
 
-// Define the base URL for your custom API server. Trim any whitespace in case
-// environment variables contain stray spaces which would break fetch.
-const API_BASE_URL =
-    (process.env.REACT_APP_API_BASE_URL || 'http://localhost:3000/api').trim();
 
 export default function App() {
-    // State management using the new custom hook
-    const { inventory, usageLog, loading, error, userId, refetchData } = useApiData();
+    const { inventory, usageLog, loading, error, userId } = useFirestoreData();
     const [activeView, setActiveView] = useState('dashboard');
     const [modal, setModal] = useState({ type: null, data: null });
     const [isEditMode, setIsEditMode] = useState(false);
     const [scrollToMaterial, setScrollToMaterial] = useState(null);
 
-    // Memoized calculations remain the same, as they operate on local state
+    // Memoize all data calculations
     const inventorySummary = useMemo(() => calculateInventorySummary(inventory), [inventory]);
     const incomingSummary = useMemo(() => calculateIncomingSummary(inventory), [inventory]);
     const costBySupplier = useMemo(() => calculateCostBySupplier(inventory), [inventory]);
@@ -51,94 +44,74 @@ export default function App() {
 
     const closeModal = () => setModal({ type: null, data: null });
 
-    // --- API Data Writing Functions ---
+    // --- Core Data Writing Functions ---
 
     const handleAddOrEditOrder = async (jobs, originalOrderGroup = null) => {
         const isEditing = !!originalOrderGroup;
-        // Note: The backend logic for editing will need to handle this properly.
-        // For simplicity, we use the same endpoint for add and edit.
-        const url = `${API_BASE_URL}/inventory/group`;
-        const method = isEditing ? 'PUT' : 'POST';
-
-        try {
-            const response = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jobs, originalOrderGroup }),
-            });
-
-            if (!response.ok) {
-                let message = 'Failed to save the order.';
-                try {
-                    const resData = await parseJsonSafe(response);
-                    if (resData && resData.message) message = resData.message;
-                } catch (err) {
-                    if (typeof err === 'string') message = err;
-                }
-                throw new Error(message);
+        await runTransaction(db, async (transaction) => {
+            if (isEditing) {
+                originalOrderGroup.details.forEach(item => {
+                    const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
+                    transaction.delete(docRef);
+                });
             }
-            await refetchData(); // Refetch data to show changes
-        } catch (err) {
-            console.error("Error saving order:", err);
-            // You can also set an error state here to show in the modal
-        }
+
+            const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+            jobs.forEach(job => {
+                const jobName = job.jobName.trim() || null;
+                job.items.forEach(item => {
+                    const arrivalDateString = job.arrivalDate;
+                    const localDate = arrivalDateString ? new Date(`${arrivalDateString}T00:00:00`) : null;
+
+                    const stockData = {
+                        materialType: item.materialType,
+                        gauge: getGaugeFromMaterial(item.materialType),
+                        supplier: job.supplier,
+                        costPerPound: parseFloat(item.costPerPound || 0),
+                        // FIX: Check for both possible date property names to prevent 'undefined' error
+                        createdAt: isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : new Date().toISOString(),
+                        job: jobName,
+                        status: job.status,
+                        arrivalDate: job.status === 'Ordered' && localDate ? localDate.toISOString() : null,
+                        dateReceived: null,
+                    };
+
+                    STANDARD_LENGTHS.forEach(len => {
+                        const qty = parseInt(item[`qty${len}`] || 0);
+                        for (let i = 0; i < qty; i++) {
+                            const newDocRef = doc(inventoryCollectionRef);
+                            transaction.set(newDocRef, { ...stockData, width: 48, length: len });
+                        }
+                    });
+                });
+            });
+        });
     };
 
     const handleDeleteInventoryGroup = async (group) => {
         if (!group?.details?.length) return;
-        try {
-            const response = await fetch(`${API_BASE_URL}/inventory/group`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ itemIds: group.details.map(d => d.id) }),
-            });
-            if (!response.ok) throw new Error('Failed to delete the inventory group.');
-            await refetchData();
-        } catch (err) {
-            console.error("Error deleting inventory group:", err);
-        }
+        const batch = writeBatch(db);
+        group.details.forEach(item => {
+            const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
+            batch.delete(docRef);
+        });
+        await batch.commit();
     };
 
     const handleDeleteLog = async (logId) => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/logs/${logId}`, {
-                method: 'DELETE',
-            });
-            if (!response.ok) throw new Error('Failed to delete the log entry.');
-            await refetchData();
-        } catch (err) {
-            console.error("Error deleting log:", err);
-        }
+        const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logId);
+        await deleteDoc(logDocRef);
     };
 
     const handleReceiveOrder = async (orderGroup) => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/inventory/receive`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ itemIds: orderGroup.details.map(d => d.id) }),
-            });
-            if (!response.ok) throw new Error('Failed to receive the order.');
-            await refetchData();
-        } catch (err) {
-            console.error("Error receiving order:", err);
-        }
-    };
-
-    const handleEditOutgoingLog = async (logEntry, updatedData) => {
-        // The logic to edit a log can be complex (e.g., reverting stock changes).
-        // This is a placeholder for the API call. The backend will handle the complexity.
-        try {
-            const response = await fetch(`${API_BASE_URL}/logs/${logEntry.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedData),
-            });
-            if (!response.ok) throw new Error('Failed to update log entry.');
-            await refetchData();
-        } catch (err) {
-            console.error("Error updating log:", err);
-        }
+        const batch = writeBatch(db);
+        orderGroup.details.forEach(item => {
+            if (item.id) {
+                const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
+                batch.update(docRef, { status: 'On Hand', dateReceived: new Date().toISOString().split('T')[0] });
+            }
+        });
+        await batch.commit();
     };
 
     const openModalForEdit = (transaction) => {
@@ -194,14 +167,14 @@ export default function App() {
 
                 <footer className="text-center text-slate-500 mt-8 text-sm">
                     <p>TecnoPan Inventory System</p>
-                    <p>User ID: <span className="font-mono bg-slate-800 px-2 py-1 rounded">{userId}</span></p>
+                    <p>User ID: <span className="font-mono bg-slate-800 px-2 py-1 rounded">{userId || 'Authenticating...'}</span></p>
                 </footer>
             </div>
 
             {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} />}
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" />}
-            {modal.type === 'use' && <UseStockModal onClose={closeModal} inventory={inventory} onStockUsed={refetchData} />}
-            {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} onSave={handleEditOutgoingLog} logEntry={modal.data} />}
+            {modal.type === 'use' && <UseStockModal onClose={closeModal} inventory={inventory} />}
+            {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} inventory={inventory} />}
         </div>
     );
 }
