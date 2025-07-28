@@ -1,5 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { writeBatch, runTransaction, doc, collection, deleteDoc } from 'firebase/firestore';
+// src/App.jsx
+
+import React, { useState, useMemo } from 'react';
+import { writeBatch, runTransaction, doc, collection, deleteDoc, setDoc } from 'firebase/firestore';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
 import {
@@ -9,7 +11,7 @@ import {
     calculateCostBySupplier,
     calculateAnalyticsByCategory
 } from './utils/dataProcessing';
-import { MATERIALS, CATEGORIES, STANDARD_LENGTHS } from './constants/materials';
+import { STANDARD_LENGTHS } from './constants/materials';
 
 // Layout & Common Components
 import { Header } from './components/layout/Header';
@@ -27,24 +29,44 @@ import { CostAnalyticsView } from './views/CostAnalyticsView';
 import { AddOrderModal } from './components/modals/AddOrderModal';
 import { UseStockModal } from './components/modals/UseStockModal';
 import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
+import { AddCategoryModal } from './components/modals/AddCategoryModal';
 
 
 export default function App() {
-    const { inventory, usageLog, loading, error, userId } = useFirestoreData();
+    const { inventory, usageLog, materials, loading, error, userId } = useFirestoreData();
     const [activeView, setActiveView] = useState('dashboard');
     const [modal, setModal] = useState({ type: null, data: null });
     const [isEditMode, setIsEditMode] = useState(false);
     const [scrollToMaterial, setScrollToMaterial] = useState(null);
 
-    // Memoize all data calculations
-    const inventorySummary = useMemo(() => calculateInventorySummary(inventory), [inventory]);
-    const incomingSummary = useMemo(() => calculateIncomingSummary(inventory), [inventory]);
-    const costBySupplier = useMemo(() => calculateCostBySupplier(inventory), [inventory]);
-    const analyticsByCategory = useMemo(() => calculateAnalyticsByCategory(inventory), [inventory]);
+    const categories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
+    const materialTypes = useMemo(() => Object.keys(materials), [materials]);
+
+    const inventorySummary = useMemo(() => calculateInventorySummary(inventory, materialTypes), [inventory, materialTypes]);
+    const incomingSummary = useMemo(() => calculateIncomingSummary(inventory, materialTypes), [inventory, materialTypes]);
+    const costBySupplier = useMemo(() => calculateCostBySupplier(inventory, materials), [inventory, materials]);
+    const analyticsByCategory = useMemo(() => calculateAnalyticsByCategory(inventory, materials), [inventory, materials]);
 
     const closeModal = () => setModal({ type: null, data: null });
 
     // --- Core Data Writing Functions ---
+
+    const handleAddCategory = async (categoryName, materialsToAdd) => {
+        const batch = writeBatch(db);
+
+        materialsToAdd.forEach(material => {
+            const materialId = material.name.replace(/\//g, '-'); // Sanitize ID
+            const newMaterialRef = doc(db, `artifacts/${appId}/public/data/materials`, materialId);
+
+            batch.set(newMaterialRef, {
+                category: categoryName,
+                thickness: parseFloat(material.thickness),
+                density: parseFloat(material.density)
+            });
+        });
+
+        await batch.commit();
+    };
 
     const handleAddOrEditOrder = async (jobs, originalOrderGroup = null) => {
         const isEditing = !!originalOrderGroup;
@@ -68,7 +90,6 @@ export default function App() {
                         gauge: getGaugeFromMaterial(item.materialType),
                         supplier: job.supplier,
                         costPerPound: parseFloat(item.costPerPound || 0),
-                        // FIX: Check for both possible date property names to prevent 'undefined' error
                         createdAt: isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : new Date().toISOString(),
                         job: jobName,
                         status: job.status,
@@ -124,8 +145,10 @@ export default function App() {
             case 'dashboard':
                 return <DashboardView
                     inventorySummary={inventorySummary} incomingSummary={incomingSummary} isEditMode={isEditMode}
+                    materials={materials}
+                    categories={categories}
                     onMaterialClick={(materialType) => {
-                        const category = MATERIALS[materialType]?.category;
+                        const category = materials[materialType]?.category;
                         if (category) {
                             setActiveView(category);
                             setScrollToMaterial(materialType);
@@ -143,10 +166,12 @@ export default function App() {
                     analyticsByCategory={analyticsByCategory}
                 />;
             default:
-                if (CATEGORIES.includes(activeView)) {
+                if (categories.includes(activeView)) {
                     return <MaterialDetailView
                         category={activeView} inventory={inventory} usageLog={usageLog}
                         inventorySummary={inventorySummary} incomingSummary={incomingSummary}
+                        materials={materials}
+                        materialTypes={materialTypes}
                         onDeleteLog={handleDeleteLog} onDeleteInventoryGroup={handleDeleteInventoryGroup}
                         onEditOrder={openModalForEdit} onReceiveOrder={handleReceiveOrder}
                         scrollToMaterial={scrollToMaterial} onScrollToComplete={() => setScrollToMaterial(null)}
@@ -159,8 +184,14 @@ export default function App() {
     return (
         <div className="bg-slate-900 min-h-screen font-sans text-slate-200">
             <div className="container mx-auto p-4 md:p-8">
-                <Header onAdd={() => setModal({ type: 'add' })} onUse={() => setModal({ type: 'use' })} onEdit={() => setIsEditMode(!isEditMode)} isEditMode={isEditMode} />
-                <ViewTabs activeView={activeView} setActiveView={setActiveView} />
+                <Header
+                    onAdd={() => setModal({ type: 'add' })}
+                    onUse={() => setModal({ type: 'use' })}
+                    onEdit={() => setIsEditMode(!isEditMode)}
+                    isEditMode={isEditMode}
+                    onAddCategory={() => setModal({ type: 'add-category' })}
+                />
+                <ViewTabs activeView={activeView} setActiveView={setActiveView} categories={categories} />
                 {error && <ErrorMessage message={error} />}
 
                 {loading ? <LoadingSpinner /> : renderActiveView()}
@@ -171,10 +202,11 @@ export default function App() {
                 </footer>
             </div>
 
-            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} />}
-            {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" />}
-            {modal.type === 'use' && <UseStockModal onClose={closeModal} inventory={inventory} />}
-            {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} inventory={inventory} />}
+            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} />}
+            {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} />}
+            {modal.type === 'use' && <UseStockModal onClose={closeModal} inventory={inventory} materialTypes={materialTypes} />}
+            {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} inventory={inventory} materialTypes={materialTypes} />}
+            {modal.type === 'add-category' && <AddCategoryModal onClose={closeModal} onSave={handleAddCategory} />}
         </div>
     );
 }

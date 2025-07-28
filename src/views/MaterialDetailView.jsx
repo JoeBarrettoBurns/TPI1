@@ -1,12 +1,14 @@
+// src/views/MaterialDetailView.jsx
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { calculateMaterialTransactions } from '../utils/dataProcessing';
-import { MATERIALS, STANDARD_LENGTHS, MATERIAL_TYPES } from '../constants/materials';
+import { STANDARD_LENGTHS } from '../constants/materials';
 import { LogDetailModal } from '../components/modals/LogDetailModal';
 import { ConfirmationModal } from '../components/modals/ConfirmationModal';
 import { Truck, Edit, Trash2 } from 'lucide-react';
 
-export const MaterialDetailView = ({ category, inventory, usageLog, inventorySummary, incomingSummary, onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, scrollToMaterial, onScrollToComplete }) => {
-    const materialsInCategory = useMemo(() => MATERIAL_TYPES.filter(m => MATERIALS[m].category === category), [category]);
+export const MaterialDetailView = ({ category, inventory, usageLog, inventorySummary, incomingSummary, onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, scrollToMaterial, onScrollToComplete, materials, materialTypes }) => {
+    const materialsInCategory = useMemo(() => materialTypes.filter(m => materials[m].category === category), [category, materials, materialTypes]);
     const transactions = useMemo(() => calculateMaterialTransactions(materialsInCategory, inventory, usageLog), [materialsInCategory, inventory, usageLog]);
 
     const [detailLog, setDetailLog] = useState(null);
@@ -68,7 +70,6 @@ export const MaterialDetailView = ({ category, inventory, usageLog, inventorySum
                                             ))}
                                         </div>
                                     </div>
-                                    {/* UPDATED SECTION */}
                                     <div>
                                         <h4 className="text-sm font-semibold text-slate-400 mb-1">FUTURE INVENTORY</h4>
                                         <div className="flex gap-4">
@@ -92,7 +93,6 @@ export const MaterialDetailView = ({ category, inventory, usageLog, inventorySum
                                             </div>
                                         )}
                                     </div>
-                                    {/* END UPDATED SECTION */}
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -142,7 +142,7 @@ export const MaterialDetailView = ({ category, inventory, usageLog, inventorySum
                     </div>
                 );
             })}
-            <LogDetailModal isOpen={!!detailLog} onClose={() => setDetailLog(null)} logEntry={detailLog} />
+            <LogDetailModal isOpen={!!detailLog} onClose={() => setDetailLog(null)} logEntry={detailLog} materials={materials} />
             <ConfirmationModal isOpen={!!logToDelete} onClose={() => setLogToDelete(null)} onConfirm={handleConfirmDelete} title="Delete Entry" message="Are you sure you want to delete this entry? This action cannot be undone." />
         </div>
     );

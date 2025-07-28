@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
-import { MATERIAL_TYPES, MATERIALS, STANDARD_LENGTHS } from '../../constants/materials';
+// src/components/dashboard/MaterialCategoryCard.jsx
 
-export const MaterialCategoryCard = ({ category, inventorySummary, incomingSummary, isEditMode, onSave, onMaterialClick }) => {
-    const materialsInCategory = MATERIAL_TYPES.filter(m => MATERIALS[m].category === category);
+import React, { useState, useMemo } from 'react';
+import { STANDARD_LENGTHS } from '../../constants/materials';
+
+export const MaterialCategoryCard = ({ category, inventorySummary, incomingSummary, isEditMode, onSave, onMaterialClick, materials }) => {
+    const materialTypes = useMemo(() => Object.keys(materials), [materials]);
+    const materialsInCategory = materialTypes.filter(m => materials[m].category === category);
+
     const [editingCell, setEditingCell] = useState(null); // { matType, len }
     const [editValue, setEditValue] = useState('');
 

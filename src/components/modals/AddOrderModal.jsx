@@ -1,14 +1,16 @@
+// src/components/modals/AddOrderModal.jsx
+
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useOrderForm } from '../../hooks/useOrderForm';
-import { MATERIAL_TYPES, SUPPLIERS } from '../../constants/materials';
+import { SUPPLIERS } from '../../constants/materials';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 
-export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock" }) => {
-    const { jobs, setJobField, setItemField, addJob, removeJob, addMaterial, removeMaterial } = useOrderForm(initialData);
+export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock", materialTypes }) => {
+    const { jobs, setJobField, setItemField, addJob, removeJob, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
@@ -21,7 +23,7 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
         setIsSubmitting(true);
         setError('');
         try {
-            await onSave(jobs, initialData); // Pass jobs and original data back to App.jsx
+            await onSave(jobs, initialData);
             onClose();
         } catch (err) {
             console.error("Submission error:", err);
@@ -50,13 +52,12 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                             </div>
                             {job.status === 'Ordered' && <FormInput label="Expected Arrival Date" name="arrivalDate" type="date" value={job.arrivalDate} onChange={(e) => setJobField(jobIndex, 'arrivalDate', e.target.value)} />}
 
-                            {/* Items section */}
                             {job.items.map((item, itemIndex) => (
                                 <div key={itemIndex} className="border border-slate-700 p-4 rounded-lg bg-slate-800 relative">
                                     {!initialData && job.items.length > 1 && (
                                         <button type="button" onClick={() => removeMaterial(jobIndex, itemIndex)} className="absolute top-2 right-2 text-red-400 hover:text-red-300"><X size={18} /></button>
                                     )}
-                                    <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} onChange={(e) => setItemField(jobIndex, itemIndex, 'materialType', e.target.value)} as="select">{MATERIAL_TYPES.map(type => <option key={type}>{type}</option>)}</FormInput>
+                                    <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} onChange={(e) => setItemField(jobIndex, itemIndex, 'materialType', e.target.value)} as="select">{materialTypes.map(type => <option key={type}>{type}</option>)}</FormInput>
                                     <p className="text-sm font-medium text-slate-300 mt-2">Standard Quantities:</p>
                                     <div className="grid grid-cols-3 gap-2">
                                         <FormInput label='96"x48"' name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty96', e.target.value)} />

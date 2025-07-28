@@ -1,8 +1,9 @@
+// src/components/modals/LogDetailModal.jsx
+
 import React, { useMemo } from 'react';
 import { BaseModal } from './BaseModal';
-import { MATERIALS } from '../../constants/materials';
 
-export const LogDetailModal = ({ isOpen, onClose, logEntry }) => {
+export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
     const groupedDetails = useMemo(() => {
         if (!logEntry?.details) return [];
 
@@ -25,7 +26,7 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry }) => {
     if (!isOpen || !logEntry) return null;
 
     const calculateWeight = (item) => {
-        const material = MATERIALS[item.materialType];
+        const material = materials[item.materialType];
         if (!material) return 0;
         return (item.width * item.length * material.thickness * material.density);
     };

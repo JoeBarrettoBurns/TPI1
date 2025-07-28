@@ -1,11 +1,13 @@
+// src/components/modals/EditOutgoingLogModal.jsx
+
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
-import { STANDARD_LENGTHS, MATERIAL_TYPES } from '../../constants/materials';
+import { STANDARD_LENGTHS } from '../../constants/materials';
 
-export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory }) => {
+export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory, materialTypes }) => {
     const [jobData, setJobData] = useState({ jobName: '', customer: '', items: [] });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -63,7 +65,7 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                     </div>
                     {jobData.items.map((item, itemIndex) => (
                         <div key={itemIndex} className="border border-slate-700 p-4 rounded-lg bg-slate-800">
-                            <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} as="select" disabled>{MATERIAL_TYPES.map(type => <option key={type}>{type}</option>)}</FormInput>
+                            <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} as="select" disabled>{materialTypes.map(type => <option key={type}>{type}</option>)}</FormInput>
                             <div className="grid grid-cols-3 gap-2 mt-2">
                                 <FormInput label='96"x48" Qty' name="qty96" type="number" value={item.qty96} onChange={(e) => handleItemChange(itemIndex, 'qty96', e.target.value)} />
                                 <FormInput label='120"x48" Qty' name="qty120" type="number" value={item.qty120} onChange={(e) => handleItemChange(itemIndex, 'qty120', e.target.value)} />

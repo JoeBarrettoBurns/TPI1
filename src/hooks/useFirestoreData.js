@@ -5,11 +5,13 @@ import { db, appId, auth, onAuthStateChanged, signInAnonymously, signInWithCusto
 export function useFirestoreData() {
     const [inventory, setInventory] = useState([]);
     const [usageLog, setUsageLog] = useState([]);
+    // --- New state to hold your materials data from Firestore ---
+    const [materials, setMaterials] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [userId, setUserId] = useState(null);
 
-    // Authentication Effect
+    // Authentication Effect remains the same
     useEffect(() => {
         const unsubAuth = onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -37,6 +39,8 @@ export function useFirestoreData() {
         setLoading(true);
         const inventoryRef = collection(db, `artifacts/${appId}/public/data/inventory`);
         const usageLogRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
+        // --- New reference to the 'materials' collection ---
+        const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
 
         const qInventory = query(inventoryRef, orderBy("createdAt", "desc"));
         const qUsageLog = query(usageLogRef, orderBy("createdAt", "desc"));
@@ -58,6 +62,7 @@ export function useFirestoreData() {
             const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setInventory(data);
             handleAutoReceive(data);
+            // We set loading to false only after the main data (inventory) is loaded
             setLoading(false);
         }, (err) => {
             console.error("Error fetching inventory:", err);
@@ -72,11 +77,26 @@ export function useFirestoreData() {
             setError('Failed to load usage logs.');
         });
 
+        // --- New listener for the materials collection ---
+        const unsubMaterials = onSnapshot(materialsRef, (snap) => {
+            const materialsData = {};
+            snap.docs.forEach(doc => {
+                materialsData[doc.id] = { id: doc.id, ...doc.data() };
+            });
+            setMaterials(materialsData);
+        }, (err) => {
+            console.error("Error fetching materials:", err);
+            setError('Failed to load materials.');
+        });
+
+        // --- Cleanup function to unsubscribe from listeners when the component unmounts ---
         return () => {
             unsubInventory();
             unsubUsageLog();
+            unsubMaterials(); // Make sure to unsubscribe
         };
     }, [userId]);
 
-    return { inventory, usageLog, loading, error, userId };
+    // --- Return the new materials state from the hook ---
+    return { inventory, usageLog, materials, loading, error, userId };
 }

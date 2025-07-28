@@ -1,13 +1,15 @@
-import { MATERIAL_TYPES, STANDARD_LENGTHS, MATERIALS } from '../constants/materials';
+// src/utils/dataProcessing.js
+
+import { STANDARD_LENGTHS } from '../constants/materials';
 
 // Helper function to calculate the cost of a single sheet based on its properties
-const calculateSheetCost = (item) => {
-    const material = MATERIALS[item.materialType];
+const calculateSheetCost = (item, materials) => {
+    const material = materials[item.materialType];
     if (!material || !item.costPerPound || item.costPerPound <= 0) return 0;
     // Assume standard width if not specified, for calculation purposes
     const width = item.width || 48;
     const weight = (width * item.length * material.thickness * material.density);
-    return weight * item.costPerPound;
+    return weight * item.costPerPpound;
 };
 
 
@@ -20,9 +22,9 @@ export const getGaugeFromMaterial = (materialType) => {
     return 'N/A';
 };
 
-export const calculateInventorySummary = (inventory) => {
+export const calculateInventorySummary = (inventory, materialTypes) => {
     const summary = {};
-    MATERIAL_TYPES.forEach(type => {
+    materialTypes.forEach(type => {
         summary[type] = { ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {}), custom: 0 };
     });
     inventory.filter(item => item.status !== 'Ordered').forEach(item => {
@@ -37,9 +39,9 @@ export const calculateInventorySummary = (inventory) => {
     return summary;
 };
 
-export const calculateIncomingSummary = (inventory) => {
+export const calculateIncomingSummary = (inventory, materialTypes) => {
     const summary = {};
-    MATERIAL_TYPES.forEach(type => {
+    materialTypes.forEach(type => {
         summary[type] = {
             lengths: { ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {}), custom: 0 },
             totalCount: 0,
@@ -100,39 +102,35 @@ export const calculateMaterialTransactions = (materialsInCategory, inventory, us
     return allTransactions;
 };
 
-// --- UPDATED & NEW ANALYTICS FUNCTIONS ---
 
-export const calculateCostBySupplier = (inventory) => {
+export const calculateCostBySupplier = (inventory, materials) => {
     const costMap = {};
     inventory.forEach(item => {
         if (item.supplier && item.costPerPound > 0) {
-            const cost = calculateSheetCost(item);
+            const cost = calculateSheetCost(item, materials);
             costMap[item.supplier] = (costMap[item.supplier] || 0) + cost;
         }
     });
     return Object.entries(costMap).map(([name, value]) => ({ name, value }));
 };
 
-// NEW function to group material quantity AND cost by category
-export const calculateAnalyticsByCategory = (inventory) => {
+
+export const calculateAnalyticsByCategory = (inventory, materials) => {
     const categoryMap = {};
 
-    // First, aggregate quantity and cost for each material type
     const materialMap = {};
     inventory.forEach(item => {
         if (!materialMap[item.materialType]) {
             materialMap[item.materialType] = {
                 quantity: 0,
                 cost: 0,
-                // Get the category from the main constants file
-                category: MATERIALS[item.materialType]?.category,
+                category: materials[item.materialType]?.category,
             };
         }
         materialMap[item.materialType].quantity += 1;
-        materialMap[item.materialType].cost += calculateSheetCost(item);
+        materialMap[item.materialType].cost += calculateSheetCost(item, materials);
     });
 
-    // Now, group the aggregated materials by their category
     Object.entries(materialMap).forEach(([materialName, data]) => {
         const { category, quantity, cost } = data;
         if (category) {
