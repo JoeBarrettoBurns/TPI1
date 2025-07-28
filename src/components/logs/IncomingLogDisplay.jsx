@@ -1,7 +1,31 @@
 import React, { useMemo } from 'react';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2, Truck } from 'lucide-react';
 
+<<<<<<< Updated upstream
 export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, ordersToShow }) => {
+=======
+// Helper function to generate a detailed description with shortened names
+const generateDescription = (details) => {
+    if (!Array.isArray(details) || details.length === 0) {
+        return 'No item details';
+    }
+
+    const materialCounts = details.reduce((acc, item) => {
+        const type = item.materialType || 'Unknown';
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+    }, {});
+
+    return Object.entries(materialCounts).map(([type, count]) => {
+        const shortType = type
+            .replace('GALV', 'Galv')
+            .replace('ALUM', 'Al');
+        return `${count}x ${shortType}`;
+    }).join(', ');
+};
+
+export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }) => {
+>>>>>>> Stashed changes
     const incomingItems = useMemo(() => {
         const groupedByOrder = {};
         inventory.filter(item => item.supplier !== 'MODIFICATION').forEach(item => {
@@ -58,10 +82,13 @@ export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, or
                             </td>
                             <td className="p-4 text-green-400 font-mono text-right">+{item.qty}</td>
                             <td className="p-4 text-center">
+                                {item.isFuture && (
+                                    <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(item); }} className="text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>
+                                )}
                                 {item.isDeletable && (
                                     <>
-                                        <button onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
-                                        <button onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
+                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
+                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
                                     </>
                                 )}
                             </td>

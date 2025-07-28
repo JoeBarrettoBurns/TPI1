@@ -136,6 +136,12 @@ export default function App() {
                 return <LogsView
                     inventory={inventory} usageLog={usageLog} onEditOrder={openModalForEdit}
                     onDeleteInventoryGroup={handleDeleteInventoryGroup} onDeleteLog={handleDeleteLog}
+<<<<<<< Updated upstream
+=======
+                    materials={materials}
+                    onFulfillLog={handleFulfillScheduledLog}
+                    onReceiveOrder={handleReceiveOrder}
+>>>>>>> Stashed changes
                 />;
             case 'analytics':
                 return <CostAnalyticsView
