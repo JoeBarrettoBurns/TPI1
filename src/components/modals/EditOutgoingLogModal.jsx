@@ -1,19 +1,23 @@
+// src/components/modals/EditOutgoingLogModal.jsx
+
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
-import { STANDARD_LENGTHS, MATERIAL_TYPES } from '../../constants/materials';
+import { STANDARD_LENGTHS } from '../../constants/materials';
 
-export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory }) => {
-    const [jobData, setJobData] = useState({ jobName: '', customer: '', items: [] });
+export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory, materialTypes }) => {
+    const [jobData, setJobData] = useState({ jobName: '', customer: '', items: [], date: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (logEntry) {
             const itemsByMaterial = {};
-            logEntry.details.forEach(item => {
+            const details = logEntry.details || [];
+
+            details.forEach(item => {
                 const key = item.materialType;
                 if (!itemsByMaterial[key]) {
                     itemsByMaterial[key] = { materialType: item.materialType, qty96: 0, qty120: 0, qty144: 0 };
@@ -22,10 +26,14 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                     itemsByMaterial[key][`qty${item.length}`]++;
                 }
             });
+
+            const dateForInput = logEntry.usedAt ? new Date(logEntry.usedAt).toISOString().split('T')[0] : '';
+
             setJobData({
                 jobName: logEntry.job || '',
                 customer: logEntry.customer || '',
-                items: Object.values(itemsByMaterial)
+                items: Object.values(itemsByMaterial),
+                date: dateForInput
             });
         }
     }, [logEntry]);
@@ -61,9 +69,21 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                         <FormInput label="Job #" name="jobName" value={jobData.jobName} onChange={(e) => setJobData(prev => ({ ...prev, jobName: e.target.value }))} />
                         <FormInput label="Customer" name="customer" value={jobData.customer} onChange={(e) => setJobData(prev => ({ ...prev, customer: e.target.value }))} required />
                     </div>
+
+                    {logEntry.status === 'Scheduled' && (
+                        <FormInput
+                            label="Scheduled Use Date"
+                            name="scheduledDate"
+                            type="date"
+                            value={jobData.date}
+                            onChange={(e) => setJobData(prev => ({ ...prev, date: e.target.value }))}
+                            required
+                        />
+                    )}
+
                     {jobData.items.map((item, itemIndex) => (
                         <div key={itemIndex} className="border border-slate-700 p-4 rounded-lg bg-slate-800">
-                            <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} as="select" disabled>{MATERIAL_TYPES.map(type => <option key={type}>{type}</option>)}</FormInput>
+                            <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} as="select" disabled>{materialTypes.map(type => <option key={type}>{type}</option>)}</FormInput>
                             <div className="grid grid-cols-3 gap-2 mt-2">
                                 <FormInput label='96"x48" Qty' name="qty96" type="number" value={item.qty96} onChange={(e) => handleItemChange(itemIndex, 'qty96', e.target.value)} />
                                 <FormInput label='120"x48" Qty' name="qty120" type="number" value={item.qty120} onChange={(e) => handleItemChange(itemIndex, 'qty120', e.target.value)} />

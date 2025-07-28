@@ -1,3 +1,5 @@
+// src/views/LogsView.jsx
+
 import React, { useState } from 'react';
 import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { ConfirmationModal } from '../components/modals/ConfirmationModal';
@@ -5,7 +7,7 @@ import { LogDetailModal } from '../components/modals/LogDetailModal';
 import { IncomingLogDisplay } from '../components/logs/IncomingLogDisplay';
 import { OutgoingLogDisplay } from '../components/logs/OutgoingLogDisplay';
 
-export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup }) => {
+export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup, materials, onFulfillLog }) => {
     // State to manage which log entry is being viewed in detail
     const [detailLog, setDetailLog] = useState(null);
     // State to manage which log entry is pending deletion confirmation
@@ -30,7 +32,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
     return (
         <div className="space-y-12">
             {/* Modal for viewing detailed log information */}
-            <LogDetailModal isOpen={!!detailLog} onClose={() => setDetailLog(null)} logEntry={detailLog} />
+            <LogDetailModal isOpen={!!detailLog} onClose={() => setDetailLog(null)} logEntry={detailLog} materials={materials} />
 
             {/* Modal for confirming deletion of a log entry */}
             <ConfirmationModal
@@ -97,6 +99,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                     onRowClick={setDetailLog}
                     onDelete={setLogToDelete}
                     onEdit={onEditOrder}
+                    onFulfillLog={onFulfillLog}
                     ordersToShow={outgoingOrdersToShow}
                 />
             </div>

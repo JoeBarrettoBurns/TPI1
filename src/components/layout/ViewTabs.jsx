@@ -1,9 +1,9 @@
-import React from 'react';
-import { CATEGORIES } from '../../constants/materials';
+// src/components/layout/ViewTabs.jsx
 
-export const ViewTabs = ({ activeView, setActiveView }) => {
-    // Add 'analytics' to the list of views
-    const views = ['dashboard', 'logs', 'analytics', ...CATEGORIES];
+import React from 'react';
+
+export const ViewTabs = ({ activeView, setActiveView, categories }) => {
+    const views = ['dashboard', 'logs', 'analytics', ...categories];
 
     const handleViewChange = (view) => {
         setActiveView(view);
@@ -13,7 +13,6 @@ export const ViewTabs = ({ activeView, setActiveView }) => {
         <div className="mb-8 border-b border-slate-700">
             <nav className="-mb-px flex space-x-8 overflow-x-auto">
                 {views.map(view => {
-                    // Define display names for the tabs
                     const viewName = {
                         dashboard: 'Dashboard',
                         logs: 'Logs',
