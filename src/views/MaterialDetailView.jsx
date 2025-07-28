@@ -7,13 +7,14 @@ import { LogDetailModal } from '../components/modals/LogDetailModal';
 import { ConfirmationModal } from '../components/modals/ConfirmationModal';
 import { Truck, Edit, Trash2 } from 'lucide-react';
 
-export const MaterialDetailView = ({ category, inventory, usageLog, inventorySummary, incomingSummary, onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, scrollToMaterial, onScrollToComplete, materials, materialTypes }) => {
+export const MaterialDetailView = ({ category, inventory, usageLog, inventorySummary, incomingSummary, onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog, scrollToMaterial, onScrollToComplete, materials, materialTypes }) => {
     const materialsInCategory = useMemo(() => materialTypes.filter(m => materials[m].category === category), [category, materials, materialTypes]);
     const transactions = useMemo(() => calculateMaterialTransactions(materialsInCategory, inventory, usageLog), [materialsInCategory, inventory, usageLog]);
 
     const [detailLog, setDetailLog] = useState(null);
     const [logToDelete, setLogToDelete] = useState(null);
     const [ordersToShow, setOrdersToShow] = useState({});
+    const [highlightedMaterial, setHighlightedMaterial] = useState(null);
 
     const detailRefs = useRef({});
     materialsInCategory.forEach(matType => {
@@ -23,7 +24,14 @@ export const MaterialDetailView = ({ category, inventory, usageLog, inventorySum
     useEffect(() => {
         if (scrollToMaterial && detailRefs.current[scrollToMaterial]?.current) {
             detailRefs.current[scrollToMaterial].current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            onScrollToComplete();
+            setHighlightedMaterial(scrollToMaterial);
+
+            const timer = setTimeout(() => {
+                setHighlightedMaterial(null);
+                onScrollToComplete();
+            }, 2500);
+
+            return () => clearTimeout(timer);
         }
     }, [scrollToMaterial, onScrollToComplete]);
 
@@ -54,7 +62,12 @@ export const MaterialDetailView = ({ category, inventory, usageLog, inventorySum
                 const latestArrival = incomingSummary[matType]?.latestArrivalDate;
 
                 return (
-                    <div key={matType} ref={detailRefs.current[matType]} className="bg-slate-800 rounded-xl shadow-lg border border-slate-700 overflow-hidden">
+                    <div
+                        key={matType}
+                        ref={detailRefs.current[matType]}
+                        className={`bg-slate-800 rounded-xl shadow-lg border border-slate-700 overflow-hidden transition-all duration-500 ${highlightedMaterial === matType ? 'ring-2 ring-blue-500 shadow-xl shadow-blue-500/20' : 'ring-0 ring-transparent'
+                            }`}
+                    >
                         <div className="p-4 bg-slate-900/50 flex flex-wrap justify-between items-center gap-4">
                             <div>
                                 <h3 className="text-2xl font-bold text-blue-400">{matType}</h3>
@@ -70,29 +83,31 @@ export const MaterialDetailView = ({ category, inventory, usageLog, inventorySum
                                             ))}
                                         </div>
                                     </div>
-                                    <div>
-                                        <h4 className="text-sm font-semibold text-slate-400 mb-1">FUTURE INVENTORY</h4>
-                                        <div className="flex gap-4">
-                                            {STANDARD_LENGTHS.map(len => {
-                                                const currentStock = inventorySummary[matType]?.[len] || 0;
-                                                const incomingStock = incomingSummary[matType]?.lengths[len] || 0;
-                                                const projectedTotal = currentStock + incomingStock;
-                                                return (
-                                                    <div key={len} className="text-center">
-                                                        <div className="text-xs text-slate-500">{len}"x48"</div>
-                                                        <div className="text-2xl font-bold text-yellow-300">
-                                                            {projectedTotal}
+                                    {totalIncomingSheets > 0 && (
+                                        <div>
+                                            <h4 className="text-sm font-semibold text-slate-400 mb-1">FUTURE INVENTORY</h4>
+                                            <div className="flex gap-4">
+                                                {STANDARD_LENGTHS.map(len => {
+                                                    const currentStock = inventorySummary[matType]?.[len] || 0;
+                                                    const incomingStock = incomingSummary[matType]?.lengths[len] || 0;
+                                                    const projectedTotal = currentStock + incomingStock;
+                                                    return (
+                                                        <div key={len} className="text-center">
+                                                            <div className="text-xs text-slate-500">{len}"x48"</div>
+                                                            <div className="text-2xl font-bold text-yellow-300">
+                                                                {projectedTotal}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                        {latestArrival && totalIncomingSheets > 0 && (
-                                            <div className="text-xs text-yellow-400 mt-1 text-center sm:text-left">
-                                                (Latest Due: {new Date(latestArrival).toLocaleDateString()})
+                                                    )
+                                                })}
                                             </div>
-                                        )}
-                                    </div>
+                                            {latestArrival && (
+                                                <div className="text-xs text-yellow-400 mt-1 text-center sm:text-left">
+                                                    (Latest Due: {new Date(latestArrival).toLocaleDateString()})
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -117,25 +132,34 @@ export const MaterialDetailView = ({ category, inventory, usageLog, inventorySum
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {visibleTransactions.map((t) => (
-                                        <tr key={t.id} onClick={() => setDetailLog(t)} className={`border-b border-slate-700/50 cursor-pointer hover:bg-slate-700/50 ${t.isFuture ? 'bg-yellow-900/20' : !t.isAddition ? 'bg-red-900/20' : ''}`}>
-                                            <td className="p-3 whitespace-nowrap">{t.job}</td>
-                                            <td className="p-3 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
-                                            <td className="p-3 whitespace-nowrap">{t.customer}</td>
-                                            {STANDARD_LENGTHS.map(len => (
-                                                <td key={len} className={`p-3 text-center font-mono ${t[len] < 0 ? 'text-red-400' : 'text-slate-300'}`}>{t[len] || ''}</td>
-                                            ))}
-                                            <td className="p-3 text-center">
-                                                {t.isFuture && <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(t); }} className="text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>}
-                                                {t.isDeletable && (
-                                                    <>
-                                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEditOrder(t); }} className="text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
-                                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); setLogToDelete(t); }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
-                                                    </>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {visibleTransactions.map((t) => {
+                                        const rowClass = !t.isAddition && t.isFuture ? 'bg-purple-900/30' // Scheduled Usage
+                                            : t.isFuture ? 'bg-yellow-900/20' // Incoming Order
+                                                : !t.isAddition ? 'bg-red-900/20' // Completed Usage
+                                                    : ''; // Stock Addition
+
+                                        return (
+                                            <tr key={t.id} onClick={() => setDetailLog(t)} className={`border-b border-slate-700/50 cursor-pointer hover:bg-slate-700/50 ${rowClass}`}>
+                                                <td className="p-3 whitespace-nowrap">{t.job}</td>
+                                                <td className="p-3 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
+                                                <td className="p-3 whitespace-nowrap">{t.customer}</td>
+                                                {STANDARD_LENGTHS.map(len => (
+                                                    <td key={len} className={`p-3 text-center font-mono ${t[len] < 0 ? 'text-red-400' : 'text-slate-300'}`}>{t[len] || ''}</td>
+                                                ))}
+                                                <td className="p-3 text-center">
+                                                    {t.isFuture && t.isAddition && <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(t); }} className="text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>}
+                                                    {t.isFulfillable && <button title="Fulfill Scheduled Usage" onClick={(e) => { e.stopPropagation(); onFulfillLog(t); }} className="text-purple-400 hover:text-purple-300 mr-2"><Truck size={16} /></button>}
+
+                                                    {t.isDeletable && (
+                                                        <>
+                                                            <button title="Edit" onClick={(e) => { e.stopPropagation(); onEditOrder(t); }} className="text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
+                                                            <button title="Delete" onClick={(e) => { e.stopPropagation(); setLogToDelete(t); }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
+                                                        </>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
                                 </tbody>
                             </table>
                         </div>

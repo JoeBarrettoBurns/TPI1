@@ -9,7 +9,7 @@ const calculateSheetCost = (item, materials) => {
     // Assume standard width if not specified, for calculation purposes
     const width = item.width || 48;
     const weight = (width * item.length * material.thickness * material.density);
-    return weight * item.costPerPpound;
+    return weight * item.costPerPound;
 };
 
 
@@ -87,9 +87,15 @@ export const calculateMaterialTransactions = (materialsInCategory, inventory, us
         usageLog.filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
             const isModification = (log.job || '').startsWith('MODIFICATION');
             if (isModification && log.qty >= 0) return;
+
+            const isScheduled = log.status === 'Scheduled';
+
             groupedUsage[log.id] = {
-                id: log.id, job: log.job, date: log.usedAt, customer: log.customer || 'N/A', isAddition: false, isDeletable: true,
-                isFuture: false, details: log.details, ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {})
+                id: log.id, job: log.job, date: log.usedAt, customer: log.customer || 'N/A', isAddition: false,
+                isDeletable: true,
+                isFulfillable: isScheduled,
+                isFuture: isScheduled,
+                details: log.details, ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {})
             };
             log.details.forEach(detail => {
                 if (detail.materialType === matType && STANDARD_LENGTHS.includes(detail.length)) {

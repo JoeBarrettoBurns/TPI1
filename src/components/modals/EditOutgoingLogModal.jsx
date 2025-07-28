@@ -8,14 +8,16 @@ import { ErrorMessage } from '../common/ErrorMessage';
 import { STANDARD_LENGTHS } from '../../constants/materials';
 
 export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory, materialTypes }) => {
-    const [jobData, setJobData] = useState({ jobName: '', customer: '', items: [] });
+    const [jobData, setJobData] = useState({ jobName: '', customer: '', items: [], date: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (logEntry) {
             const itemsByMaterial = {};
-            logEntry.details.forEach(item => {
+            const details = logEntry.details || [];
+
+            details.forEach(item => {
                 const key = item.materialType;
                 if (!itemsByMaterial[key]) {
                     itemsByMaterial[key] = { materialType: item.materialType, qty96: 0, qty120: 0, qty144: 0 };
@@ -24,10 +26,14 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                     itemsByMaterial[key][`qty${item.length}`]++;
                 }
             });
+
+            const dateForInput = logEntry.usedAt ? new Date(logEntry.usedAt).toISOString().split('T')[0] : '';
+
             setJobData({
                 jobName: logEntry.job || '',
                 customer: logEntry.customer || '',
-                items: Object.values(itemsByMaterial)
+                items: Object.values(itemsByMaterial),
+                date: dateForInput
             });
         }
     }, [logEntry]);
@@ -63,6 +69,18 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                         <FormInput label="Job #" name="jobName" value={jobData.jobName} onChange={(e) => setJobData(prev => ({ ...prev, jobName: e.target.value }))} />
                         <FormInput label="Customer" name="customer" value={jobData.customer} onChange={(e) => setJobData(prev => ({ ...prev, customer: e.target.value }))} required />
                     </div>
+
+                    {logEntry.status === 'Scheduled' && (
+                        <FormInput
+                            label="Scheduled Use Date"
+                            name="scheduledDate"
+                            type="date"
+                            value={jobData.date}
+                            onChange={(e) => setJobData(prev => ({ ...prev, date: e.target.value }))}
+                            required
+                        />
+                    )}
+
                     {jobData.items.map((item, itemIndex) => (
                         <div key={itemIndex} className="border border-slate-700 p-4 rounded-lg bg-slate-800">
                             <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} as="select" disabled>{materialTypes.map(type => <option key={type}>{type}</option>)}</FormInput>

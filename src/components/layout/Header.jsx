@@ -4,7 +4,7 @@ import React from 'react';
 import { Plus, Minus, Edit, Box } from 'lucide-react';
 import { Button } from '../common/Button';
 
-export const Header = ({ onAdd, onUse, onEdit, isEditMode, onAddCategory }) => (
+export const Header = ({ onAdd, onUse, onEdit, isEditMode, onAddCategory, activeView }) => (
     <header className="flex flex-col md:flex-row justify-between items-center mb-8">
         <div className="flex items-center gap-4">
             <img src="/tecnopan-logo.png" alt="TecnoPan Logo" className="h-16 w-auto" />
@@ -14,9 +14,11 @@ export const Header = ({ onAdd, onUse, onEdit, isEditMode, onAddCategory }) => (
             <Button onClick={onAdd}><Plus size={20} /> Add Stock</Button>
             <Button onClick={onUse} variant="secondary"><Minus size={20} /> Use Stock</Button>
             <Button onClick={onAddCategory} variant="ghost"><Box size={20} /> Add Category</Button>
-            <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'}>
-                <Edit size={20} /> {isEditMode ? 'Finish Editing' : 'Edit Stock'}
-            </Button>
+            {activeView === 'dashboard' && (
+                <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'}>
+                    <Edit size={20} /> {isEditMode ? 'Finish Editing' : 'Edit Stock'}
+                </Button>
+            )}
         </div>
     </header>
 );

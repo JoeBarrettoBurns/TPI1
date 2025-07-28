@@ -48,7 +48,7 @@ export const MaterialCategoryCard = ({ category, inventorySummary, incomingSumma
                                 {STANDARD_LENGTHS.map(len => {
                                     const isEditing = isEditMode && editingCell?.matType === matType && editingCell?.len === len;
                                     const stockCount = inventorySummary[matType]?.[len] || 0;
-                                    const incomingCount = incomingSummary[matType]?.[len] || 0;
+                                    const incomingCount = incomingSummary[matType]?.lengths[len] || 0;
                                     return (
                                         <td key={len} className="p-2 text-center border-l border-slate-700">
                                             {isEditing ? (
