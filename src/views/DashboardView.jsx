@@ -1,10 +1,11 @@
+// src/views/DashboardView.jsx
+
 import React from 'react';
-import { CATEGORIES } from '../constants/materials';
 import { MaterialCategoryCard } from '../components/dashboard/MaterialCategoryCard';
 
-export const DashboardView = ({ inventorySummary, incomingSummary, isEditMode, onSave, onMaterialClick }) => (
+export const DashboardView = ({ inventorySummary, incomingSummary, isEditMode, onSave, onMaterialClick, materials, categories }) => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {CATEGORIES.map(category => (
+        {categories.map(category => (
             <MaterialCategoryCard
                 key={category}
                 category={category}
@@ -13,6 +14,7 @@ export const DashboardView = ({ inventorySummary, incomingSummary, isEditMode, o
                 isEditMode={isEditMode}
                 onSave={onSave}
                 onMaterialClick={onMaterialClick}
+                materials={materials}
             />
         ))}
     </div>

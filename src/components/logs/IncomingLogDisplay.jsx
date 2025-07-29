@@ -1,7 +1,32 @@
+// src/components/logs/IncomingLogDisplay.jsx
+
 import React, { useMemo } from 'react';
 import { Edit, Trash2, Truck } from 'lucide-react';
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
+=======
+// Helper function to generate a detailed description with shortened names
+const generateDescription = (details) => {
+    if (!Array.isArray(details) || details.length === 0) {
+        return 'No item details';
+    }
+
+    const materialCounts = details.reduce((acc, item) => {
+        const type = item.materialType || 'Unknown';
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+    }, {});
+
+    return Object.entries(materialCounts).map(([type, count]) => {
+        const shortType = type
+            .replace('GALV', 'Galv')
+            .replace('ALUM', 'Al');
+        return `${count}x ${shortType}`;
+    }).join(', ');
+};
+
+>>>>>>> 9ec48bdabea9b00a9a1ee33d335286a2235abc1b
 export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, ordersToShow }) => {
 =======
 // Helper function to generate a detailed description with shortened names
@@ -35,18 +60,16 @@ export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, on
                     id: key, isDeletable: true, isAddition: true, dateOrdered: item.createdAt, customer: item.supplier,
                     job: item.job || 'Stock', qty: 0, details: [], isFuture: item.status === 'Ordered',
                     dateIncoming: item.status === 'On Hand' ? item.dateReceived : item.arrivalDate,
-                    materialTypesSummary: new Set(),
                 };
             }
             groupedByOrder[key].qty += 1;
             groupedByOrder[key].details.push(item);
-            groupedByOrder[key].materialTypesSummary.add(item.materialType);
             if (item.status === 'Ordered' && item.arrivalDate && (!groupedByOrder[key].dateIncoming || new Date(item.arrivalDate) > new Date(groupedByOrder[key].dateIncoming))) {
                 groupedByOrder[key].dateIncoming = item.arrivalDate;
             }
         });
         return Object.values(groupedByOrder)
-            .map(item => ({ ...item, materialTypesDisplay: Array.from(item.materialTypesSummary).join(', ') }))
+            .map(item => ({ ...item, description: generateDescription(item.details) }))
             .sort((a, b) => new Date(b.dateOrdered) - new Date(a.dateOrdered));
     }, [inventory]);
 
@@ -63,7 +86,7 @@ export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, on
                     <tr className="bg-slate-900/60 border-b border-slate-700">
                         <th className="p-4 font-semibold text-slate-400">ORDER</th>
                         <th className="p-4 font-semibold text-slate-400">SUPPLIER</th>
-                        <th className="p-4 font-semibold text-slate-400">MATERIAL(S)</th>
+                        <th className="p-4 font-semibold text-slate-400">DESCRIPTION</th>
                         <th className="p-4 font-semibold text-slate-400">DATE ORDERED</th>
                         <th className="p-4 font-semibold text-slate-400">DATE INCOMING</th>
                         <th className="p-4 font-semibold text-slate-400 text-right">QTY</th>
@@ -75,7 +98,7 @@ export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, on
                         <tr key={item.id} onClick={() => onRowClick(item)} className={`border-b border-slate-700 hover:bg-slate-700/50 cursor-pointer ${item.isFuture ? 'bg-yellow-900/20' : ''}`}>
                             <td className="p-4 truncate text-slate-300">{item.job}</td>
                             <td className="p-4 truncate text-slate-300">{item.customer}</td>
-                            <td className="p-4 truncate text-slate-300">{item.materialTypesDisplay}</td>
+                            <td className="p-4 truncate text-slate-300">{item.description}</td>
                             <td className="p-4 truncate text-slate-300">{new Date(item.dateOrdered).toLocaleDateString()}</td>
                             <td className="p-4 truncate text-slate-300">
                                 {item.dateIncoming ? new Date(item.dateIncoming).toLocaleDateString() : 'N/A'}

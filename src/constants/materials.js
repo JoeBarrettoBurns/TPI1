@@ -1,12 +1,4 @@
-export const MATERIALS = {
-    '22GA-GALV': { category: 'Galvanized', thickness: 0.033, density: 0.2833 }, '20GA-GALV': { category: 'Galvanized', thickness: 0.04, density: 0.2833 }, '18GA-GALV': { category: 'Galvanized', thickness: 0.05, density: 0.2833 }, '16GA-GALV': { category: 'Galvanized', thickness: 0.06, density: 0.2833 }, '12GA-GALV': { category: 'Galvanized', thickness: 0.105, density: 0.2833 }, '10GA-GALV': { category: 'Galvanized', thickness: 0.135, density: 0.2833 }, 'Perf-Galv-16/20GA': { category: 'Galvanized', thickness: 0.04, density: 0.2833 },
-    '22GA-WHITE': { category: 'Pre-Paint', thickness: 0.033, density: 0.2833 }, '20GA-WHITE': { category: 'Pre-Paint', thickness: 0.04, density: 0.2833 }, '18GA-WHITE': { category: 'Pre-Paint', thickness: 0.05, density: 0.2833 },
-    '20GA-SATIN': { category: 'Satin Coat', thickness: 0.04, density: 0.2833 }, '18GA-SATIN': { category: 'Satin Coat', thickness: 0.05, density: 0.2833 }, '16GA-SATIN': { category: 'Satin Coat', thickness: 0.06, density: 0.2833 }, '12GA-SATIN': { category: 'Satin Coat', thickness: 0.105, density: 0.2833 }, '10GA-SATIN': { category: 'Satin Coat', thickness: 0.135, density: 0.2833 },
-    '0.050" MILL ALUM': { category: 'Aluminum', thickness: 0.050, density: 0.0975 }, '0.080" MILL ALUM': { category: 'Aluminum', thickness: 0.080, density: 0.0975 }, '0.125" MILL ALUM': { category: 'Aluminum', thickness: 0.125, density: 0.0975 }, '0.050" STUCCO ALUM': { category: 'Aluminum', thickness: 0.050, density: 0.0975 }, '0.060" TREAD ALUM': { category: 'Aluminum', thickness: 0.060, density: 0.0975 }, 'Perf-Alum-0.050"': { category: 'Aluminum', thickness: 0.050, density: 0.0975 },
-    '20GA-304SS': { category: 'Stainless Steel', thickness: 0.04, density: 0.289 }, '18GA-304SS': { category: 'Stainless Steel', thickness: 0.05, density: 0.289 }, '16GA-304SS': { category: 'Stainless Steel', thickness: 0.06, density: 0.289 }, '12GA-304SS': { category: 'Stainless Steel', thickness: 0.105, density: 0.289 }, '20GA-316L SS': { category: 'Stainless Steel', thickness: 0.04, density: 0.289 },
-};
+// src/constants/materials.js
 
-export const MATERIAL_TYPES = Object.keys(MATERIALS);
-export const CATEGORIES = [...new Set(Object.values(MATERIALS).map(m => m.category))];
 export const SUPPLIERS = ["RYERSON", "AGWAY", "IDEAL", "ALLIANCE", "DEL METALS", "WELLINGTON PERF", "SAMUEL"];
 export const STANDARD_LENGTHS = [96, 120, 144];
