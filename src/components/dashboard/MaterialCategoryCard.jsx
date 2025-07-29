@@ -4,9 +4,9 @@ import React, { useState, useMemo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { STANDARD_LENGTHS } from '../../constants/materials';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Trash2, RotateCcw } from 'lucide-react';
 
-export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingSummary, isEditMode, onSave, onMaterialClick, materials, isDragging }) => {
+export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingSummary, isEditMode, onSave, onMaterialClick, materials, isDragging, onDeleteCategory, isMarkedForDeletion }) => {
     const {
         attributes,
         listeners,
@@ -14,7 +14,10 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         transform,
         transition,
         isDragging: isSortableDragging
-    } = useSortable({ id });
+    } = useSortable({
+        id: id,
+        disabled: isEditMode, // <-- This disables dragging when in edit mode
+    });
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -45,11 +48,28 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         return 'bg-green-500/20 text-green-200';
     };
 
+    const cardClasses = isMarkedForDeletion
+        ? 'ring-2 ring-red-500 bg-red-900/20'
+        : 'border border-slate-700';
+
+    const headerCursor = isEditMode ? 'cursor-default' : 'cursor-grab active:cursor-grabbing';
+
     return (
-        <div ref={setNodeRef} style={style} {...attributes} className="bg-slate-800 rounded-2xl shadow-lg border border-slate-700 flex flex-col">
-            <div {...listeners} className="flex justify-between items-center p-6 cursor-grab active:cursor-grabbing">
+        <div ref={setNodeRef} style={style} {...attributes} className={`bg-slate-800 rounded-2xl shadow-lg flex flex-col transition-all duration-300 ${cardClasses}`}>
+            <div {...listeners} className={`flex justify-between items-center p-6 ${headerCursor}`}>
                 <h3 className="text-xl font-bold text-blue-400">{category}</h3>
-                <GripVertical className="text-slate-500" />
+                <div className="flex items-center gap-2">
+                    {isEditMode && (
+                        <button
+                            onClick={() => onDeleteCategory(category)}
+                            className={`p-1 rounded-full transition-colors ${isMarkedForDeletion ? 'text-amber-400 hover:bg-amber-500/20' : 'text-red-400 hover:bg-red-500/20'}`}
+                            title={isMarkedForDeletion ? 'Undo marking for deletion' : 'Mark for deletion'}
+                        >
+                            {isMarkedForDeletion ? <RotateCcw size={18} /> : <Trash2 size={18} />}
+                        </button>
+                    )}
+                    <GripVertical className="text-slate-500" />
+                </div>
             </div>
             <div className="overflow-x-auto px-6 pb-6">
                 {materialsInCategory.length > 0 ? (
@@ -67,12 +87,12 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                                 <tr key={matType} className="border-b border-slate-700 last:border-b-0">
                                     <td onClick={() => onMaterialClick(matType)} className="p-2 font-medium text-slate-300 cursor-pointer hover:text-blue-400">{matType}</td>
                                     {STANDARD_LENGTHS.map(len => {
-                                        const isEditing = isEditMode && editingCell?.matType === matType && editingCell?.len === len;
+                                        const isEditingCell = isEditMode && editingCell?.matType === matType && editingCell?.len === len;
                                         const stockCount = inventorySummary[matType]?.[len] || 0;
                                         const incomingCount = incomingSummary[matType]?.lengths[len] || 0;
                                         return (
                                             <td key={len} className="p-2 text-center border-l border-slate-700">
-                                                {isEditing ? (
+                                                {isEditingCell ? (
                                                     <input
                                                         type="number"
                                                         value={editValue}

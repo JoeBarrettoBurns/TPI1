@@ -3,14 +3,13 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useOrderForm } from '../../hooks/useOrderForm';
-import { SUPPLIERS } from '../../constants/materials';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 
-export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock", materialTypes }) => {
-    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes);
+export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock", materialTypes, suppliers }) => {
+    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes, suppliers);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
@@ -62,7 +61,7 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                     <div className="p-4 border border-slate-700 rounded-lg bg-slate-900/50 relative space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', e.target.value)} placeholder="e.g. 12345 or Stock" />
-                            <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{SUPPLIERS.map(s => <option key={s}>{s}</option>)}</FormInput>
+                            <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
                             <FormInput label="Status" name="status" value={job.status} onChange={(e) => setJobField(jobIndex, 'status', e.target.value)} as="select">
                                 <option value="Ordered">Ordered (Future)</option>
                                 <option value="On Hand">On Hand</option>

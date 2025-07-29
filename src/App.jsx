@@ -14,7 +14,7 @@ import {
     calculateCostBySupplier,
     calculateAnalyticsByCategory
 } from './utils/dataProcessing';
-import { STANDARD_LENGTHS } from './constants/materials';
+import { INITIAL_SUPPLIERS, STANDARD_LENGTHS } from './constants/materials';
 
 // Layout & Common Components
 import { Header } from './components/layout/Header';
@@ -33,73 +33,99 @@ import { AddOrderModal } from './components/modals/AddOrderModal';
 import { UseStockModal } from './components/modals/UseStockModal';
 import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
 import { AddCategoryModal } from './components/modals/AddCategoryModal';
+import { ManageSuppliersModal } from './components/modals/ManageSuppliersModal';
+import { ConfirmationModal } from './components/modals/ConfirmationModal';
 
 
 export default function App() {
     const { inventory, usageLog, materials, loading, error, userId } = useFirestoreData();
     const [activeView, setActiveView] = useState('dashboard');
-    const [modal, setModal] = useState({ type: null, data: null });
+    const [modal, setModal] = useState({ type: null, data: null, error: null });
     const [isEditMode, setIsEditMode] = useState(false);
     const [scrollToMaterial, setScrollToMaterial] = useState(null);
     const [activeCategory, setActiveCategory] = useState(null);
+    const [suppliers, setSuppliers] = usePersistentState('suppliers', INITIAL_SUPPLIERS);
+    const [categoriesToDelete, setCategoriesToDelete] = useState([]);
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
-
     const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);
 
     useEffect(() => {
-        if (!loading && initialCategories.length > 0) {
+        if (!loading) {
             setCategories(prevOrder => {
-                const newSet = new Set(initialCategories);
-                const orderedSet = new Set(prevOrder);
-
-                const validOrdered = prevOrder.filter(cat => newSet.has(cat));
-                const newCategories = initialCategories.filter(cat => !orderedSet.has(cat));
-
+                const liveCategories = new Set(initialCategories);
+                const validOrdered = prevOrder.filter(cat => liveCategories.has(cat));
+                const newCategories = initialCategories.filter(cat => !prevOrder.includes(cat));
                 return [...validOrdered, ...newCategories];
             });
         }
     }, [initialCategories, setCategories, loading]);
-
 
     const materialTypes = useMemo(() => Object.keys(materials), [materials]);
     const inventorySummary = useMemo(() => calculateInventorySummary(inventory, materialTypes), [inventory, materialTypes]);
     const incomingSummary = useMemo(() => calculateIncomingSummary(inventory, materialTypes), [inventory, materialTypes]);
     const costBySupplier = useMemo(() => calculateCostBySupplier(inventory, materials), [inventory, materials]);
     const analyticsByCategory = useMemo(() => calculateAnalyticsByCategory(inventory, materials), [inventory, materials]);
-    const closeModal = () => setModal({ type: null, data: null });
+    const closeModal = () => setModal({ type: null, data: null, error: null });
 
-    const onScrollToComplete = useCallback(() => {
-        setScrollToMaterial(null);
-    }, []);
+    const onScrollToComplete = useCallback(() => setScrollToMaterial(null), []);
 
-    // --- Drag and Drop Handlers ---
-    const handleDragStart = (event) => {
-        setActiveCategory(event.active.id);
-    };
-
+    const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
         const { active, over } = event;
         if (over && active.id !== over.id) {
-            setCategories((items) => {
-                const oldIndex = items.indexOf(active.id);
-                const newIndex = items.indexOf(over.id);
-                return arrayMove(items, oldIndex, newIndex);
-            });
+            setCategories((items) => arrayMove(items, items.indexOf(active.id), items.indexOf(over.id)));
         }
         setActiveCategory(null);
     };
+    const handleDragCancel = () => setActiveCategory(null);
 
-    const handleDragCancel = () => {
-        setActiveCategory(null);
+    const handleToggleCategoryForDeletion = (categoryName) => {
+        setCategoriesToDelete(prev =>
+            prev.includes(categoryName)
+                ? prev.filter(c => c !== categoryName)
+                : [...prev, categoryName]
+        );
     };
 
+    const handleFinishEditing = () => {
+        if (categoriesToDelete.length > 0) {
+            setModal({ type: 'confirm-delete-categories', data: categoriesToDelete });
+        } else {
+            setIsEditMode(false);
+        }
+    };
 
-    // --- Core Data Writing Functions (NO CHANGES HERE) ---
-    // ... handleUseStock, handleFulfillScheduledLog, etc. remain the same
+    const handleConfirmDeleteCategories = async () => {
+        try {
+            const materialsToDelete = Object.values(materials).filter(m => categoriesToDelete.includes(m.category));
+            const materialIdsToDelete = materialsToDelete.map(m => m.id);
+            const inventoryToDelete = inventory.filter(item => materialIdsToDelete.includes(item.materialType));
 
-    // --- Core Data Writing Functions ---
+            const allDocRefsToDelete = [
+                ...materialIdsToDelete.map(id => doc(db, `artifacts/${appId}/public/data/materials`, id.replace(/\//g, '-'))),
+                ...inventoryToDelete.map(item => doc(db, `artifacts/${appId}/public/data/inventory`, item.id))
+            ];
 
+            const MAX_BATCH_SIZE = 500;
+            for (let i = 0; i < allDocRefsToDelete.length; i += MAX_BATCH_SIZE) {
+                const chunk = allDocRefsToDelete.slice(i, i + MAX_BATCH_SIZE);
+                const batch = writeBatch(db);
+                chunk.forEach(docRef => batch.delete(docRef));
+                await batch.commit();
+            }
+
+            setCategoriesToDelete([]);
+            setIsEditMode(false);
+            closeModal();
+            setActiveView('dashboard');
+        } catch (err) {
+            console.error("Error deleting categories:", err);
+            setModal(prev => ({ ...prev, error: "Failed to delete categories. Please try again." }));
+        }
+    };
+
+    // ... other handler functions (handleUseStock, handleAddOrEditOrder, etc.) remain unchanged ...
     const handleUseStock = async (jobs, options) => {
         const { isScheduled, scheduledDate } = options;
 
@@ -243,6 +269,14 @@ export default function App() {
         });
 
         await batch.commit();
+    };
+
+    const handleAddSupplier = (supplier) => {
+        setSuppliers(prev => [...prev, supplier]);
+    };
+
+    const handleDeleteSupplier = (supplier) => {
+        setSuppliers(prev => prev.filter(s => s !== supplier));
     };
 
     const handleAddOrEditOrder = async (jobs, originalOrderGroup = null) => {
@@ -466,6 +500,8 @@ export default function App() {
                                 }
                             }}
                             activeCategory={activeCategory}
+                            onDeleteCategory={handleToggleCategoryForDeletion}
+                            categoriesToDelete={categoriesToDelete}
                         />
                     </DndContext>
                 );
@@ -506,9 +542,10 @@ export default function App() {
                 <Header
                     onAdd={() => setModal({ type: 'add' })}
                     onUse={() => setModal({ type: 'use' })}
-                    onEdit={() => setIsEditMode(!isEditMode)}
+                    onEdit={() => isEditMode ? handleFinishEditing() : setIsEditMode(true)}
                     isEditMode={isEditMode}
                     onAddCategory={() => setModal({ type: 'add-category' })}
+                    onManageSuppliers={() => setModal({ type: 'manage-suppliers' })}
                     activeView={activeView}
                 />
                 <ViewTabs activeView={activeView} setActiveView={setActiveView} categories={categories} />
@@ -522,11 +559,21 @@ export default function App() {
                 </footer>
             </div>
 
-            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} />}
-            {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} />}
+            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} suppliers={suppliers} />}
+            {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} suppliers={suppliers} />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} inventorySummary={inventorySummary} incomingSummary={incomingSummary} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
             {modal.type === 'add-category' && <AddCategoryModal onClose={closeModal} onSave={handleAddCategory} />}
+            {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} />}
+            {modal.type === 'confirm-delete-categories' &&
+                <ConfirmationModal
+                    isOpen={true}
+                    onClose={closeModal}
+                    onConfirm={handleConfirmDeleteCategories}
+                    title="Confirm Deletion"
+                    message={`Are you sure you want to delete ${modal.data.length} categor${modal.data.length > 1 ? 'ies' : 'y'} and all associated materials/inventory? This action cannot be undone.`}
+                />
+            }
         </div>
     );
 }

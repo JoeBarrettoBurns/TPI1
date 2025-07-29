@@ -1,16 +1,16 @@
 // src/hooks/useOrderForm.js
 
 import { useState } from 'react';
-import { SUPPLIERS, STANDARD_LENGTHS } from '../constants/materials';
+import { STANDARD_LENGTHS } from '../constants/materials';
 
-export function useOrderForm(initialData, materialTypes) {
+export function useOrderForm(initialData, materialTypes, suppliers) {
     const createNewItem = () => ({
         materialType: materialTypes && materialTypes.length > 0 ? materialTypes[0] : '',
         qty96: '', qty120: '', qty144: '',
         customWidth: '', customLength: '', customQty: '',
         costPerPound: ''
     });
-    const createNewJob = () => ({ jobName: '', customer: '', supplier: SUPPLIERS[0], status: 'Ordered', arrivalDate: '', items: [createNewItem()] });
+    const createNewJob = () => ({ jobName: '', customer: '', supplier: suppliers[0], status: 'Ordered', arrivalDate: '', items: [createNewItem()] });
 
     const transformInitialData = (data) => {
         if (!data) return [createNewJob()];
@@ -21,7 +21,7 @@ export function useOrderForm(initialData, materialTypes) {
         const jobData = {
             jobName: data.job || '',
             customer: data.customer || '',
-            supplier: data.customer || SUPPLIERS[0],
+            supplier: data.customer || suppliers[0],
             status: data.isFuture ? 'Ordered' : 'On Hand',
             arrivalDate: arrivalDateForInput,
             items: []

@@ -13,7 +13,9 @@ export const DashboardView = ({
     onMaterialClick,
     materials,
     categories,
-    activeCategory
+    activeCategory,
+    onDeleteCategory,
+    categoriesToDelete
 }) => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <SortableContext items={categories} strategy={rectSortingStrategy}>
@@ -28,6 +30,8 @@ export const DashboardView = ({
                     onSave={onSave}
                     onMaterialClick={onMaterialClick}
                     materials={materials}
+                    onDeleteCategory={onDeleteCategory}
+                    isMarkedForDeletion={categoriesToDelete.includes(category)}
                 />
             ))}
         </SortableContext>
