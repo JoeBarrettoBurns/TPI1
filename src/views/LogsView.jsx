@@ -7,15 +7,7 @@ import { LogDetailModal } from '../components/modals/LogDetailModal';
 import { IncomingLogDisplay } from '../components/logs/IncomingLogDisplay';
 import { OutgoingLogDisplay } from '../components/logs/OutgoingLogDisplay';
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup }) => {
-=======
 export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup, materials, onFulfillLog, onReceiveOrder }) => {
->>>>>>> Stashed changes
-=======
-export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup, materials, onFulfillLog }) => {
->>>>>>> 9ec48bdabea9b00a9a1ee33d335286a2235abc1b
     // State to manage which log entry is being viewed in detail
     const [detailLog, setDetailLog] = useState(null);
     // State to manage which log entry is pending deletion confirmation

@@ -3,32 +3,6 @@
 import React, { useMemo } from 'react';
 import { Edit, Trash2, Truck } from 'lucide-react';
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-// Helper function to generate a detailed description with shortened names
-const generateDescription = (details) => {
-    if (!Array.isArray(details) || details.length === 0) {
-        return 'No item details';
-    }
-
-    const materialCounts = details.reduce((acc, item) => {
-        const type = item.materialType || 'Unknown';
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-    }, {});
-
-    return Object.entries(materialCounts).map(([type, count]) => {
-        const shortType = type
-            .replace('GALV', 'Galv')
-            .replace('ALUM', 'Al');
-        return `${count}x ${shortType}`;
-    }).join(', ');
-};
-
->>>>>>> 9ec48bdabea9b00a9a1ee33d335286a2235abc1b
-export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, ordersToShow }) => {
-=======
 // Helper function to generate a detailed description with shortened names
 const generateDescription = (details) => {
     if (!Array.isArray(details) || details.length === 0) {
@@ -50,7 +24,6 @@ const generateDescription = (details) => {
 };
 
 export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }) => {
->>>>>>> Stashed changes
     const incomingItems = useMemo(() => {
         const groupedByOrder = {};
         inventory.filter(item => item.supplier !== 'MODIFICATION').forEach(item => {
