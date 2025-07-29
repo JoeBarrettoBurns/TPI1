@@ -27,7 +27,7 @@ import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
 import { CostAnalyticsView } from './views/CostAnalyticsView';
-import { PriceHistoryView } from './views/PriceHistoryView'; // <-- Import the new view
+import { PriceHistoryView } from './views/PriceHistoryView';
 
 // Modals
 import { AddOrderModal } from './components/modals/AddOrderModal';
@@ -131,47 +131,50 @@ export default function App() {
 
         await runTransaction(db, async (transaction) => {
             const usageLogCollectionRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
+            const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
             for (const job of jobs) {
-                const itemsForLog = [];
-                let totalItems = 0;
+                if (isScheduled) {
+                    const itemsForLog = [];
+                    let totalItems = 0;
 
-                for (const item of job.items) {
-                    for (const len of STANDARD_LENGTHS) {
-                        const qty = parseInt(item[`qty${len}`] || 0);
-                        if (qty > 0) {
-                            totalItems += qty;
-                            const materialInfo = materials[item.materialType];
-                            for (let i = 0; i < qty; i++) {
-                                itemsForLog.push({
-                                    materialType: item.materialType,
-                                    length: len,
-                                    width: 48,
-                                    gauge: getGaugeFromMaterial(item.materialType),
-                                    density: materialInfo?.density || 0,
-                                    thickness: materialInfo?.thickness || 0,
-                                });
+                    for (const item of job.items) {
+                        for (const len of STANDARD_LENGTHS) {
+                            const qty = parseInt(item[`qty${len}`] || 0);
+                            if (qty > 0) {
+                                totalItems += qty;
+                                const materialInfo = materials[item.materialType];
+                                for (let i = 0; i < qty; i++) {
+                                    itemsForLog.push({
+                                        materialType: item.materialType,
+                                        length: len,
+                                        width: 48,
+                                        gauge: getGaugeFromMaterial(item.materialType),
+                                        density: materialInfo?.density || 0,
+                                        thickness: materialInfo?.thickness || 0,
+                                    });
+                                }
                             }
                         }
                     }
-                }
 
-                if (itemsForLog.length === 0) continue;
-
-                if (isScheduled) {
-                    const logDocRef = doc(usageLogCollectionRef);
-                    const logEntry = {
-                        job: job.jobName.trim() || 'N/A',
-                        customer: job.customer,
-                        createdAt: new Date().toISOString(),
-                        usedAt: new Date(scheduledDate + 'T00:00:00').toISOString(),
-                        status: 'Scheduled',
-                        details: itemsForLog,
-                        qty: -totalItems,
-                    };
-                    transaction.set(logDocRef, logEntry);
+                    if (itemsForLog.length > 0) {
+                        const logDocRef = doc(usageLogCollectionRef);
+                        const logEntry = {
+                            job: job.jobName.trim() || 'N/A',
+                            customer: job.customer,
+                            createdAt: new Date().toISOString(),
+                            usedAt: new Date(scheduledDate + 'T00:00:00').toISOString(),
+                            status: 'Scheduled',
+                            details: itemsForLog,
+                            qty: -totalItems,
+                        };
+                        transaction.set(logDocRef, logEntry);
+                    }
                 } else {
                     const usedItemsForLog = [];
+                    const logDocRef = doc(usageLogCollectionRef);
+
                     for (const item of job.items) {
                         for (const len of STANDARD_LENGTHS) {
                             const qty = parseInt(item[`qty${len}`] || 0);
@@ -187,16 +190,20 @@ export default function App() {
 
                             const sheetsToUse = matchingSheets.slice(0, qty);
                             sheetsToUse.forEach(sheet => {
-                                const stockDocRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
-                                transaction.delete(stockDocRef);
-                                const { id, ...rest } = sheet;
-                                usedItemsForLog.push(rest);
+                                const stockDocRef = doc(inventoryCollectionRef, sheet.id);
+                                transaction.update(stockDocRef, {
+                                    status: 'Used',
+                                    usageLogId: logDocRef.id,
+                                    jobNameUsed: job.jobName.trim() || 'N/A',
+                                    customerUsed: job.customer,
+                                    usedAt: new Date().toISOString()
+                                });
+                                usedItemsForLog.push(sheet);
                             });
                         }
                     }
 
                     if (usedItemsForLog.length > 0) {
-                        const logDocRef = doc(usageLogCollectionRef);
                         const logEntry = {
                             job: job.jobName.trim() || 'N/A',
                             customer: job.customer,
@@ -222,7 +229,7 @@ export default function App() {
                     return acc;
                 }, {});
 
-                const inventoryToDelete = [];
+                const inventoryToUpdate = [];
                 for (const [key, qty] of Object.entries(itemsNeeded)) {
                     const [materialType, lengthStr] = key.split('|');
                     const length = parseInt(lengthStr, 10);
@@ -234,17 +241,24 @@ export default function App() {
                     if (availableSheets.length < qty) {
                         throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                     }
-                    inventoryToDelete.push(...availableSheets.slice(0, qty));
+                    inventoryToUpdate.push(...availableSheets.slice(0, qty));
                 }
 
-                inventoryToDelete.forEach(sheet => {
+                inventoryToUpdate.forEach(sheet => {
                     const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
-                    transaction.delete(docRef);
+                    transaction.update(docRef, {
+                        status: 'Used',
+                        usageLogId: logToFulfill.id,
+                        jobNameUsed: logToFulfill.job,
+                        customerUsed: logToFulfill.customer,
+                        usedAt: new Date().toISOString()
+                    });
                 });
 
                 const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
                 transaction.update(logDocRef, {
                     status: 'Completed',
+                    details: inventoryToUpdate,
                     fulfilledAt: new Date().toISOString()
                 });
             });
@@ -427,14 +441,58 @@ export default function App() {
                 qty: -totalItems
             });
         } else {
+            // Logic for editing a COMPLETED log
             await runTransaction(db, async (transaction) => {
                 const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
-                const details = originalLog.details || [];
-                for (const item of details) {
-                    const { id, ...originalSheetData } = item;
-                    const newDocRef = doc(inventoryCollectionRef);
-                    transaction.set(newDocRef, originalSheetData);
+
+                // 1. Calculate the net change in materials required
+                const netChange = {};
+                (originalLog.details || []).forEach(item => {
+                    const key = `${item.materialType}|${item.length}`;
+                    netChange[key] = (netChange[key] || 0) + 1; // Items to be returned
+                });
+                newLogData.items.forEach(item => {
+                    STANDARD_LENGTHS.forEach(len => {
+                        const qty = parseInt(item[`qty${len}`] || 0);
+                        if (qty > 0) {
+                            const key = `${item.materialType}|${len}`;
+                            netChange[key] = (netChange[key] || 0) - qty; // Items to be used
+                        }
+                    });
+                });
+
+                // 2. Validate stock availability for items that need to be removed
+                for (const key in netChange) {
+                    if (netChange[key] < 0) {
+                        const [materialType, lengthStr] = key.split('|');
+                        const length = parseInt(lengthStr, 10);
+                        const needed = Math.abs(netChange[key]);
+
+                        const currentStock = inventory.filter(i =>
+                            i.materialType === materialType &&
+                            i.length === length &&
+                            i.status === 'On Hand'
+                        ).length;
+
+                        if (currentStock < needed) {
+                            throw new Error(`Not enough stock for ${materialType} @ ${length}". Needed: ${needed}, Available: ${currentStock}.`);
+                        }
+                    }
                 }
+
+                // 3. Apply changes if validation passes
+                const originalItemIds = (originalLog.details || []).map(d => d.id);
+                const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
+                itemsToReturn.forEach(item => {
+                    const docRef = doc(inventoryCollectionRef, item.id);
+                    transaction.update(docRef, {
+                        status: 'On Hand',
+                        usageLogId: null,
+                        jobNameUsed: null,
+                        customerUsed: null,
+                        usedAt: null
+                    });
+                });
 
                 const updatedUsedItemsForLog = [];
                 for (const item of newLogData.items) {
@@ -443,19 +501,25 @@ export default function App() {
                         if (qty <= 0) continue;
 
                         const matchingSheets = inventory.filter(
-                            (i) => i.materialType === item.materialType && i.length === len && i.status !== 'Ordered'
+                            (i) => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !originalItemIds.includes(i.id)
                         ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-                        if (matchingSheets.length < qty) {
-                            throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
+                        const sheetsToUse = matchingSheets.slice(0, qty);
+
+                        if (sheetsToUse.length < qty) {
+                            throw new Error(`Concurrency Error: Not enough stock for ${item.materialType} @ ${len}" during edit.`);
                         }
 
-                        const sheetsToUse = matchingSheets.slice(0, qty);
                         sheetsToUse.forEach((sheet) => {
-                            const stockDocRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
-                            transaction.delete(stockDocRef);
-                            const { id, ...rest } = sheet;
-                            updatedUsedItemsForLog.push({ ...rest });
+                            const stockDocRef = doc(inventoryCollectionRef, sheet.id);
+                            transaction.update(stockDocRef, {
+                                status: 'Used',
+                                usageLogId: originalLog.id,
+                                jobNameUsed: newLogData.jobName,
+                                customerUsed: newLogData.customer,
+                                usedAt: new Date().toISOString()
+                            });
+                            updatedUsedItemsForLog.push(sheet);
                         });
                     }
                 }
@@ -513,7 +577,7 @@ export default function App() {
                     onFulfillLog={handleFulfillScheduledLog}
                     onReceiveOrder={handleReceiveOrder}
                 />;
-            case 'price-history': // <-- Add the new case
+            case 'price-history':
                 return <PriceHistoryView
                     inventory={inventory}
                     materials={materials}
@@ -566,7 +630,7 @@ export default function App() {
 
             {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} suppliers={suppliers} />}
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} suppliers={suppliers} />}
-            {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} inventorySummary={inventorySummary} incomingSummary={incomingSummary} />}
+            {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
             {modal.type === 'add-category' && <AddCategoryModal onClose={closeModal} onSave={handleAddCategory} />}
             {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} />}

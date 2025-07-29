@@ -72,7 +72,7 @@ export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, on
                             <td className="p-4 truncate text-slate-300">{item.job}</td>
                             <td className="p-4 truncate text-slate-300">{item.customer}</td>
                             <td className="p-4 truncate text-slate-300">{item.description}</td>
-                            <td className="p-4 truncate text-slate-300">{new Date(item.dateOrdered).toLocaleDateString()}</td>
+                            <td className="p-4 truncate text-slate-300">{new Date(item.dateOrdered).toLocaleString()}</td>
                             <td className="p-4 truncate text-slate-300">
                                 {item.dateIncoming ? new Date(item.dateIncoming).toLocaleDateString() : 'N/A'}
                             </td>

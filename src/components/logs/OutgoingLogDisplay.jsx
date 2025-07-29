@@ -71,7 +71,7 @@ export const OutgoingLogDisplay = ({ usageLog, onRowClick, onDelete, onEdit, onF
                             <td className="p-4 truncate text-slate-300">
                                 <div className="flex items-center gap-2">
                                     {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" title="Scheduled" />}
-                                    <span>{new Date(item.usedAt).toLocaleDateString()}</span>
+                                    <span>{new Date(item.usedAt).toLocaleString()}</span>
                                 </div>
                             </td>
                             <td className="p-4 truncate text-slate-300">{item.job}</td>

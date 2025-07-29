@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, writeBatch, runTransaction } from 'firebase/firestore';
 import { db, appId, auth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from '../firebase/config';
-import { STANDARD_LENGTHS } from '../constants/materials';
 
 export function useFirestoreData() {
     const [inventory, setInventory] = useState([]);
     const [usageLog, setUsageLog] = useState([]);
+    const [purchaseOrders, setPurchaseOrders] = useState([]); // <-- New state for purchase orders
     const [materials, setMaterials] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -40,9 +40,11 @@ export function useFirestoreData() {
         const inventoryRef = collection(db, `artifacts/${appId}/public/data/inventory`);
         const usageLogRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
         const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
+        const purchaseOrdersRef = collection(db, `artifacts/${appId}/public/data/purchase_orders`); // <-- New reference
 
         const qInventory = query(inventoryRef, orderBy("createdAt", "desc"));
         const qUsageLog = query(usageLogRef, orderBy("createdAt", "desc"));
+        const qPurchaseOrders = query(purchaseOrdersRef, orderBy("createdAt", "desc")); // <-- New query
 
         const handleAutoReceive = (inventoryData) => {
             const now = new Date();
@@ -62,8 +64,6 @@ export function useFirestoreData() {
             const logsToFulfill = usageData.filter(log => log.status === 'Scheduled' && new Date(log.usedAt) <= now);
 
             if (logsToFulfill.length === 0) return;
-
-            console.log(`Found ${logsToFulfill.length} scheduled log(s) to fulfill.`);
 
             for (const log of logsToFulfill) {
                 runTransaction(db, async (transaction) => {
@@ -100,11 +100,6 @@ export function useFirestoreData() {
 
                         const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
                         transaction.update(logDocRef, { status: 'Completed' });
-                        console.log(`Successfully fulfilled and completed scheduled log ${log.id}.`);
-                    } else {
-                        // Optionally, update the log with an error status
-                        // const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
-                        // transaction.update(logDocRef, { status: 'Failed', error: 'Insufficient stock on scheduled date.' });
                     }
                 }).catch(err => console.error(`Failed transaction for scheduled log ${log.id}:`, err));
             }
@@ -116,7 +111,6 @@ export function useFirestoreData() {
             handleAutoReceive(data);
             setLoading(false);
         }, (err) => {
-            console.error("Error fetching inventory:", err);
             setError('Failed to load inventory.');
             setLoading(false);
         });
@@ -124,24 +118,29 @@ export function useFirestoreData() {
         const unsubUsageLog = onSnapshot(qUsageLog, (snap) => {
             const usageData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setUsageLog(usageData);
-            // We need current inventory to check for fulfillment
             onSnapshot(qInventory, (invSnap) => {
                 const currentInventory = invSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 handleAutoFulfillScheduledUsage(usageData, currentInventory);
             });
         }, (err) => {
-            console.error("Error fetching usage logs:", err);
             setError('Failed to load usage logs.');
+        });
+
+        // <-- New listener for purchase orders -->
+        const unsubPurchaseOrders = onSnapshot(qPurchaseOrders, (snap) => {
+            const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setPurchaseOrders(data);
+        }, (err) => {
+            setError('Failed to load purchase orders.');
         });
 
         const unsubMaterials = onSnapshot(materialsRef, (snap) => {
             const materialsData = {};
             snap.docs.forEach(doc => {
-                materialsData[doc.id] = { id: doc.id, ...doc.data() };
+                materialsData[doc.id.replace(/-/g, '/')] = { id: doc.id, ...doc.data() };
             });
             setMaterials(materialsData);
         }, (err) => {
-            console.error("Error fetching materials:", err);
             setError('Failed to load materials.');
         });
 
@@ -149,8 +148,9 @@ export function useFirestoreData() {
             unsubInventory();
             unsubUsageLog();
             unsubMaterials();
+            unsubPurchaseOrders(); // <-- Unsubscribe
         };
     }, [userId]);
 
-    return { inventory, usageLog, materials, loading, error, userId };
+    return { inventory, usageLog, purchaseOrders, materials, loading, error, userId };
 }

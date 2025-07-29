@@ -9,14 +9,14 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X } from 'lucide-react';
 
-export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary, incomingSummary }) => {
+export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary, incomingSummary, suppliers }) => {
     const {
         jobs,
         setJobField,
         setItemField,
         addMaterial,
         removeMaterial,
-    } = useOrderForm(null, materialTypes);
+    } = useOrderForm(null, materialTypes, suppliers);
 
     const [isScheduled, setIsScheduled] = useState(false);
     const [scheduledDate, setScheduledDate] = useState('');

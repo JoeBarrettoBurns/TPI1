@@ -48,10 +48,12 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
         setLogToDelete(null);
     };
 
-    // Combine refs for dnd-kit and the parent's scroll-to functionality
+    // Correctly combine the ref from dnd-kit and the parent component's ref
     const combinedRef = (node) => {
         setNodeRef(node);
-        if (ref) {
+        if (typeof ref === 'function') {
+            ref(node);
+        } else if (ref) {
             ref.current = node;
         }
     };

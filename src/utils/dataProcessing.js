@@ -3,7 +3,7 @@
 import { STANDARD_LENGTHS } from '../constants/materials';
 
 // Helper function to calculate the cost of a single sheet based on its properties
-const calculateSheetCost = (item, materials) => {
+export const calculateSheetCost = (item, materials) => {
     const material = materials[item.materialType];
     if (!material || !item.costPerPound || item.costPerPound <= 0) return 0;
     // Assume standard width if not specified, for calculation purposes
@@ -22,12 +22,13 @@ export const getGaugeFromMaterial = (materialType) => {
     return 'N/A';
 };
 
+// CORRECTED: This now ONLY counts items that are physically 'On Hand'
 export const calculateInventorySummary = (inventory, materialTypes) => {
     const summary = {};
     materialTypes.forEach(type => {
         summary[type] = { ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {}), custom: 0 };
     });
-    inventory.filter(item => item.status !== 'Ordered').forEach(item => {
+    inventory.filter(item => item.status === 'On Hand').forEach(item => {
         if (summary[item.materialType]) {
             if (STANDARD_LENGTHS.includes(item.length)) {
                 summary[item.materialType][item.length]++;
@@ -69,6 +70,7 @@ export const calculateIncomingSummary = (inventory, materialTypes) => {
 export const calculateMaterialTransactions = (materialsInCategory, inventory, usageLog) => {
     const allTransactions = {};
     materialsInCategory.forEach(matType => {
+        // Incoming logs should show all purchased items, regardless of status
         const groupedInventory = {};
         inventory.filter(item => item.materialType === matType).forEach(item => {
             const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
@@ -83,6 +85,8 @@ export const calculateMaterialTransactions = (materialsInCategory, inventory, us
             }
             groupedInventory[key].details.push(item);
         });
+
+        // Outgoing logs remain the same
         const groupedUsage = {};
         usageLog.filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
             const isModification = (log.job || '').startsWith('MODIFICATION');
