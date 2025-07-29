@@ -1,9 +1,12 @@
 // src/App.jsx
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import { writeBatch, runTransaction, doc, collection, deleteDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
+import { usePersistentState } from './hooks/usePersistentState';
 import {
     calculateInventorySummary,
     calculateIncomingSummary,
@@ -38,20 +41,62 @@ export default function App() {
     const [modal, setModal] = useState({ type: null, data: null });
     const [isEditMode, setIsEditMode] = useState(false);
     const [scrollToMaterial, setScrollToMaterial] = useState(null);
+    const [activeCategory, setActiveCategory] = useState(null);
 
-    const categories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
+    const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
+
+    const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);
+
+    useEffect(() => {
+        if (!loading && initialCategories.length > 0) {
+            setCategories(prevOrder => {
+                const newSet = new Set(initialCategories);
+                const orderedSet = new Set(prevOrder);
+
+                const validOrdered = prevOrder.filter(cat => newSet.has(cat));
+                const newCategories = initialCategories.filter(cat => !orderedSet.has(cat));
+
+                return [...validOrdered, ...newCategories];
+            });
+        }
+    }, [initialCategories, setCategories, loading]);
+
+
     const materialTypes = useMemo(() => Object.keys(materials), [materials]);
-
     const inventorySummary = useMemo(() => calculateInventorySummary(inventory, materialTypes), [inventory, materialTypes]);
     const incomingSummary = useMemo(() => calculateIncomingSummary(inventory, materialTypes), [inventory, materialTypes]);
     const costBySupplier = useMemo(() => calculateCostBySupplier(inventory, materials), [inventory, materials]);
     const analyticsByCategory = useMemo(() => calculateAnalyticsByCategory(inventory, materials), [inventory, materials]);
-
     const closeModal = () => setModal({ type: null, data: null });
 
     const onScrollToComplete = useCallback(() => {
         setScrollToMaterial(null);
     }, []);
+
+    // --- Drag and Drop Handlers ---
+    const handleDragStart = (event) => {
+        setActiveCategory(event.active.id);
+    };
+
+    const handleDragEnd = (event) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            setCategories((items) => {
+                const oldIndex = items.indexOf(active.id);
+                const newIndex = items.indexOf(over.id);
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        }
+        setActiveCategory(null);
+    };
+
+    const handleDragCancel = () => {
+        setActiveCategory(null);
+    };
+
+
+    // --- Core Data Writing Functions (NO CHANGES HERE) ---
+    // ... handleUseStock, handleFulfillScheduledLog, etc. remain the same
 
     // --- Core Data Writing Functions ---
 
@@ -399,19 +444,31 @@ export default function App() {
     const renderActiveView = () => {
         switch (activeView) {
             case 'dashboard':
-                return <DashboardView
-                    inventorySummary={inventorySummary} incomingSummary={incomingSummary} isEditMode={isEditMode}
-                    materials={materials}
-                    categories={categories}
-                    onSave={handleStockEdit}
-                    onMaterialClick={(materialType) => {
-                        const category = materials[materialType]?.category;
-                        if (category) {
-                            setActiveView(category);
-                            setScrollToMaterial(materialType);
-                        }
-                    }}
-                />;
+                return (
+                    <DndContext
+                        collisionDetection={closestCenter}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        onDragCancel={handleDragCancel}
+                    >
+                        <DashboardView
+                            inventorySummary={inventorySummary}
+                            incomingSummary={incomingSummary}
+                            isEditMode={isEditMode}
+                            materials={materials}
+                            categories={categories}
+                            onSave={handleStockEdit}
+                            onMaterialClick={(materialType) => {
+                                const category = materials[materialType]?.category;
+                                if (category) {
+                                    setActiveView(category);
+                                    setScrollToMaterial(materialType);
+                                }
+                            }}
+                            activeCategory={activeCategory}
+                        />
+                    </DndContext>
+                );
             case 'logs':
                 return <LogsView
                     inventory={inventory} usageLog={usageLog} onEditOrder={openModalForEdit}
@@ -426,7 +483,7 @@ export default function App() {
                     analyticsByCategory={analyticsByCategory}
                 />;
             default:
-                if (categories.includes(activeView)) {
+                if (initialCategories.includes(activeView)) {
                     return <MaterialDetailView
                         category={activeView} inventory={inventory} usageLog={usageLog}
                         inventorySummary={inventorySummary} incomingSummary={incomingSummary}
