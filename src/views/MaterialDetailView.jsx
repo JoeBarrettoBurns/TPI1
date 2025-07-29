@@ -18,23 +18,47 @@ export const MaterialDetailView = ({
 
     const [orderedMaterials, setOrderedMaterials] = usePersistentState(`material-order-${category}`, []);
     const [activeMaterial, setActiveMaterial] = useState(null);
+    const [highlightedMaterial, setHighlightedMaterial] = useState(null);
+    const detailRefs = useRef({});
 
     useEffect(() => {
         setOrderedMaterials(prevOrder => {
             const liveItems = new Set(initialMaterials);
             const currentOrderSet = new Set(prevOrder);
-
             const filteredOrder = prevOrder.filter(item => liveItems.has(item));
             const newItems = initialMaterials.filter(item => !currentOrderSet.has(item));
-
             const newOrder = [...filteredOrder, ...newItems];
-
             if (JSON.stringify(newOrder) !== JSON.stringify(prevOrder)) {
                 return newOrder;
             }
             return prevOrder;
         });
     }, [initialMaterials, setOrderedMaterials]);
+
+    // This effect handles the scrolling and highlighting
+    useEffect(() => {
+        if (scrollToMaterial) {
+            // 1. Set the local state to trigger the highlight
+            setHighlightedMaterial(scrollToMaterial);
+
+            // 2. Scroll the item into view
+            if (detailRefs.current[scrollToMaterial]?.current) {
+                detailRefs.current[scrollToMaterial].current.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }
+
+            // 3. Set a timer to remove the highlight
+            const timer = setTimeout(() => {
+                setHighlightedMaterial(null);
+                onScrollToComplete(); // Notify the parent app the process is done
+            }, 1000); // 1.5 seconds
+
+            // 4. Clean up the timer
+            return () => clearTimeout(timer);
+        }
+    }, [scrollToMaterial, onScrollToComplete]);
 
 
     const handleDragStart = (event) => setActiveMaterial(event.active.id);
@@ -50,14 +74,6 @@ export const MaterialDetailView = ({
         setActiveMaterial(null);
     };
     const handleDragCancel = () => setActiveMaterial(null);
-
-    const detailRefs = useRef({});
-    useEffect(() => {
-        if (scrollToMaterial && detailRefs.current[scrollToMaterial]?.current) {
-            detailRefs.current[scrollToMaterial].current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            onScrollToComplete();
-        }
-    }, [scrollToMaterial, onScrollToComplete]);
 
     return (
         <DndContext
@@ -84,7 +100,7 @@ export const MaterialDetailView = ({
                             onFulfillLog={onFulfillLog}
                             materials={materials}
                             ref={el => detailRefs.current[matType] = { current: el }}
-                            highlighted={scrollToMaterial === matType}
+                            highlighted={highlightedMaterial === matType} // Use local state for highlight
                         />
                     ))}
                 </SortableContext>

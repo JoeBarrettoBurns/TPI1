@@ -27,6 +27,7 @@ import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
 import { CostAnalyticsView } from './views/CostAnalyticsView';
+import { PriceHistoryView } from './views/PriceHistoryView'; // <-- Import the new view
 
 // Modals
 import { AddOrderModal } from './components/modals/AddOrderModal';
@@ -125,7 +126,6 @@ export default function App() {
         }
     };
 
-    // ... other handler functions (handleUseStock, handleAddOrEditOrder, etc.) remain unchanged ...
     const handleUseStock = async (jobs, options) => {
         const { isScheduled, scheduledDate } = options;
 
@@ -512,6 +512,11 @@ export default function App() {
                     materials={materials}
                     onFulfillLog={handleFulfillScheduledLog}
                     onReceiveOrder={handleReceiveOrder}
+                />;
+            case 'price-history': // <-- Add the new case
+                return <PriceHistoryView
+                    inventory={inventory}
+                    materials={materials}
                 />;
             case 'analytics':
                 return <CostAnalyticsView
