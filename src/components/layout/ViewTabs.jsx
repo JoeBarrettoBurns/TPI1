@@ -1,5 +1,3 @@
-// src/components/layout/ViewTabs.jsx
-
 import React from 'react';
 
 const Tab = ({ label, view, activeView, setActiveView }) => {
@@ -11,7 +9,7 @@ const Tab = ({ label, view, activeView, setActiveView }) => {
     return (
         <button
             onClick={() => setActiveView(view)}
-            className={`px-4 py-2 rounded-md font-semibold transition-colors duration-200 ${classes}`}
+            className={`px-3 py-1.5 md:px-4 md:py-2 rounded-md text-sm md:text-base font-semibold transition-colors duration-200 ${classes}`}
         >
             {label}
         </button>
@@ -21,13 +19,13 @@ const Tab = ({ label, view, activeView, setActiveView }) => {
 export const ViewTabs = ({ activeView, setActiveView, categories }) => {
     const mainViews = [
         { label: 'Dashboard', view: 'dashboard' },
+        { label: 'Jobs', view: 'jobs' },
         { label: 'Logs', view: 'logs' },
         { label: 'Price History', view: 'price-history' },
         { label: 'Analytics', view: 'analytics' },
         { label: 'Reorder', view: 'reorder' }
     ];
 
-    // The category tabs are now always rendered
     const categoryViews = categories || [];
 
     return (

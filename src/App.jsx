@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { DndContext, closestCenter} from '@dnd-kit/core';
+import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, deleteDoc, updateDoc } from 'firebase/firestore';
+import { writeBatch, runTransaction, doc, collection, deleteDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
 import { usePersistentState } from './hooks/usePersistentState';
@@ -10,7 +10,8 @@ import {
     calculateIncomingSummary,
     getGaugeFromMaterial,
     calculateCostBySupplier,
-    calculateAnalyticsByCategory
+    calculateAnalyticsByCategory,
+    groupLogsByJob
 } from './utils/dataProcessing';
 import { INITIAL_SUPPLIERS, STANDARD_LENGTHS } from './constants/materials';
 
@@ -28,6 +29,8 @@ import { MaterialDetailView } from './views/MaterialDetailView';
 import { CostAnalyticsView } from './views/CostAnalyticsView';
 import { PriceHistoryView } from './views/PriceHistoryView';
 import { ReorderView } from './views/ReorderView';
+import { JobOverviewView } from './views/JobOverviewView';
+
 
 // Modals
 import { AddOrderModal } from './components/modals/AddOrderModal';
@@ -50,17 +53,15 @@ export default function App() {
     const [suppliers, setSuppliers] = usePersistentState('suppliers', INITIAL_SUPPLIERS);
     const [categoriesToDelete, setCategoriesToDelete] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedJobFromSearch, setSelectedJobFromSearch] = useState(null);
     const searchInputRef = useRef(null);
 
     // Effect to handle global keypress to focus search
     useEffect(() => {
         const handleGlobalKeyPress = (event) => {
-            // Don't interfere if the user is already typing in an input/textarea/select
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) {
                 return;
             }
-
-            // Focus search on letter/number key press, but not on modifiers like Shift, Ctrl, etc.
             if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
                 searchInputRef.current?.focus();
             }
@@ -71,7 +72,7 @@ export default function App() {
         return () => {
             window.removeEventListener('keydown', handleGlobalKeyPress);
         };
-    }, []); // Empty dependency array ensures this effect runs only once
+    }, []);
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
     const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);
@@ -88,6 +89,7 @@ export default function App() {
     }, [initialCategories, setCategories, loading]);
 
     const materialTypes = useMemo(() => Object.keys(materials), [materials]);
+    const allJobs = useMemo(() => groupLogsByJob(inventory, usageLog), [inventory, usageLog]);
     const inventorySummary = useMemo(() => calculateInventorySummary(inventory, materialTypes), [inventory, materialTypes]);
     const incomingSummary = useMemo(() => calculateIncomingSummary(inventory, materialTypes), [inventory, materialTypes]);
     const costBySupplier = useMemo(() => calculateCostBySupplier(inventory, materials), [inventory, materials]);
@@ -109,7 +111,16 @@ export default function App() {
         const query = searchQuery.toLowerCase().trim();
         if (!query) return;
 
-        // Priority 1: Check for a material match
+        // Priority 1: Check for a job match
+        const matchedJob = allJobs.find(job => job.job.toLowerCase().includes(query));
+        if (matchedJob) {
+            setActiveView('jobs');
+            setSelectedJobFromSearch(matchedJob);
+            setSearchQuery('');
+            return;
+        }
+
+        // Priority 2: Check for a material match
         const matchedMaterial = materialTypes.find(m => m.toLowerCase().includes(query));
         if (matchedMaterial) {
             const category = materials[matchedMaterial]?.category;
@@ -121,22 +132,23 @@ export default function App() {
             }
         }
 
-        // Priority 2: Check for a category match (case-insensitive)
+        // Priority 3: Check for a category match
         const matchedCategory = categories.find(c => c.toLowerCase().startsWith(query));
         if (matchedCategory) {
-            setActiveView(matchedCategory); // Use the original cased name
+            setActiveView(matchedCategory);
             setSearchQuery('');
             return;
         }
 
-        // Priority 3: Check for a main view match
-        const mainViews = ['dashboard', 'logs', 'price history', 'analytics', 'reorder'];
+        // Priority 4: Check for a main view match
+        const mainViews = ['dashboard', 'jobs', 'logs', 'price history', 'analytics', 'reorder'];
         const matchedMainView = mainViews.find(v => v.startsWith(query));
         if (matchedMainView) {
             setActiveView(matchedMainView.replace(' ', '-'));
             setSearchQuery('');
         }
     };
+
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
@@ -634,6 +646,19 @@ export default function App() {
                         />
                     </DndContext>
                 );
+            case 'jobs':
+                return <JobOverviewView
+                    allJobs={allJobs}
+                    inventory={inventory}
+                    usageLog={usageLog}
+                    materials={materials}
+                    suppliers={suppliers}
+                    handleAddOrEditOrder={handleAddOrEditOrder}
+                    handleUseStock={handleUseStock}
+                    searchQuery={searchQuery}
+                    initialSelectedJob={selectedJobFromSearch}
+                    onClearSelectedJob={() => setSelectedJobFromSearch(null)}
+                />;
             case 'logs':
                 return <LogsView
                     inventory={inventory} usageLog={usageLog} onEditOrder={openModalForEdit}

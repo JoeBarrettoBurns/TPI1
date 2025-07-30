@@ -1,6 +1,4 @@
-// src/hooks/useOrderForm.js
-
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { STANDARD_LENGTHS } from '../constants/materials';
 
 export function useOrderForm(initialData, materialTypes, suppliers, preselectedMaterial) {
@@ -10,9 +8,16 @@ export function useOrderForm(initialData, materialTypes, suppliers, preselectedM
         customWidth: '', customLength: '', customQty: '',
         costPerPound: ''
     });
-    const createNewJob = () => ({ jobName: '', customer: '', supplier: suppliers[0], status: 'Ordered', arrivalDate: '', items: [createNewItem(preselectedMaterial)] });
+    const createNewJob = useCallback(() => ({
+        jobName: '',
+        customer: '',
+        supplier: suppliers[0],
+        status: 'Ordered',
+        arrivalDate: '',
+        items: [createNewItem(preselectedMaterial)]
+    }), [suppliers, materialTypes, preselectedMaterial]); // Dependencies for useCallback
 
-    const transformInitialData = (data) => {
+    const transformInitialData = useCallback((data) => {
         if (!data) return [createNewJob()];
 
         const arrivalDateISO = data.details[0]?.arrivalDate;
@@ -41,9 +46,13 @@ export function useOrderForm(initialData, materialTypes, suppliers, preselectedM
         });
         jobData.items = Object.values(itemsByMaterial);
         return [jobData];
-    };
+    }, [suppliers, createNewJob]); // Dependencies for useCallback
 
     const [jobs, setJobs] = useState(() => transformInitialData(initialData));
+
+    const resetForm = useCallback(() => {
+        setJobs([createNewJob()]);
+    }, [createNewJob]);
 
     const setJobField = (jobIndex, field, value) => {
         const newJobs = [...jobs];
@@ -72,5 +81,5 @@ export function useOrderForm(initialData, materialTypes, suppliers, preselectedM
         setJobs(newJobs);
     };
 
-    return { jobs, setJobs, setJobField, setItemField, addJob, removeJob, addMaterial, removeMaterial };
+    return { jobs, setJobs, setJobField, setItemField, addJob, removeJob, addMaterial, removeMaterial, resetForm };
 }

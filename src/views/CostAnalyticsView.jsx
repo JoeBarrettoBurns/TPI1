@@ -26,7 +26,7 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
         return <p className="text-center text-zinc-400 py-8">No cost data available. Add stock with cost information to see analytics.</p>;
     }
 
-    const sortedCostBySupplier = [...costBySupplier].sort((a, b) => b.value - a.value);
+    const sortedCostBySupplier = [...costBySupplier].sort((a, b) => (b.value || 0) - (a.value || 0));
 
     return (
         <div className="flex flex-col lg:flex-row gap-8">
@@ -43,14 +43,18 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip formatter={(value) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} contentStyle={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', borderRadius: '0.5rem' }} labelStyle={{ color: '#d4d4d8' }} />
+                                <Tooltip
+                                    formatter={(value) => `$${(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    contentStyle={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', borderRadius: '0.5rem' }}
+                                    labelStyle={{ color: '#d4d4d8' }}
+                                />
                                 <Legend />
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* NEW: Material Analytics Section by Category */}
+                {/* Material Analytics Section by Category */}
                 <div className="space-y-8">
                     <h3 className="text-xl font-bold text-blue-400">Sheets & Cost by Material</h3>
                     {Object.entries(analyticsByCategory).map(([category, materials]) => (
@@ -65,7 +69,7 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', borderRadius: '0.5rem' }}
                                             labelStyle={{ color: '#d4d4d8' }}
-                                            formatter={(value, name) => [name === 'quantity' ? value : `$${value.toFixed(2)}`, name]}
+                                            formatter={(value, name) => [name === 'quantity' ? value : `$${(value || 0).toFixed(2)}`, name]}
                                         />
                                         <Legend />
                                         <Bar dataKey="quantity" name="Sheets" fill="#00C49F">
@@ -74,7 +78,7 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
                                                 position="top"
                                                 fill="#FFBB28"
                                                 fontSize={12}
-                                                formatter={(value) => value > 0 ? `$${Math.round(value)}` : ''}
+                                                formatter={(value) => (value || 0) > 0 ? `$${Math.round(value)}` : ''}
                                             />
                                         </Bar>
                                     </BarChart>
@@ -98,7 +102,7 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
                                         <span className="font-medium text-zinc-300">{supplier.name}</span>
                                     </div>
                                     <span className="font-mono text-green-400">
-                                        ${supplier.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        ${(supplier.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </span>
                                 </li>
                             ))}
