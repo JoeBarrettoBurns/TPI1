@@ -23,6 +23,7 @@ import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { ErrorMessage } from './components/common/ErrorMessage';
 
 // Views
+import { AuthView } from './views/AuthView';
 import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
@@ -39,7 +40,9 @@ import { ConfirmationModal } from './components/modals/ConfirmationModal';
 
 
 export default function App() {
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
     const { inventory, usageLog, materials, loading, error, userId } = useFirestoreData();
+
     const [activeView, setActiveView] = useState('dashboard');
     const [modal, setModal] = useState({ type: null, data: null, error: null });
     const [isEditMode, setIsEditMode] = useState(false);
@@ -70,6 +73,10 @@ export default function App() {
     const closeModal = () => setModal({ type: null, data: null, error: null });
 
     const onScrollToComplete = useCallback(() => setScrollToMaterial(null), []);
+
+    const handleSignOut = () => {
+        setIsLoggedIn(false);
+    };
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
@@ -445,23 +452,21 @@ export default function App() {
             await runTransaction(db, async (transaction) => {
                 const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
-                // 1. Calculate the net change in materials required
                 const netChange = {};
                 (originalLog.details || []).forEach(item => {
                     const key = `${item.materialType}|${item.length}`;
-                    netChange[key] = (netChange[key] || 0) + 1; // Items to be returned
+                    netChange[key] = (netChange[key] || 0) + 1;
                 });
                 newLogData.items.forEach(item => {
                     STANDARD_LENGTHS.forEach(len => {
                         const qty = parseInt(item[`qty${len}`] || 0);
                         if (qty > 0) {
                             const key = `${item.materialType}|${len}`;
-                            netChange[key] = (netChange[key] || 0) - qty; // Items to be used
+                            netChange[key] = (netChange[key] || 0) - qty;
                         }
                     });
                 });
 
-                // 2. Validate stock availability for items that need to be removed
                 for (const key in netChange) {
                     if (netChange[key] < 0) {
                         const [materialType, lengthStr] = key.split('|');
@@ -480,7 +485,6 @@ export default function App() {
                     }
                 }
 
-                // 3. Apply changes if validation passes
                 const originalItemIds = (originalLog.details || []).map(d => d.id);
                 const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
                 itemsToReturn.forEach(item => {
@@ -605,6 +609,10 @@ export default function App() {
         }
     };
 
+    if (!isLoggedIn) {
+        return <AuthView onLoginSuccess={() => setIsLoggedIn(true)} />;
+    }
+
     return (
         <div className="bg-slate-900 min-h-screen font-sans text-slate-200">
             <div className="container mx-auto p-4 md:p-8">
@@ -612,6 +620,7 @@ export default function App() {
                     onAdd={() => setModal({ type: 'add' })}
                     onUse={() => setModal({ type: 'use' })}
                     onEdit={() => isEditMode ? handleFinishEditing() : setIsEditMode(true)}
+                    onSignOut={handleSignOut}
                     isEditMode={isEditMode}
                     onAddCategory={() => setModal({ type: 'add-category' })}
                     onManageSuppliers={() => setModal({ type: 'manage-suppliers' })}
@@ -624,7 +633,7 @@ export default function App() {
 
                 <footer className="text-center text-slate-500 mt-8 text-sm">
                     <p>TecnoPan Inventory System</p>
-                    <p>User ID: <span className="font-mono bg-slate-800 px-2 py-1 rounded">{userId || 'Authenticating...'}</span></p>
+                    <p>User: <span className="font-mono bg-slate-800 px-2 py-1 rounded">{userId}</span></p>
                 </footer>
             </div>
 
