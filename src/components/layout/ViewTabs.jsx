@@ -23,7 +23,8 @@ export const ViewTabs = ({ activeView, setActiveView, categories }) => {
         { label: 'Dashboard', view: 'dashboard' },
         { label: 'Logs', view: 'logs' },
         { label: 'Price History', view: 'price-history' },
-        { label: 'Analytics', view: 'analytics' }
+        { label: 'Analytics', view: 'analytics' },
+        { label: 'Reorder', view: 'reorder' }
     ];
 
     // The category tabs are now always rendered

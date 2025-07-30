@@ -8,8 +8,8 @@ import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 
-export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock", materialTypes, suppliers }) => {
-    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes, suppliers);
+export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock", materialTypes, suppliers, preselectedMaterial }) => {
+    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes, suppliers, preselectedMaterial);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 

@@ -29,6 +29,7 @@ import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
 import { CostAnalyticsView } from './views/CostAnalyticsView';
 import { PriceHistoryView } from './views/PriceHistoryView';
+import { ReorderView } from './views/ReorderView';
 
 // Modals
 import { AddOrderModal } from './components/modals/AddOrderModal';
@@ -77,6 +78,10 @@ export default function App() {
     const handleSignOut = () => {
         localStorage.removeItem('isLoggedIn');
         setIsLoggedIn(false);
+    };
+
+    const handleRestock = (materialType) => {
+        setModal({ type: 'add', data: { preselectedMaterial: materialType } });
     };
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
@@ -592,6 +597,12 @@ export default function App() {
                     costBySupplier={costBySupplier}
                     analyticsByCategory={analyticsByCategory}
                 />;
+            case 'reorder':
+                return <ReorderView
+                    inventorySummary={inventorySummary}
+                    materials={materials}
+                    onRestock={handleRestock}
+                />;
             default:
                 if (initialCategories.includes(activeView)) {
                     return <MaterialDetailView
@@ -638,7 +649,7 @@ export default function App() {
                 </footer>
             </div>
 
-            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} suppliers={suppliers} />}
+            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} suppliers={suppliers} preselectedMaterial={modal.data?.preselectedMaterial} />}
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} suppliers={suppliers} />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}

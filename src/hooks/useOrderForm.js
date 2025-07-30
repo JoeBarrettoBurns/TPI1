@@ -3,14 +3,14 @@
 import { useState } from 'react';
 import { STANDARD_LENGTHS } from '../constants/materials';
 
-export function useOrderForm(initialData, materialTypes, suppliers) {
-    const createNewItem = () => ({
-        materialType: materialTypes && materialTypes.length > 0 ? materialTypes[0] : '',
+export function useOrderForm(initialData, materialTypes, suppliers, preselectedMaterial) {
+    const createNewItem = (materialTypeOverride) => ({
+        materialType: materialTypeOverride || (materialTypes && materialTypes.length > 0 ? materialTypes[0] : ''),
         qty96: '', qty120: '', qty144: '',
         customWidth: '', customLength: '', customQty: '',
         costPerPound: ''
     });
-    const createNewJob = () => ({ jobName: '', customer: '', supplier: suppliers[0], status: 'Ordered', arrivalDate: '', items: [createNewItem()] });
+    const createNewJob = () => ({ jobName: '', customer: '', supplier: suppliers[0], status: 'Ordered', arrivalDate: '', items: [createNewItem(preselectedMaterial)] });
 
     const transformInitialData = (data) => {
         if (!data) return [createNewJob()];
@@ -62,7 +62,7 @@ export function useOrderForm(initialData, materialTypes, suppliers) {
 
     const addMaterial = (jobIndex) => {
         const newJobs = [...jobs];
-        newJobs[jobIndex].items.push(createNewItem());
+        newJobs[jobIndex].items.push(createNewItem(null));
         setJobs(newJobs);
     };
 
