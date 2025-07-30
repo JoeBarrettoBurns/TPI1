@@ -8,7 +8,7 @@ import { ErrorMessage } from '../components/common/ErrorMessage';
 // --- IMPORTANT ---
 // Set your desired login credentials here.
 const WHITELISTED_EMAIL = "jbb@tecnopan.ca";
-const WHITELISTED_PASSWORD = "123456"; // Change this to your desired password
+const WHITELISTED_PASSWORD = "tecnopan999"; // Change this to your desired password
 
 export const AuthView = ({ onLoginSuccess }) => {
     const [email, setEmail] = useState('');
@@ -62,7 +62,7 @@ export const AuthView = ({ onLoginSuccess }) => {
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="******************"
+                            placeholder="password"
                             required
                         />
                     </div>
