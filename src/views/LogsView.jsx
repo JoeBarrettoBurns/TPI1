@@ -10,26 +10,41 @@ import { Button } from '../components/common/Button';
 import { exportToCSV } from '../utils/csvExport';
 import { groupInventoryByJob } from '../utils/dataProcessing';
 
-export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup, materials, onFulfillLog, onReceiveOrder }) => {
+export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup, materials, onFulfillLog, onReceiveOrder, searchQuery }) => {
     const [detailLog, setDetailLog] = useState(null);
     const [logToDelete, setLogToDelete] = useState(null);
     const [incomingOrdersToShow, setIncomingOrdersToShow] = useState(5);
     const [outgoingOrdersToShow, setOutgoingOrdersToShow] = useState(5);
 
-    const incomingItems = useMemo(() => groupInventoryByJob(inventory), [inventory]);
-    const filteredUsageLog = useMemo(() => usageLog.filter(log => log.status !== 'Archived'), [usageLog]);
+    const incomingItems = useMemo(() => {
+        const grouped = groupInventoryByJob(inventory);
+        if (!searchQuery) return grouped;
+        const lowercasedQuery = searchQuery.toLowerCase();
+        return grouped.filter(group =>
+            (group.job || '').toLowerCase().includes(lowercasedQuery) ||
+            (group.supplier || '').toLowerCase().includes(lowercasedQuery) ||
+            group.details.some(d => d.materialType.toLowerCase().includes(lowercasedQuery))
+        );
+    }, [inventory, searchQuery]);
+
+    const filteredUsageLog = useMemo(() => {
+        const filtered = usageLog.filter(log => log.status !== 'Archived');
+        if (!searchQuery) return filtered;
+        const lowercasedQuery = searchQuery.toLowerCase();
+        return filtered.filter(log =>
+            (log.job || '').toLowerCase().includes(lowercasedQuery) ||
+            (log.customer || '').toLowerCase().includes(lowercasedQuery) ||
+            log.details.some(d => d.materialType.toLowerCase().includes(lowercasedQuery))
+        );
+    }, [usageLog, searchQuery]);
 
     const handleConfirmDeleteLog = () => {
         if (!logToDelete) return;
-
-        // Corrected logic: If it's an addition, delete from inventory.
-        // This now correctly includes "MODIFICATION: ADD" entries.
         if (logToDelete.isAddition) {
             onDeleteInventoryGroup(logToDelete);
         } else {
             onDeleteLog(logToDelete.id);
         }
-
         setLogToDelete(null);
     };
 
@@ -97,7 +112,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
             />
 
             <div>
-                <div className="flex justify-between items-center mb-2">
+                <div className="flex flex-col md:flex-row justify-between items-center mb-2 gap-4">
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                         <ArrowDownCircle size={24} /> Incoming Stock Log
                     </h2>
@@ -112,7 +127,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                             </select>
                         </div>
                         <Button onClick={handleExportIncoming} variant="secondary">
-                            <Download size={16} /> Export
+                            <Download size={16} /> <span className="hidden sm:inline">Export</span>
                         </Button>
                     </div>
                 </div>
@@ -127,7 +142,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
             </div>
 
             <div>
-                <div className="flex justify-between items-center mb-2">
+                <div className="flex flex-col md:flex-row justify-between items-center mb-2 gap-4">
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                         <ArrowUpCircle size={24} /> Outgoing Stock Log
                     </h2>
@@ -142,7 +157,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                             </select>
                         </div>
                         <Button onClick={handleExportOutgoing} variant="secondary">
-                            <Download size={16} /> Export
+                            <Download size={16} /> <span className="hidden sm:inline">Export</span>
                         </Button>
                     </div>
                 </div>

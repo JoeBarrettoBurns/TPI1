@@ -1,9 +1,7 @@
-// src/App.jsx
-
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { DndContext, closestCenter} from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, deleteDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { writeBatch, runTransaction, doc, collection, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
 import { usePersistentState } from './hooks/usePersistentState';
@@ -51,6 +49,29 @@ export default function App() {
     const [activeCategory, setActiveCategory] = useState(null);
     const [suppliers, setSuppliers] = usePersistentState('suppliers', INITIAL_SUPPLIERS);
     const [categoriesToDelete, setCategoriesToDelete] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const searchInputRef = useRef(null);
+
+    // Effect to handle global keypress to focus search
+    useEffect(() => {
+        const handleGlobalKeyPress = (event) => {
+            // Don't interfere if the user is already typing in an input/textarea/select
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) {
+                return;
+            }
+
+            // Focus search on letter/number key press, but not on modifiers like Shift, Ctrl, etc.
+            if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+                searchInputRef.current?.focus();
+            }
+        };
+
+        window.addEventListener('keydown', handleGlobalKeyPress);
+
+        return () => {
+            window.removeEventListener('keydown', handleGlobalKeyPress);
+        };
+    }, []); // Empty dependency array ensures this effect runs only once
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
     const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);
@@ -82,6 +103,39 @@ export default function App() {
 
     const handleRestock = (materialType) => {
         setModal({ type: 'add', data: { preselectedMaterial: materialType } });
+    };
+
+    const handleSearchSubmit = () => {
+        const query = searchQuery.toLowerCase().trim();
+        if (!query) return;
+
+        // Priority 1: Check for a material match
+        const matchedMaterial = materialTypes.find(m => m.toLowerCase().includes(query));
+        if (matchedMaterial) {
+            const category = materials[matchedMaterial]?.category;
+            if (category) {
+                setActiveView(category);
+                setScrollToMaterial(matchedMaterial);
+                setSearchQuery('');
+                return;
+            }
+        }
+
+        // Priority 2: Check for a category match (case-insensitive)
+        const matchedCategory = categories.find(c => c.toLowerCase().startsWith(query));
+        if (matchedCategory) {
+            setActiveView(matchedCategory); // Use the original cased name
+            setSearchQuery('');
+            return;
+        }
+
+        // Priority 3: Check for a main view match
+        const mainViews = ['dashboard', 'logs', 'price history', 'analytics', 'reorder'];
+        const matchedMainView = mainViews.find(v => v.startsWith(query));
+        if (matchedMainView) {
+            setActiveView(matchedMainView.replace(' ', '-'));
+            setSearchQuery('');
+        }
     };
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
@@ -576,6 +630,7 @@ export default function App() {
                             activeCategory={activeCategory}
                             onDeleteCategory={handleToggleCategoryForDeletion}
                             categoriesToDelete={categoriesToDelete}
+                            searchQuery={searchQuery}
                         />
                     </DndContext>
                 );
@@ -586,11 +641,13 @@ export default function App() {
                     materials={materials}
                     onFulfillLog={handleFulfillScheduledLog}
                     onReceiveOrder={handleReceiveOrder}
+                    searchQuery={searchQuery}
                 />;
             case 'price-history':
                 return <PriceHistoryView
                     inventory={inventory}
                     materials={materials}
+                    searchQuery={searchQuery}
                 />;
             case 'analytics':
                 return <CostAnalyticsView
@@ -602,6 +659,7 @@ export default function App() {
                     inventorySummary={inventorySummary}
                     materials={materials}
                     onRestock={handleRestock}
+                    searchQuery={searchQuery}
                 />;
             default:
                 if (initialCategories.includes(activeView)) {
@@ -615,6 +673,7 @@ export default function App() {
                         onFulfillLog={handleFulfillScheduledLog}
                         scrollToMaterial={scrollToMaterial}
                         onScrollToComplete={onScrollToComplete}
+                        searchQuery={searchQuery}
                     />;
                 }
                 return null;
@@ -629,6 +688,7 @@ export default function App() {
         <div className="bg-zinc-900 min-h-screen font-sans text-zinc-200">
             <div className="container mx-auto p-4 md:p-8">
                 <Header
+                    ref={searchInputRef}
                     onAdd={() => setModal({ type: 'add' })}
                     onUse={() => setModal({ type: 'use' })}
                     onEdit={() => isEditMode ? handleFinishEditing() : setIsEditMode(true)}
@@ -637,6 +697,9 @@ export default function App() {
                     onAddCategory={() => setModal({ type: 'add-category' })}
                     onManageSuppliers={() => setModal({ type: 'manage-suppliers' })}
                     activeView={activeView}
+                    searchQuery={searchQuery}
+                    onSearchChange={(e) => setSearchQuery(e.target.value)}
+                    onSearchSubmit={handleSearchSubmit}
                 />
                 <ViewTabs activeView={activeView} setActiveView={setActiveView} categories={categories} />
                 {error && <ErrorMessage message={error} />}

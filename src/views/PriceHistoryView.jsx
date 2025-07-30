@@ -5,26 +5,58 @@ import { Download } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { exportToCSV } from '../utils/csvExport';
 
-export const PriceHistoryView = ({ inventory, materials }) => {
+export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
     const [selectedCategory, setSelectedCategory] = useState('All');
 
     const categories = useMemo(() => ['All', ...new Set(Object.values(materials).map(m => m.category))].sort(), [materials]);
 
-    const handleCategoryChange = (e) => {
-        setSelectedCategory(e.target.value || null);
-    };
-
     const priceHistory = useMemo(() => {
-        const history = inventory.filter(item => {
+        const lowercasedQuery = (searchQuery || '').toLowerCase();
+
+        // First, filter the raw inventory data
+        const filteredInventory = inventory.filter(item => {
             const materialInfo = materials[item.materialType];
             if (!materialInfo || !item.costPerPound || item.costPerPound <= 0) return false;
-            return selectedCategory === 'All' || materialInfo.category === selectedCategory;
+
+            const matchesCategory = selectedCategory === 'All' || materialInfo.category === selectedCategory;
+            if (!matchesCategory) return false;
+
+            if (searchQuery) {
+                return item.materialType.toLowerCase().includes(lowercasedQuery) ||
+                    (item.supplier || '').toLowerCase().includes(lowercasedQuery) ||
+                    (item.job || '').toLowerCase().includes(lowercasedQuery);
+            }
+
+            return true;
         });
-        return history.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    }, [inventory, materials, selectedCategory]);
+
+        // Now, create a de-duplicated list of unique price points
+        const uniquePricePoints = new Map();
+        filteredInventory.forEach(item => {
+            const dateKey = (item.dateReceived || item.createdAt).split('T')[0];
+            const key = `${item.materialType}-${item.supplier}-${dateKey}-${item.costPerPound}`;
+
+            if (!uniquePricePoints.has(key)) {
+                uniquePricePoints.set(key, {
+                    id: key,
+                    materialType: item.materialType,
+                    supplier: item.supplier,
+                    job: item.job,
+                    dateReceived: item.dateReceived || item.createdAt,
+                    costPerPound: item.costPerPound,
+                    category: materials[item.materialType]?.category || 'N/A',
+                });
+            }
+        });
+
+        return Array.from(uniquePricePoints.values())
+            .sort((a, b) => new Date(b.dateReceived) - new Date(a.dateReceived));
+
+    }, [inventory, materials, selectedCategory, searchQuery]);
 
     const handleExport = () => {
         const headers = [
+            { label: 'Job/PO', key: 'job' },
             { label: 'Material', key: 'materialType' },
             { label: 'Category', key: 'category' },
             { label: 'Supplier', key: 'supplier' },
@@ -33,62 +65,57 @@ export const PriceHistoryView = ({ inventory, materials }) => {
         ];
 
         const dataToExport = priceHistory.map(item => ({
-            materialType: item.materialType,
-            category: materials[item.materialType]?.category || 'N/A',
-            supplier: item.supplier,
-            dateReceived: item.dateReceived ? new Date(item.dateReceived).toLocaleDateString() : new Date(item.createdAt).toLocaleDateString(),
+            ...item,
+            dateReceived: new Date(item.dateReceived).toLocaleDateString(),
             costPerPound: `$${item.costPerPound.toFixed(2)}`
         }));
 
         exportToCSV(dataToExport, `price_history_${selectedCategory.toLowerCase().replace(' ', '_')}.csv`);
     };
 
+
     return (
-        <div className="space-y-6">
-            <div className="bg-zinc-800 p-4 rounded-lg shadow-md border border-zinc-700">
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                    <h2 className="text-xl font-semibold text-white">Select a Category to View its Price History</h2>
-                    <div className="flex items-center gap-4">
-                        <select
-                            onChange={handleCategoryChange}
-                            className="w-full md:w-auto p-2 rounded bg-zinc-700 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={selectedCategory || ''}
-                        >
-                            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
-                        <Button onClick={handleExport} variant="secondary">
-                            <Download size={16} /> Export
-                        </Button>
-                    </div>
+        <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
+            <div className="flex flex-col md:flex-row justify-between md:items-center mb-4 gap-4">
+                <h2 className="text-xl md:text-2xl font-bold text-white">Price History</h2>
+                <div className="flex items-center gap-4">
+                    <select
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                        className="bg-zinc-700 text-white border border-zinc-600 rounded-md px-3 py-2 text-sm md:text-base"
+                    >
+                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                    <Button onClick={handleExport} variant="secondary">
+                        <Download size={16} /> <span className="hidden sm:inline">Export</span>
+                    </Button>
                 </div>
             </div>
 
-            <div className="bg-zinc-800 rounded-lg shadow-lg p-6 border border-zinc-700">
-                <h3 className="text-xl font-bold text-blue-400 mb-4">{selectedCategory} Price History</h3>
-                {priceHistory?.length > 0 ? (
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="border-b border-zinc-700">
-                                <th className="p-2 font-semibold text-zinc-400">Date</th>
-                                <th className="p-2 font-semibold text-zinc-400">Supplier</th>
-                                <th className="p-2 font-semibold text-zinc-400">Material</th>
-                                <th className="p-2 font-semibold text-zinc-400 text-right">Price per Pound</th>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm md:text-base text-left">
+                    <thead>
+                        <tr className="border-b border-zinc-700">
+                            <th className="p-2 font-semibold text-zinc-400">Date</th>
+                            <th className="p-2 font-semibold text-zinc-400">Job/PO</th>
+                            <th className="p-2 font-semibold text-zinc-400">Supplier</th>
+                            <th className="p-2 font-semibold text-zinc-400">Material</th>
+                            <th className="p-2 font-semibold text-zinc-400 text-right">Cost Per Pound</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {priceHistory.map((order, index) => (
+                            <tr key={order.id || index} className={`border-b border-zinc-700 last:border-b-0 ${index % 2 === 0 ? 'bg-zinc-800' : 'bg-zinc-800/50'}`}>
+                                <td className="p-2">{new Date(order.dateReceived).toLocaleDateString()}</td>
+                                <td className="p-2">{order.job}</td>
+                                <td className="p-2">{order.supplier}</td>
+                                <td className="p-2">{order.materialType}</td>
+                                <td className="p-2 text-right font-mono text-green-400">${order.costPerPound.toFixed(2)}</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {priceHistory.map((entry, index) => (
-                                <tr key={entry.id || index} className="border-b border-zinc-700 last:border-b-0">
-                                    <td className="p-2">{new Date(entry.createdAt).toLocaleDateString()}</td>
-                                    <td className="p-2">{entry.supplier}</td>
-                                    <td className="p-2">{entry.materialType}</td>
-                                    <td className="p-2 text-right font-mono">${entry.costPerPound.toFixed(2)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : (
-                    <p className="text-zinc-400">No purchase history found for this category.</p>
-                )}
+                        ))}
+                    </tbody>
+                </table>
+                {priceHistory.length === 0 && <p className="text-center text-zinc-400 py-8">No price history available for this category or search query.</p>}
             </div>
         </div>
     );

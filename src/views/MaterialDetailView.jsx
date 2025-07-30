@@ -9,18 +9,24 @@ import { MaterialDetailItem } from '../components/dashboard/MaterialDetailItem';
 export const MaterialDetailView = ({
     category, inventory, usageLog, inventorySummary, incomingSummary,
     onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog,
-    scrollToMaterial, onScrollToComplete, materials, materialTypes
+    scrollToMaterial, onScrollToComplete, materials, materialTypes, searchQuery
 }) => {
     const initialMaterials = useMemo(() => {
         const materialsInCategory = materialTypes.filter(m => materials[m].category === category);
-        return materialsInCategory.sort((a, b) => {
+
+        const lowercasedQuery = searchQuery.toLowerCase();
+        const filtered = searchQuery
+            ? materialsInCategory.filter(m => m.toLowerCase().includes(lowercasedQuery))
+            : materialsInCategory;
+
+        return filtered.sort((a, b) => {
             const aSummary = inventorySummary[a] || {};
             const bSummary = inventorySummary[b] || {};
             const aTotal = Object.values(aSummary).reduce((sum, count) => sum + count, 0);
             const bTotal = Object.values(bSummary).reduce((sum, count) => sum + count, 0);
             return bTotal - aTotal;
         });
-    }, [category, materials, materialTypes, inventorySummary]);
+    }, [category, materials, materialTypes, inventorySummary, searchQuery]);
 
     const [orderedMaterials, setOrderedMaterials] = usePersistentState(`material-order-${category}`, []);
     const [activeMaterial, setActiveMaterial] = useState(null);
@@ -41,27 +47,19 @@ export const MaterialDetailView = ({
         });
     }, [initialMaterials, setOrderedMaterials]);
 
-    // This effect handles the scrolling and highlighting
     useEffect(() => {
         if (scrollToMaterial) {
-            // 1. Set the local state to trigger the highlight
             setHighlightedMaterial(scrollToMaterial);
-
-            // 2. Scroll the item into view
             if (detailRefs.current[scrollToMaterial]?.current) {
                 detailRefs.current[scrollToMaterial].current.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center'
                 });
             }
-
-            // 3. Set a timer to remove the highlight
             const timer = setTimeout(() => {
                 setHighlightedMaterial(null);
-                onScrollToComplete(); // Notify the parent app the process is done
-            }, 1000); // 1.5 seconds
-
-            // 4. Clean up the timer
+                onScrollToComplete();
+            }, 1000);
             return () => clearTimeout(timer);
         }
     }, [scrollToMaterial, onScrollToComplete]);
@@ -89,8 +87,8 @@ export const MaterialDetailView = ({
             onDragCancel={handleDragCancel}
         >
             <div className="space-y-8">
-                <SortableContext items={orderedMaterials} strategy={verticalListSortingStrategy}>
-                    {orderedMaterials.map(matType => (
+                <SortableContext items={initialMaterials} strategy={verticalListSortingStrategy}>
+                    {initialMaterials.map(matType => (
                         <MaterialDetailItem
                             key={matType}
                             id={matType}
@@ -106,7 +104,7 @@ export const MaterialDetailView = ({
                             onFulfillLog={onFulfillLog}
                             materials={materials}
                             ref={el => detailRefs.current[matType] = { current: el }}
-                            highlighted={highlightedMaterial === matType} // Use local state for highlight
+                            highlighted={highlightedMaterial === matType}
                         />
                     ))}
                 </SortableContext>
