@@ -24,6 +24,7 @@ export const AuthView = ({ onLoginSuccess }) => {
         // A short delay to simulate a real login process
         setTimeout(() => {
             if (email.toLowerCase() === WHITELISTED_EMAIL && password === WHITELISTED_PASSWORD) {
+                localStorage.setItem('isLoggedIn', 'true'); // Keep user logged in
                 onLoginSuccess();
             } else {
                 setError('Invalid email or password.');

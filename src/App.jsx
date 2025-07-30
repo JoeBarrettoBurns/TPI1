@@ -40,7 +40,7 @@ import { ConfirmationModal } from './components/modals/ConfirmationModal';
 
 
 export default function App() {
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('isLoggedIn') === 'true');
     const { inventory, usageLog, materials, loading, error, userId } = useFirestoreData();
 
     const [activeView, setActiveView] = useState('dashboard');
@@ -75,6 +75,7 @@ export default function App() {
     const onScrollToComplete = useCallback(() => setScrollToMaterial(null), []);
 
     const handleSignOut = () => {
+        localStorage.removeItem('isLoggedIn');
         setIsLoggedIn(false);
     };
 

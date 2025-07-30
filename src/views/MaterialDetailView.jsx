@@ -11,10 +11,16 @@ export const MaterialDetailView = ({
     onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog,
     scrollToMaterial, onScrollToComplete, materials, materialTypes
 }) => {
-    const initialMaterials = useMemo(() =>
-        materialTypes.filter(m => materials[m].category === category),
-        [category, materials, materialTypes]
-    );
+    const initialMaterials = useMemo(() => {
+        const materialsInCategory = materialTypes.filter(m => materials[m].category === category);
+        return materialsInCategory.sort((a, b) => {
+            const aSummary = inventorySummary[a] || {};
+            const bSummary = inventorySummary[b] || {};
+            const aTotal = Object.values(aSummary).reduce((sum, count) => sum + count, 0);
+            const bTotal = Object.values(bSummary).reduce((sum, count) => sum + count, 0);
+            return bTotal - aTotal;
+        });
+    }, [category, materials, materialTypes, inventorySummary]);
 
     const [orderedMaterials, setOrderedMaterials] = usePersistentState(`material-order-${category}`, []);
     const [activeMaterial, setActiveMaterial] = useState(null);
