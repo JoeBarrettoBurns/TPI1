@@ -12,6 +12,37 @@ export const calculateSheetCost = (item, materials) => {
     return weight * item.costPerPound;
 };
 
+export const groupInventoryByJob = (inventory) => {
+    const grouped = {};
+    inventory.forEach(item => {
+        // Use a more robust key that includes the supplier
+        const key = `${item.job || 'N/A'}|${item.supplier}|${item.createdAt.split('T')[0]}`;
+        if (!grouped[key]) {
+            grouped[key] = {
+                id: key, // The synthetic ID for the group
+                job: item.job || 'N/A',
+                date: item.createdAt,
+                supplier: item.supplier,
+                customer: item.supplier, // For consistency with log items
+                isFuture: item.status === 'Ordered',
+                isReceived: !!item.dateReceived,
+                isAddition: true, // This was the missing piece
+                materials: {},
+                details: []
+            };
+        }
+        if (!grouped[key].materials[item.materialType]) {
+            grouped[key].materials[item.materialType] = {};
+        }
+        if (!grouped[key].materials[item.materialType][item.length]) {
+            grouped[key].materials[item.materialType][item.length] = 0;
+        }
+        grouped[key].materials[item.materialType][item.length]++;
+        grouped[key].details.push(item);
+    });
+    return Object.values(grouped).sort((a, b) => new Date(b.date) - new Date(a.date));
+};
+
 
 // --- Existing Functions (Unchanged) ---
 export const getGaugeFromMaterial = (materialType) => {
@@ -22,7 +53,6 @@ export const getGaugeFromMaterial = (materialType) => {
     return 'N/A';
 };
 
-// CORRECTED: This now ONLY counts items that are physically 'On Hand'
 export const calculateInventorySummary = (inventory, materialTypes) => {
     const summary = {};
     materialTypes.forEach(type => {
@@ -70,7 +100,6 @@ export const calculateIncomingSummary = (inventory, materialTypes) => {
 export const calculateMaterialTransactions = (materialsInCategory, inventory, usageLog) => {
     const allTransactions = {};
     materialsInCategory.forEach(matType => {
-        // Incoming logs should show all purchased items, regardless of status
         const groupedInventory = {};
         inventory.filter(item => item.materialType === matType).forEach(item => {
             const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
@@ -86,7 +115,6 @@ export const calculateMaterialTransactions = (materialsInCategory, inventory, us
             groupedInventory[key].details.push(item);
         });
 
-        // Outgoing logs remain the same
         const groupedUsage = {};
         usageLog.filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
             const isModification = (log.job || '').startsWith('MODIFICATION');

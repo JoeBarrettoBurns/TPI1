@@ -23,30 +23,12 @@ const generateDescription = (details) => {
     }).join(', ');
 };
 
-export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }) => {
-    const incomingItems = useMemo(() => {
-        const groupedByOrder = {};
-        inventory.filter(item => item.supplier !== 'MODIFICATION').forEach(item => {
-            const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
-            if (!groupedByOrder[key]) {
-                groupedByOrder[key] = {
-                    id: key, isDeletable: true, isAddition: true, dateOrdered: item.createdAt, customer: item.supplier,
-                    job: item.job || 'Stock', qty: 0, details: [], isFuture: item.status === 'Ordered',
-                    dateIncoming: item.status === 'On Hand' ? item.dateReceived : item.arrivalDate,
-                };
-            }
-            groupedByOrder[key].qty += 1;
-            groupedByOrder[key].details.push(item);
-            if (item.status === 'Ordered' && item.arrivalDate && (!groupedByOrder[key].dateIncoming || new Date(item.arrivalDate) > new Date(groupedByOrder[key].dateIncoming))) {
-                groupedByOrder[key].dateIncoming = item.arrivalDate;
-            }
-        });
-        return Object.values(groupedByOrder)
-            .map(item => ({ ...item, description: generateDescription(item.details) }))
-            .sort((a, b) => new Date(b.dateOrdered) - new Date(a.dateOrdered));
-    }, [inventory]);
+export const IncomingLogDisplay = ({ incomingItems, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }) => {
+    const processedItems = useMemo(() => {
+        return incomingItems.map(item => ({ ...item, description: generateDescription(item.details) }));
+    }, [incomingItems]);
 
-    const visibleItems = incomingItems.slice(0, ordersToShow);
+    const visibleItems = processedItems.slice(0, ordersToShow);
 
     if (visibleItems.length === 0) {
         return <p className="text-center text-slate-400 py-8">No incoming stock logged.</p>;
@@ -72,16 +54,16 @@ export const IncomingLogDisplay = ({ inventory, onRowClick, onDelete, onEdit, on
                             <td className="p-4 truncate text-slate-300">{item.job}</td>
                             <td className="p-4 truncate text-slate-300">{item.customer}</td>
                             <td className="p-4 truncate text-slate-300">{item.description}</td>
-                            <td className="p-4 truncate text-slate-300">{new Date(item.dateOrdered).toLocaleString()}</td>
+                            <td className="p-4 truncate text-slate-300">{new Date(item.date).toLocaleString()}</td>
                             <td className="p-4 truncate text-slate-300">
                                 {item.dateIncoming ? new Date(item.dateIncoming).toLocaleDateString() : 'N/A'}
                             </td>
-                            <td className="p-4 text-green-400 font-mono text-right">+{item.qty}</td>
+                            <td className="p-4 text-green-400 font-mono text-right">+{item.details.length}</td>
                             <td className="p-4 text-center">
                                 {item.isFuture && (
                                     <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(item); }} className="text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>
                                 )}
-                                {item.isDeletable && (
+                                {(
                                     <>
                                         <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
                                         <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
