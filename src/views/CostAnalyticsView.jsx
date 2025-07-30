@@ -23,7 +23,7 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
 export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
     // Handle case where there is no data to display
     if (!costBySupplier.length && !Object.keys(analyticsByCategory).length) {
-        return <p className="text-center text-slate-400 py-8">No cost data available. Add stock with cost information to see analytics.</p>;
+        return <p className="text-center text-zinc-400 py-8">No cost data available. Add stock with cost information to see analytics.</p>;
     }
 
     const sortedCostBySupplier = [...costBySupplier].sort((a, b) => b.value - a.value);
@@ -33,7 +33,7 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
             {/* Main content area for charts */}
             <div className="w-full lg:w-2/3 space-y-8">
                 {/* Cost by Supplier Pie Chart */}
-                <div className="bg-slate-800 rounded-2xl shadow-lg p-6 border border-slate-700">
+                <div className="bg-zinc-800 rounded-2xl shadow-lg p-6 border border-zinc-700">
                     <h3 className="text-xl font-bold text-blue-400 mb-4">Total Cost by Supplier</h3>
                     <div style={{ width: '100%', height: 400 }}>
                         <ResponsiveContainer>
@@ -43,7 +43,7 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip formatter={(value) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.5rem' }} labelStyle={{ color: '#cbd5e1' }} />
+                                <Tooltip formatter={(value) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} contentStyle={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', borderRadius: '0.5rem' }} labelStyle={{ color: '#d4d4d8' }} />
                                 <Legend />
                             </PieChart>
                         </ResponsiveContainer>
@@ -54,17 +54,17 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
                 <div className="space-y-8">
                     <h3 className="text-xl font-bold text-blue-400">Sheets & Cost by Material</h3>
                     {Object.entries(analyticsByCategory).map(([category, materials]) => (
-                        <div key={category} className="bg-slate-800 rounded-2xl shadow-lg p-6 border border-slate-700">
-                            <h4 className="text-lg font-semibold text-slate-300 mb-4">{category}</h4>
+                        <div key={category} className="bg-zinc-800 rounded-2xl shadow-lg p-6 border border-zinc-700">
+                            <h4 className="text-lg font-semibold text-zinc-300 mb-4">{category}</h4>
                             <div style={{ width: '100%', height: 300 }}>
                                 <ResponsiveContainer>
                                     <BarChart data={materials} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                        <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 12 }} />
-                                        <YAxis stroke="#94a3b8" />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
+                                        <XAxis dataKey="name" stroke="#a1a1aa" tick={{ fontSize: 12 }} />
+                                        <YAxis stroke="#a1a1aa" />
                                         <Tooltip
-                                            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.5rem' }}
-                                            labelStyle={{ color: '#cbd5e1' }}
+                                            contentStyle={{ backgroundColor: '#27272a', border: '1px solid #3f3f46', borderRadius: '0.5rem' }}
+                                            labelStyle={{ color: '#d4d4d8' }}
                                             formatter={(value, name) => [name === 'quantity' ? value : `$${value.toFixed(2)}`, name]}
                                         />
                                         <Legend />
@@ -87,15 +87,15 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
 
             {/* Sidebar for detailed cost breakdown */}
             <div className="w-full lg:w-1/3">
-                <div className="bg-slate-800 rounded-2xl shadow-lg p-6 border border-slate-700 sticky top-8">
+                <div className="bg-zinc-800 rounded-2xl shadow-lg p-6 border border-zinc-700 sticky top-8">
                     <h3 className="text-xl font-bold text-blue-400 mb-4">Supplier Cost Breakdown</h3>
                     {sortedCostBySupplier.length > 0 ? (
                         <ul className="space-y-3 max-h-[80vh] overflow-y-auto">
                             {sortedCostBySupplier.map((supplier, index) => (
-                                <li key={index} className="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg">
+                                <li key={index} className="flex justify-between items-center bg-zinc-700/50 p-3 rounded-lg">
                                     <div className="flex items-center">
                                         <span className="w-4 h-4 rounded-full mr-3" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
-                                        <span className="font-medium text-slate-300">{supplier.name}</span>
+                                        <span className="font-medium text-zinc-300">{supplier.name}</span>
                                     </div>
                                     <span className="font-mono text-green-400">
                                         ${supplier.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -104,7 +104,7 @@ export const CostAnalyticsView = ({ costBySupplier, analyticsByCategory }) => {
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-slate-400">No supplier cost data to display.</p>
+                        <p className="text-zinc-400">No supplier cost data to display.</p>
                     )}
                 </div>
             </div>

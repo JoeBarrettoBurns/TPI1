@@ -44,20 +44,20 @@ export const OutgoingLogDisplay = ({ usageLog, onRowClick, onDelete, onEdit, onF
     const visibleItems = outgoingItems.slice(0, ordersToShow);
 
     if (visibleItems.length === 0) {
-        return <p className="text-center text-slate-400 py-8">No outgoing stock logged.</p>;
+        return <p className="text-center text-zinc-400 py-8">No outgoing stock logged.</p>;
     }
 
     return (
-        <div className="overflow-x-auto mt-6 bg-slate-800 rounded-xl shadow-sm border border-slate-700">
+        <div className="overflow-x-auto mt-6 bg-zinc-800 rounded-xl shadow-sm border border-zinc-700">
             <table className="w-full text-left table-auto">
                 <thead>
-                    <tr className="bg-slate-900/60 border-b border-slate-700">
-                        <th className="p-4 font-semibold text-slate-400">DATE</th>
-                        <th className="p-4 font-semibold text-slate-400">JOB #</th>
-                        <th className="p-4 font-semibold text-slate-400">CUSTOMER</th>
-                        <th className="p-4 font-semibold text-slate-400">DESCRIPTION</th>
-                        <th className="p-4 font-semibold text-slate-400 text-right">QTY</th>
-                        <th className="p-4 font-semibold text-slate-400 text-center">ACTIONS</th>
+                    <tr className="bg-zinc-900/60 border-b border-zinc-700">
+                        <th className="p-4 font-semibold text-zinc-400">DATE</th>
+                        <th className="p-4 font-semibold text-zinc-400">JOB #</th>
+                        <th className="p-4 font-semibold text-zinc-400">CUSTOMER</th>
+                        <th className="p-4 font-semibold text-zinc-400">DESCRIPTION</th>
+                        <th className="p-4 font-semibold text-zinc-400 text-right">QTY</th>
+                        <th className="p-4 font-semibold text-zinc-400 text-center">ACTIONS</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -65,18 +65,18 @@ export const OutgoingLogDisplay = ({ usageLog, onRowClick, onDelete, onEdit, onF
                         <tr
                             key={item.id}
                             onClick={() => onRowClick(item)}
-                            className={`border-b border-slate-700 hover:bg-slate-700/50 cursor-pointer ${item.status === 'Scheduled' ? 'bg-purple-900/30' : ''
+                            className={`border-b border-zinc-700 hover:bg-zinc-700/50 cursor-pointer ${item.status === 'Scheduled' ? 'bg-purple-900/30' : ''
                                 }`}
                         >
-                            <td className="p-4 truncate text-slate-300">
+                            <td className="p-4 truncate text-zinc-300">
                                 <div className="flex items-center gap-2">
                                     {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" title="Scheduled" />}
                                     <span>{new Date(item.usedAt).toLocaleString()}</span>
                                 </div>
                             </td>
-                            <td className="p-4 truncate text-slate-300">{item.job}</td>
-                            <td className="p-4 truncate text-slate-300">{item.customer}</td>
-                            <td className="p-4 truncate text-slate-300">{item.description}</td>
+                            <td className="p-4 truncate text-zinc-300">{item.job}</td>
+                            <td className="p-4 truncate text-zinc-300">{item.customer}</td>
+                            <td className="p-4 truncate text-zinc-300">{item.description}</td>
                             <td className="p-4 text-red-400 font-mono text-right">{item.displayQty}</td>
                             <td className="p-4 text-center">
                                 {item.status === 'Scheduled' && (

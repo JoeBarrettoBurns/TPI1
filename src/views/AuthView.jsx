@@ -8,7 +8,7 @@ import { ErrorMessage } from '../components/common/ErrorMessage';
 // --- IMPORTANT ---
 // Set your desired login credentials here.
 const WHITELISTED_EMAIL = "jbb@tecnopan.ca";
-const WHITELISTED_PASSWORD = "tecnopan999"; // Change this to your desired password
+const WHITELISTED_PASSWORD = "123456"; // Change this to your desired password
 
 export const AuthView = ({ onLoginSuccess }) => {
     const [email, setEmail] = useState('');
@@ -34,11 +34,11 @@ export const AuthView = ({ onLoginSuccess }) => {
     };
 
     return (
-        <div className="bg-slate-900 min-h-screen flex items-center justify-center">
+        <div className="bg-zinc-900 min-h-screen flex items-center justify-center">
             <div className="w-full max-w-md">
                 <form
                     onSubmit={handleLogin}
-                    className="bg-slate-800 shadow-lg rounded-xl px-8 pt-6 pb-8 mb-4 border border-slate-700"
+                    className="bg-zinc-800 shadow-lg rounded-xl px-8 pt-6 pb-8 mb-4 border border-zinc-700"
                 >
                     <div className="mb-8 text-center">
                         <img src="/tecnopan-logo.png" alt="TecnoPan Logo" className="h-20 w-auto mx-auto mb-4" />
@@ -62,7 +62,7 @@ export const AuthView = ({ onLoginSuccess }) => {
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="password"
+                            placeholder="******************"
                             required
                         />
                     </div>

@@ -22,11 +22,14 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
     const handleConfirmDeleteLog = () => {
         if (!logToDelete) return;
 
-        if (logToDelete.isAddition && !logToDelete.job?.startsWith('MODIFICATION')) {
+        // Corrected logic: If it's an addition, delete from inventory.
+        // This now correctly includes "MODIFICATION: ADD" entries.
+        if (logToDelete.isAddition) {
             onDeleteInventoryGroup(logToDelete);
         } else {
             onDeleteLog(logToDelete.id);
         }
+
         setLogToDelete(null);
     };
 
@@ -100,8 +103,8 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                     </h2>
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
-                            <label htmlFor="show-incoming-logs" className="text-sm text-slate-400">Show:</label>
-                            <select id="show-incoming-logs" value={incomingOrdersToShow > 20 ? 'all' : incomingOrdersToShow} onChange={(e) => setIncomingOrdersToShow(e.target.value === 'all' ? 10000 : parseInt(e.target.value, 10))} className="bg-slate-700 text-white p-2 rounded-lg">
+                            <label htmlFor="show-incoming-logs" className="text-sm text-zinc-400">Show:</label>
+                            <select id="show-incoming-logs" value={incomingOrdersToShow > 20 ? 'all' : incomingOrdersToShow} onChange={(e) => setIncomingOrdersToShow(e.target.value === 'all' ? 10000 : parseInt(e.target.value, 10))} className="bg-zinc-700 text-white p-2 rounded-lg">
                                 <option value={5}>5</option>
                                 <option value={10}>10</option>
                                 <option value={20}>20</option>
@@ -130,8 +133,8 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                     </h2>
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
-                            <label htmlFor="show-outgoing-logs" className="text-sm text-slate-400">Show:</label>
-                            <select id="show-outgoing-logs" value={outgoingOrdersToShow > 20 ? 'all' : outgoingOrdersToShow} onChange={(e) => setOutgoingOrdersToShow(e.target.value === 'all' ? 10000 : parseInt(e.target.value, 10))} className="bg-slate-700 text-white p-2 rounded-lg">
+                            <label htmlFor="show-outgoing-logs" className="text-sm text-zinc-400">Show:</label>
+                            <select id="show-outgoing-logs" value={outgoingOrdersToShow > 20 ? 'all' : outgoingOrdersToShow} onChange={(e) => setOutgoingOrdersToShow(e.target.value === 'all' ? 10000 : parseInt(e.target.value, 10))} className="bg-zinc-700 text-white p-2 rounded-lg">
                                 <option value={5}>5</option>
                                 <option value={10}>10</option>
                                 <option value={20}>20</option>

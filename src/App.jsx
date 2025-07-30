@@ -626,7 +626,7 @@ export default function App() {
     }
 
     return (
-        <div className="bg-slate-900 min-h-screen font-sans text-slate-200">
+        <div className="bg-zinc-900 min-h-screen font-sans text-zinc-200">
             <div className="container mx-auto p-4 md:p-8">
                 <Header
                     onAdd={() => setModal({ type: 'add' })}
@@ -643,9 +643,9 @@ export default function App() {
 
                 {loading ? <LoadingSpinner /> : renderActiveView()}
 
-                <footer className="text-center text-slate-500 mt-8 text-sm">
+                <footer className="text-center text-zinc-500 mt-8 text-sm">
                     <p>TecnoPan Inventory System</p>
-                    <p>User: <span className="font-mono bg-slate-800 px-2 py-1 rounded">{userId}</span></p>
+                    <p>User: <span className="font-mono bg-zinc-800 px-2 py-1 rounded">{userId}</span></p>
                 </footer>
             </div>
 

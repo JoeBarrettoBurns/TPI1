@@ -5,8 +5,8 @@ import React from 'react';
 const Tab = ({ label, view, activeView, setActiveView }) => {
     const isActive = activeView === view;
     const classes = isActive
-        ? 'bg-blue-600 text-white'
-        : 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white';
+        ? 'bg-blue-800 text-white'
+        : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-white';
 
     return (
         <button
@@ -32,15 +32,15 @@ export const ViewTabs = ({ activeView, setActiveView, categories }) => {
 
     return (
         <div className="mb-8 space-y-4">
-            <div className="flex flex-wrap items-center gap-2 border-b-2 border-slate-700 pb-4">
-                <span className="text-slate-400 font-semibold mr-2">Views:</span>
+            <div className="flex flex-wrap items-center gap-2 border-b-2 border-zinc-700 pb-4">
+                <span className="text-zinc-400 font-semibold mr-2">Views:</span>
                 {mainViews.map(v =>
                     <Tab key={v.view} {...v} activeView={activeView} setActiveView={setActiveView} />
                 )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-400 font-semibold mr-2">Categories:</span>
+                <span className="text-zinc-400 font-semibold mr-2">Categories:</span>
                 {categoryViews.map(cat =>
                     <Tab key={cat} label={cat} view={cat} activeView={activeView} setActiveView={setActiveView} />
                 )}

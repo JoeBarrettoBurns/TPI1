@@ -27,7 +27,7 @@ export const ReorderView = ({ inventorySummary, materials, onRestock }) => {
 
     if (lowStockItems.length === 0) {
         return (
-            <div className="text-center text-slate-400 py-8">
+            <div className="text-center text-zinc-400 py-8">
                 <h2 className="text-2xl font-bold text-white mb-4">Reorder List</h2>
                 <p>No items are currently low in stock.</p>
             </div>
@@ -35,22 +35,22 @@ export const ReorderView = ({ inventorySummary, materials, onRestock }) => {
     }
 
     return (
-        <div className="bg-slate-800 rounded-lg shadow-lg p-6">
+        <div className="bg-zinc-800 rounded-lg shadow-lg p-6 border border-zinc-700">
             <h2 className="text-2xl font-bold text-white mb-4">Reorder List</h2>
             <div className="overflow-x-auto">
                 <table className="w-full text-left">
                     <thead>
-                        <tr className="border-b border-slate-700">
-                            <th className="p-2 font-semibold text-slate-400">Category</th>
-                            <th className="p-2 font-semibold text-slate-400">Material</th>
-                            <th className="p-2 font-semibold text-slate-400">Sheet Size</th>
-                            <th className="p-2 font-semibold text-slate-400 text-right">Quantity on Hand</th>
-                            <th className="p-2 font-semibold text-slate-400 text-center">Actions</th>
+                        <tr className="border-b border-zinc-700">
+                            <th className="p-2 font-semibold text-zinc-400">Category</th>
+                            <th className="p-2 font-semibold text-zinc-400">Material</th>
+                            <th className="p-2 font-semibold text-zinc-400">Sheet Size</th>
+                            <th className="p-2 font-semibold text-zinc-400 text-right">Quantity on Hand</th>
+                            <th className="p-2 font-semibold text-zinc-400 text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {lowStockItems.map((item, index) => (
-                            <tr key={index} className="border-b border-slate-700 last:border-b-0">
+                            <tr key={index} className="border-b border-zinc-700 last:border-b-0">
                                 <td className="p-2">{item.category}</td>
                                 <td className="p-2">{item.materialType}</td>
                                 <td className="p-2">{item.length}"x48"</td>

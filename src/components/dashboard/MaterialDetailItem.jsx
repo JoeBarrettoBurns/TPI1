@@ -63,18 +63,18 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
             ref={combinedRef}
             style={style}
             {...attributes}
-            className={`bg-slate-800 rounded-xl shadow-lg border border-slate-700 overflow-hidden transition-all duration-300 ${highlighted ? 'ring-2 ring-blue-500 shadow-xl shadow-blue-500/20' : 'ring-0 ring-transparent'}`}
+            className={`bg-zinc-800 rounded-xl shadow-lg border border-zinc-700 overflow-hidden transition-all duration-300 ${highlighted ? 'ring-2 ring-blue-500 shadow-xl shadow-blue-500/20' : 'ring-0 ring-transparent'}`}
         >
-            <div {...listeners} className="p-4 bg-slate-900/50 flex flex-wrap justify-between items-center gap-4 cursor-grab active:cursor-grabbing">
+            <div {...listeners} className="p-4 bg-zinc-900/50 flex flex-wrap justify-between items-center gap-4 cursor-grab active:cursor-grabbing">
                 <div>
                     <h3 className="text-2xl font-bold text-blue-400">{matType}</h3>
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 mt-2">
                         <div>
-                            <h4 className="text-sm font-semibold text-slate-400 mb-1">CURRENT INVENTORY</h4>
+                            <h4 className="text-sm font-semibold text-zinc-400 mb-1">CURRENT INVENTORY</h4>
                             <div className="flex gap-4">
                                 {STANDARD_LENGTHS.map(len => (
                                     <div key={len} className="text-center">
-                                        <div className="text-xs text-slate-500">{len}"x48"</div>
+                                        <div className="text-xs text-zinc-500">{len}"x48"</div>
                                         <div className="text-2xl font-bold text-green-300">{inventorySummary[matType]?.[len] || 0}</div>
                                     </div>
                                 ))}
@@ -82,7 +82,7 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
                         </div>
                         {totalIncomingSheets > 0 && (
                             <div>
-                                <h4 className="text-sm font-semibold text-slate-400 mb-1">FUTURE INVENTORY</h4>
+                                <h4 className="text-sm font-semibold text-zinc-400 mb-1">FUTURE INVENTORY</h4>
                                 <div className="flex gap-4">
                                     {STANDARD_LENGTHS.map(len => {
                                         const currentStock = inventorySummary[matType]?.[len] || 0;
@@ -90,7 +90,7 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
                                         const projectedTotal = currentStock + incomingStock;
                                         return (
                                             <div key={len} className="text-center">
-                                                <div className="text-xs text-slate-500">{len}"x48"</div>
+                                                <div className="text-xs text-zinc-500">{len}"x48"</div>
                                                 <div className="text-2xl font-bold text-yellow-300">
                                                     {projectedTotal}
                                                 </div>
@@ -108,9 +108,9 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <GripVertical className="text-slate-500 mr-4" />
-                    <label htmlFor={`show-orders-${matType}`} className="text-sm text-slate-400">Show:</label>
-                    <select id={`show-orders-${matType}`} value={numToShow > 20 ? 'all' : numToShow} onChange={(e) => setNumToShow(e.target.value === 'all' ? 10000 : parseInt(e.target.value, 10))} className="bg-slate-700 text-white p-2 rounded-lg">
+                    <GripVertical className="text-zinc-500 mr-4" />
+                    <label htmlFor={`show-orders-${matType}`} className="text-sm text-zinc-400">Show:</label>
+                    <select id={`show-orders-${matType}`} value={numToShow > 20 ? 'all' : numToShow} onChange={(e) => setNumToShow(e.target.value === 'all' ? 10000 : parseInt(e.target.value, 10))} className="bg-zinc-700 text-white p-2 rounded-lg">
                         <option value={5}>5</option>
                         <option value={10}>10</option>
                         <option value={20}>20</option>
@@ -121,13 +121,13 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
             {!isDragging && (
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-900/80">
-                            <tr className="border-t border-b border-slate-700">
-                                <th className="p-3 font-semibold text-slate-400">ORDER/JOB</th>
-                                <th className="p-3 font-semibold text-slate-400">DATE</th>
-                                <th className="p-3 font-semibold text-slate-400">CUSTOMER/SUPPLIER</th>
-                                {STANDARD_LENGTHS.map(len => (<th key={len} className="p-3 font-semibold text-slate-400 text-center">{len}"x48"</th>))}
-                                <th className="p-3 font-semibold text-slate-400 text-center">Actions</th>
+                        <thead className="bg-zinc-900/80">
+                            <tr className="border-t border-b border-zinc-700">
+                                <th className="p-3 font-semibold text-zinc-400">ORDER/JOB</th>
+                                <th className="p-3 font-semibold text-zinc-400">DATE</th>
+                                <th className="p-3 font-semibold text-zinc-400">CUSTOMER/SUPPLIER</th>
+                                {STANDARD_LENGTHS.map(len => (<th key={len} className="p-3 font-semibold text-zinc-400 text-center">{len}"x48"</th>))}
+                                <th className="p-3 font-semibold text-zinc-400 text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -138,12 +138,12 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
                                             : '';
 
                                 return (
-                                    <tr key={t.id} onClick={() => setDetailLog(t)} className={`border-b border-slate-700/50 cursor-pointer hover:bg-slate-700/50 ${rowClass}`}>
+                                    <tr key={t.id} onClick={() => setDetailLog(t)} className={`border-b border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 ${rowClass}`}>
                                         <td className="p-3 whitespace-nowrap">{t.job}</td>
                                         <td className="p-3 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
                                         <td className="p-3 whitespace-nowrap">{t.customer}</td>
                                         {STANDARD_LENGTHS.map(len => (
-                                            <td key={len} className={`p-3 text-center font-mono ${t[len] < 0 ? 'text-red-400' : 'text-slate-300'}`}>{t[len] || ''}</td>
+                                            <td key={len} className={`p-3 text-center font-mono ${t[len] < 0 ? 'text-red-400' : 'text-zinc-300'}`}>{t[len] || ''}</td>
                                         ))}
                                         <td className="p-3 text-center">
                                             {t.isFuture && t.isAddition && <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(t); }} className="text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>}
