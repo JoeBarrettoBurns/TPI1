@@ -19,7 +19,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
     const incomingItems = useMemo(() => {
         const grouped = groupInventoryByJob(inventory);
         if (!searchQuery) return grouped;
-        const lowercasedQuery = searchQuery.toLowerCase();
+        const lowercasedQuery = (searchQuery || '').toLowerCase();
         return grouped.filter(group =>
             (group.job || '').toLowerCase().includes(lowercasedQuery) ||
             (group.supplier || '').toLowerCase().includes(lowercasedQuery) ||
@@ -30,7 +30,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
     const filteredUsageLog = useMemo(() => {
         const filtered = usageLog.filter(log => log.status !== 'Archived');
         if (!searchQuery) return filtered;
-        const lowercasedQuery = searchQuery.toLowerCase();
+        const lowercasedQuery = (searchQuery || '').toLowerCase();
         return filtered.filter(log =>
             (log.job || '').toLowerCase().includes(lowercasedQuery) ||
             (log.customer || '').toLowerCase().includes(lowercasedQuery) ||

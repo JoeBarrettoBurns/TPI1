@@ -26,7 +26,7 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, searchQuer
         const sorted = items.sort((a, b) => a.category.localeCompare(b.category) || a.materialType.localeCompare(b.materialType));
 
         if (!searchQuery) return sorted;
-        const lowercasedQuery = searchQuery.toLowerCase();
+        const lowercasedQuery = (searchQuery || '').toLowerCase();
         return sorted.filter(item =>
             item.materialType.toLowerCase().includes(lowercasedQuery) ||
             item.category.toLowerCase().includes(lowercasedQuery)

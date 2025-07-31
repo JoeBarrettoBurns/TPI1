@@ -1,13 +1,14 @@
+// src/views/JobOverviewView.jsx
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { AddStockForm } from '../components/jobs/AddStockForm';
 import { UseStockForm } from '../components/jobs/UseStockForm'; // New import
-import { groupLogsByJob } from '../utils/dataProcessing';
 
 const JobCard = ({ job, onSelectJob, isSelected }) => (
     <div
         className={`p-4 rounded-lg border cursor-pointer transition-colors ${isSelected
-                ? 'bg-blue-800 border-blue-600 ring-2 ring-blue-500'
-                : 'bg-zinc-800 border-zinc-700 hover:bg-zinc-700'
+            ? 'bg-blue-800 border-blue-600 ring-2 ring-blue-500'
+            : 'bg-zinc-800 border-zinc-700 hover:bg-zinc-700'
             }`}
         onClick={() => onSelectJob(job)}
     >
@@ -85,7 +86,7 @@ export const JobOverviewView = ({ allJobs, inventory, usageLog, materials, suppl
 
     const filteredJobs = useMemo(() => {
         if (!searchQuery) return allJobs;
-        const lowercasedQuery = searchQuery.toLowerCase();
+        const lowercasedQuery = (searchQuery || '').toLowerCase();
         return allJobs.filter(job =>
             job.job.toLowerCase().includes(lowercasedQuery) ||
             (job.customer || job.supplier || '').toLowerCase().includes(lowercasedQuery)

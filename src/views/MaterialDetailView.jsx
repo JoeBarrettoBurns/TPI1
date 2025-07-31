@@ -1,5 +1,3 @@
-// src/views/MaterialDetailView.jsx
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -11,41 +9,69 @@ export const MaterialDetailView = ({
     onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog,
     scrollToMaterial, onScrollToComplete, materials, materialTypes, searchQuery
 }) => {
-    const initialMaterials = useMemo(() => {
-        const materialsInCategory = materialTypes.filter(m => materials[m].category === category);
+    // 1. A stable, default-sorted list of all materials in this category. This list is never filtered.
+    const stableMaterialsInCategory = useMemo(() => {
+        return materialTypes
+            .filter(m => materials[m] && materials[m].category === category)
+            .sort((a, b) => {
+                const aSummary = inventorySummary[a] || {};
+                const bSummary = inventorySummary[b] || {};
+                const aTotal = Object.values(aSummary).reduce((sum, count) => sum + count, 0);
+                const bTotal = Object.values(bSummary).reduce((sum, count) => sum + count, 0);
+                return bTotal - aTotal;
+            });
+    }, [category, materials, materialTypes, inventorySummary]);
 
-        const lowercasedQuery = searchQuery.toLowerCase();
-        const filtered = searchQuery
-            ? materialsInCategory.filter(m => m.toLowerCase().includes(lowercasedQuery))
-            : materialsInCategory;
-
-        return filtered.sort((a, b) => {
-            const aSummary = inventorySummary[a] || {};
-            const bSummary = inventorySummary[b] || {};
-            const aTotal = Object.values(aSummary).reduce((sum, count) => sum + count, 0);
-            const bTotal = Object.values(bSummary).reduce((sum, count) => sum + count, 0);
-            return bTotal - aTotal;
-        });
-    }, [category, materials, materialTypes, inventorySummary, searchQuery]);
-
+    // 2. The user's custom sort order, loaded from local storage.
     const [orderedMaterials, setOrderedMaterials] = usePersistentState(`material-order-${category}`, []);
-    const [activeMaterial, setActiveMaterial] = useState(null);
-    const [highlightedMaterial, setHighlightedMaterial] = useState(null);
-    const detailRefs = useRef({});
 
+    // 3. This effect syncs the persisted order with the master list of materials,
+    // ensuring that new materials are added and old ones are removed without losing the user's custom order.
     useEffect(() => {
         setOrderedMaterials(prevOrder => {
-            const liveItems = new Set(initialMaterials);
+            const liveItemsSet = new Set(stableMaterialsInCategory);
             const currentOrderSet = new Set(prevOrder);
-            const filteredOrder = prevOrder.filter(item => liveItems.has(item));
-            const newItems = initialMaterials.filter(item => !currentOrderSet.has(item));
-            const newOrder = [...filteredOrder, ...newItems];
+
+            // Keep only the items in the order that still exist in the master list
+            const validOrderedItems = prevOrder.filter(item => liveItemsSet.has(item));
+
+            // Find any new items from the master list that are not in the current order
+            const newItems = stableMaterialsInCategory.filter(item => !currentOrderSet.has(item));
+
+            // Add new items to the end of the valid ordered list
+            const newOrder = [...validOrderedItems, ...newItems];
+
+            // Only update state if the order has actually changed to prevent infinite loops
             if (JSON.stringify(newOrder) !== JSON.stringify(prevOrder)) {
                 return newOrder;
             }
+
             return prevOrder;
         });
-    }, [initialMaterials, setOrderedMaterials]);
+    }, [stableMaterialsInCategory, setOrderedMaterials]);
+
+    // 4. This is the master list for sorting. It uses the user's custom order if it's valid, otherwise it falls back to the default sort.
+    // This list is provided to the drag-and-drop context. It is NOT filtered by search.
+    const baseSortableOrder = useMemo(() => {
+        // Use the custom order only if it contains all the materials. Otherwise, it's stale, so use the default.
+        return orderedMaterials.length === stableMaterialsInCategory.length
+            ? orderedMaterials
+            : stableMaterialsInCategory;
+    }, [orderedMaterials, stableMaterialsInCategory]);
+
+
+    // 5. This is the list of materials that gets displayed. It takes the correctly sorted master list and *then* filters it.
+    const displayMaterials = useMemo(() => {
+        if (!searchQuery) {
+            return baseSortableOrder;
+        }
+        const lowercasedQuery = searchQuery.toLowerCase();
+        return baseSortableOrder.filter(m => m.toLowerCase().includes(lowercasedQuery));
+    }, [baseSortableOrder, searchQuery]);
+
+    const [activeMaterial, setActiveMaterial] = useState(null);
+    const [highlightedMaterial, setHighlightedMaterial] = useState(null);
+    const detailRefs = useRef({});
 
     useEffect(() => {
         if (scrollToMaterial) {
@@ -66,6 +92,7 @@ export const MaterialDetailView = ({
 
 
     const handleDragStart = (event) => setActiveMaterial(event.active.id);
+
     const handleDragEnd = (event) => {
         const { active, over } = event;
         if (over && active.id !== over.id) {
@@ -77,6 +104,7 @@ export const MaterialDetailView = ({
         }
         setActiveMaterial(null);
     };
+
     const handleDragCancel = () => setActiveMaterial(null);
 
     return (
@@ -87,8 +115,10 @@ export const MaterialDetailView = ({
             onDragCancel={handleDragCancel}
         >
             <div className="space-y-8">
-                <SortableContext items={initialMaterials} strategy={verticalListSortingStrategy}>
-                    {initialMaterials.map(matType => (
+                {/* The SortableContext MUST receive the full, unfiltered, sorted list to work correctly */}
+                <SortableContext items={baseSortableOrder} strategy={verticalListSortingStrategy}>
+                    {/* We then MAP over the potentially filtered `displayMaterials` for rendering */}
+                    {displayMaterials.map(matType => (
                         <MaterialDetailItem
                             key={matType}
                             id={matType}

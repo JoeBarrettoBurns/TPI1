@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, deleteDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { writeBatch, runTransaction, doc, collection, deleteDoc, updateDoc } from 'firebase/firestore';
 import Fuse from 'fuse.js';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
@@ -44,6 +44,10 @@ import { AddCategoryModal } from './components/modals/AddCategoryModal';
 import { ManageSuppliersModal } from './components/modals/ManageSuppliersModal';
 import { ConfirmationModal } from './components/modals/ConfirmationModal';
 
+// AI Assistant
+import { AIAssistant } from './components/assistant/AIAssistant';
+import { Bot } from 'lucide-react';
+
 
 export default function App() {
     const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('isLoggedIn') === 'true');
@@ -63,6 +67,7 @@ export default function App() {
     const [activeIndex, setActiveIndex] = useState(0);
     const [fuse, setFuse] = useState(null);
     const searchTimeoutRef = useRef(null);
+    const [isAssistantVisible, setIsAssistantVisible] = useState(false);
 
     const closeModal = useCallback(() => setModal({ type: null, data: null, error: null }), []);
 
@@ -75,11 +80,12 @@ export default function App() {
         }
     }, []);
 
-    // Effect to handle Escape key for closing modals and search
     useEffect(() => {
         const handleKeyDown = (event) => {
             if (event.key === 'Escape') {
-                if (modal.type) {
+                if (isAssistantVisible) {
+                    setIsAssistantVisible(false);
+                } else if (modal.type) {
                     closeModal();
                 } else if (searchQuery) {
                     clearSearch();
@@ -88,9 +94,8 @@ export default function App() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [closeModal, clearSearch, modal.type, searchQuery]);
+    }, [closeModal, clearSearch, modal.type, searchQuery, isAssistantVisible]);
 
-    // Effect to handle global keypress to focus search
     useEffect(() => {
         const handleGlobalKeyPress = (event) => {
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
@@ -136,7 +141,6 @@ export default function App() {
         }
     }, [categoriesToDelete]);
 
-    // Fuse.js search index setup
     useEffect(() => {
         if (loading) return;
 
@@ -278,9 +282,6 @@ export default function App() {
                 : [...prev, categoryName]
         );
     };
-
-    // ... (All other handle functions: handleConfirmDeleteCategories, handleUseStock, etc. remain unchanged)
-
 
     const handleConfirmDeleteCategories = async () => {
         try {
@@ -750,6 +751,7 @@ export default function App() {
                             activeCategory={activeCategory}
                             onDeleteCategory={handleToggleCategoryForDeletion}
                             categoriesToDelete={categoriesToDelete}
+                            searchQuery={searchQuery}
                         />
                     </DndContext>
                 );
@@ -764,6 +766,7 @@ export default function App() {
                     handleUseStock={handleUseStock}
                     initialSelectedJob={selectedJobFromSearch}
                     onClearSelectedJob={() => setSelectedJobFromSearch(null)}
+                    searchQuery={searchQuery}
                 />;
             case 'logs':
                 return <LogsView
@@ -772,11 +775,13 @@ export default function App() {
                     materials={materials}
                     onFulfillLog={handleFulfillScheduledLog}
                     onReceiveOrder={handleReceiveOrder}
+                    searchQuery={searchQuery}
                 />;
             case 'price-history':
                 return <PriceHistoryView
                     inventory={inventory}
                     materials={materials}
+                    searchQuery={searchQuery}
                 />;
             case 'analytics':
                 return <CostAnalyticsView
@@ -788,6 +793,7 @@ export default function App() {
                     inventorySummary={inventorySummary}
                     materials={materials}
                     onRestock={handleRestock}
+                    searchQuery={searchQuery}
                 />;
             default:
                 if (initialCategories.includes(activeView)) {
@@ -801,6 +807,7 @@ export default function App() {
                         onFulfillLog={handleFulfillScheduledLog}
                         scrollToMaterial={scrollToMaterial}
                         onScrollToComplete={onScrollToComplete}
+                        searchQuery={searchQuery}
                     />;
                 }
                 return null;
@@ -851,6 +858,25 @@ export default function App() {
                     <p>User: <span className="font-mono bg-zinc-800 px-2 py-1 rounded">{userId}</span></p>
                 </footer>
             </div>
+
+            {/* AI Assistant Button and Window */}
+            <button
+                onClick={() => setIsAssistantVisible(true)}
+                className="fixed bottom-6 right-6 bg-blue-800 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 z-40"
+                aria-label="Open AI Assistant"
+            >
+                <Bot size={28} />
+            </button>
+
+            <AIAssistant
+                isVisible={isAssistantVisible}
+                onClose={() => setIsAssistantVisible(false)}
+                inventory={inventory}
+                materials={materials}
+                suppliers={suppliers}
+                usageLog={usageLog}
+            />
+
 
             {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} suppliers={suppliers} preselectedMaterial={modal.data?.preselectedMaterial} />}
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} suppliers={suppliers} />}
