@@ -1,7 +1,10 @@
+// src/App.jsx
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
+import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { writeBatch, runTransaction, doc, collection, deleteDoc, setDoc, updateDoc } from 'firebase/firestore';
+import Fuse from 'fuse.js';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
 import { usePersistentState } from './hooks/usePersistentState';
@@ -20,6 +23,7 @@ import { Header } from './components/layout/Header';
 import { ViewTabs } from './components/layout/ViewTabs';
 import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { ErrorMessage } from './components/common/ErrorMessage';
+import { SearchResultsDropdown } from './components/common/SearchResultsDropdown';
 
 // Views
 import { AuthView } from './views/AuthView';
@@ -55,23 +59,47 @@ export default function App() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedJobFromSearch, setSelectedJobFromSearch] = useState(null);
     const searchInputRef = useRef(null);
+    const [searchResults, setSearchResults] = useState([]);
+    const [activeIndex, setActiveIndex] = useState(0);
+    const [fuse, setFuse] = useState(null);
+    const searchTimeoutRef = useRef(null);
+
+    const closeModal = useCallback(() => setModal({ type: null, data: null, error: null }), []);
+
+    const clearSearch = useCallback(() => {
+        setSearchQuery('');
+        setSearchResults([]);
+        setActiveIndex(0);
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+    }, []);
+
+    // Effect to handle Escape key for closing modals and search
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                if (modal.type) {
+                    closeModal();
+                } else if (searchQuery) {
+                    clearSearch();
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [closeModal, clearSearch, modal.type, searchQuery]);
 
     // Effect to handle global keypress to focus search
     useEffect(() => {
         const handleGlobalKeyPress = (event) => {
-            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) {
-                return;
-            }
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
             if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
                 searchInputRef.current?.focus();
             }
         };
-
         window.addEventListener('keydown', handleGlobalKeyPress);
-
-        return () => {
-            window.removeEventListener('keydown', handleGlobalKeyPress);
-        };
+        return () => window.removeEventListener('keydown', handleGlobalKeyPress);
     }, []);
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
@@ -94,61 +122,144 @@ export default function App() {
     const incomingSummary = useMemo(() => calculateIncomingSummary(inventory, materialTypes), [inventory, materialTypes]);
     const costBySupplier = useMemo(() => calculateCostBySupplier(inventory, materials), [inventory, materials]);
     const analyticsByCategory = useMemo(() => calculateAnalyticsByCategory(inventory, materials), [inventory, materials]);
-    const closeModal = () => setModal({ type: null, data: null, error: null });
 
-    const onScrollToComplete = useCallback(() => setScrollToMaterial(null), []);
-
-    const handleSignOut = () => {
+    const handleSignOut = useCallback(() => {
         localStorage.removeItem('isLoggedIn');
         setIsLoggedIn(false);
+    }, []);
+
+    const handleFinishEditing = useCallback(() => {
+        if (categoriesToDelete.length > 0) {
+            setModal({ type: 'confirm-delete-categories', data: categoriesToDelete });
+        } else {
+            setIsEditMode(false);
+        }
+    }, [categoriesToDelete]);
+
+    // Fuse.js search index setup
+    useEffect(() => {
+        if (loading) return;
+
+        const commands = [
+            { type: 'command', name: 'Add Stock', aliases: ['add', 'new', 'order'], action: () => setModal({ type: 'add' }) },
+            { type: 'command', name: 'Use Stock', aliases: ['use'], action: () => setModal({ type: 'use' }) },
+            { type: 'command', name: 'Add Category', aliases: ['ac', 'add cat'], action: () => setModal({ type: 'add-category' }) },
+            { type: 'command', name: 'Manage Suppliers', aliases: ['ms', 'manage sup'], action: () => setModal({ type: 'manage-suppliers' }) },
+            { type: 'command', name: 'Edit/Finish', aliases: ['edit', 'finish'], action: () => isEditMode ? handleFinishEditing() : setIsEditMode(true), view: 'dashboard' },
+            { type: 'command', name: 'Sign Out', aliases: ['sign out', 'logout', 'log off'], action: () => handleSignOut() },
+        ];
+
+        const views = [
+            { type: 'view', name: 'Dashboard', id: 'dashboard' },
+            { type: 'view', name: 'Jobs', id: 'jobs' },
+            { type: 'view', name: 'Logs', id: 'logs' },
+            { type: 'view', name: 'Price History', id: 'price-history' },
+            { type: 'view', name: 'Analytics', id: 'analytics' },
+            { type: 'view', name: 'Reorder', id: 'reorder' },
+        ];
+
+        const searchDocs = [
+            ...commands.flatMap(c => [{ type: c.type, name: c.name, action: c.action, view: c.view }, ...c.aliases.map(a => ({ type: c.type, name: `${c.name} (alias: ${a})`, alias: a, action: c.action, view: c.view }))]),
+            ...views.map(v => ({ type: 'view', name: v.name, id: v.id })),
+            ...initialCategories.map(c => ({ type: 'category', name: c })),
+            ...materialTypes.map(m => ({ type: 'material', name: m, category: materials[m]?.category })),
+            ...allJobs.map(j => ({ type: 'job', name: j.job, customer: j.customer, data: j })),
+        ];
+
+        const fuseOptions = {
+            includeScore: true,
+            keys: ['name', 'alias', 'customer'],
+            threshold: 0.4,
+        };
+
+        setFuse(new Fuse(searchDocs, fuseOptions));
+
+    }, [loading, materials, inventory, usageLog, initialCategories, isEditMode, allJobs, materialTypes, handleFinishEditing, handleSignOut]);
+
+
+    const handleSearchChange = (e) => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        const query = e.target.value;
+        setSearchQuery(query);
+        setActiveIndex(0);
+
+        if (query.trim() === '') {
+            setSearchResults([]);
+            return;
+        }
+
+        if (fuse) {
+            const results = fuse.search(query).slice(0, 10);
+            setSearchResults(results);
+        }
+
+        searchTimeoutRef.current = setTimeout(() => {
+            setSearchResults([]);
+        }, 2000); // Disappear after 2 seconds
     };
+
+    const handleResultSelect = (result) => {
+        const item = result.item;
+        switch (item.type) {
+            case 'command':
+                if (item.view && activeView !== item.view) break;
+                item.action();
+                break;
+            case 'view':
+                setActiveView(item.id);
+                break;
+            case 'category':
+                setActiveView(item.name);
+                break;
+            case 'material':
+                setActiveView(item.category);
+                setScrollToMaterial(item.name);
+                break;
+            case 'job':
+                setActiveView('jobs');
+                setSelectedJobFromSearch(item.data);
+                break;
+            default:
+                break;
+        }
+        clearSearch();
+        searchInputRef.current?.blur();
+    };
+
+    const handleSearchKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (searchResults[activeIndex]) {
+                handleResultSelect(searchResults[activeIndex]);
+            }
+            return;
+        }
+
+        if (searchResults.length === 0) return;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setActiveIndex(prev => (prev + 1) % searchResults.length);
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setActiveIndex(prev => (prev - 1 + searchResults.length) % searchResults.length);
+                break;
+            default:
+                break;
+        }
+    };
+
+
+    const onScrollToComplete = useCallback(() => setScrollToMaterial(null), []);
 
     const handleRestock = (materialType) => {
         setModal({ type: 'add', data: { preselectedMaterial: materialType } });
     };
-
-    const handleSearchSubmit = () => {
-        const query = searchQuery.toLowerCase().trim();
-        if (!query) return;
-
-        // Priority 1: Check for a job match
-        const matchedJob = allJobs.find(job => job.job.toLowerCase().includes(query));
-        if (matchedJob) {
-            setActiveView('jobs');
-            setSelectedJobFromSearch(matchedJob);
-            setSearchQuery('');
-            return;
-        }
-
-        // Priority 2: Check for a material match
-        const matchedMaterial = materialTypes.find(m => m.toLowerCase().includes(query));
-        if (matchedMaterial) {
-            const category = materials[matchedMaterial]?.category;
-            if (category) {
-                setActiveView(category);
-                setScrollToMaterial(matchedMaterial);
-                setSearchQuery('');
-                return;
-            }
-        }
-
-        // Priority 3: Check for a category match
-        const matchedCategory = categories.find(c => c.toLowerCase().startsWith(query));
-        if (matchedCategory) {
-            setActiveView(matchedCategory);
-            setSearchQuery('');
-            return;
-        }
-
-        // Priority 4: Check for a main view match
-        const mainViews = ['dashboard', 'jobs', 'logs', 'price history', 'analytics', 'reorder'];
-        const matchedMainView = mainViews.find(v => v.startsWith(query));
-        if (matchedMainView) {
-            setActiveView(matchedMainView.replace(' ', '-'));
-            setSearchQuery('');
-        }
-    };
-
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
@@ -168,13 +279,8 @@ export default function App() {
         );
     };
 
-    const handleFinishEditing = () => {
-        if (categoriesToDelete.length > 0) {
-            setModal({ type: 'confirm-delete-categories', data: categoriesToDelete });
-        } else {
-            setIsEditMode(false);
-        }
-    };
+    // ... (All other handle functions: handleConfirmDeleteCategories, handleUseStock, etc. remain unchanged)
+
 
     const handleConfirmDeleteCategories = async () => {
         try {
@@ -615,6 +721,8 @@ export default function App() {
         setModal({ type: modalType, data: transaction });
     };
 
+
+
     const renderActiveView = () => {
         switch (activeView) {
             case 'dashboard':
@@ -642,7 +750,6 @@ export default function App() {
                             activeCategory={activeCategory}
                             onDeleteCategory={handleToggleCategoryForDeletion}
                             categoriesToDelete={categoriesToDelete}
-                            searchQuery={searchQuery}
                         />
                     </DndContext>
                 );
@@ -655,7 +762,6 @@ export default function App() {
                     suppliers={suppliers}
                     handleAddOrEditOrder={handleAddOrEditOrder}
                     handleUseStock={handleUseStock}
-                    searchQuery={searchQuery}
                     initialSelectedJob={selectedJobFromSearch}
                     onClearSelectedJob={() => setSelectedJobFromSearch(null)}
                 />;
@@ -666,13 +772,11 @@ export default function App() {
                     materials={materials}
                     onFulfillLog={handleFulfillScheduledLog}
                     onReceiveOrder={handleReceiveOrder}
-                    searchQuery={searchQuery}
                 />;
             case 'price-history':
                 return <PriceHistoryView
                     inventory={inventory}
                     materials={materials}
-                    searchQuery={searchQuery}
                 />;
             case 'analytics':
                 return <CostAnalyticsView
@@ -684,7 +788,6 @@ export default function App() {
                     inventorySummary={inventorySummary}
                     materials={materials}
                     onRestock={handleRestock}
-                    searchQuery={searchQuery}
                 />;
             default:
                 if (initialCategories.includes(activeView)) {
@@ -698,7 +801,6 @@ export default function App() {
                         onFulfillLog={handleFulfillScheduledLog}
                         scrollToMaterial={scrollToMaterial}
                         onScrollToComplete={onScrollToComplete}
-                        searchQuery={searchQuery}
                     />;
                 }
                 return null;
@@ -723,9 +825,22 @@ export default function App() {
                     onManageSuppliers={() => setModal({ type: 'manage-suppliers' })}
                     activeView={activeView}
                     searchQuery={searchQuery}
-                    onSearchChange={(e) => setSearchQuery(e.target.value)}
-                    onSearchSubmit={handleSearchSubmit}
+                    onSearchChange={handleSearchChange}
+                    onKeyDown={handleSearchKeyDown}
                 />
+
+                <div className="relative">
+                    {searchResults.length > 0 && (
+                        <SearchResultsDropdown
+                            results={searchResults}
+                            onSelect={handleResultSelect}
+                            activeIndex={activeIndex}
+                            setActiveIndex={setActiveIndex}
+                        />
+                    )}
+                </div>
+
+
                 <ViewTabs activeView={activeView} setActiveView={setActiveView} categories={categories} />
                 {error && <ErrorMessage message={error} />}
 

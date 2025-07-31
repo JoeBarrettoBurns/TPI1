@@ -7,7 +7,7 @@ import { Button } from '../common/Button';
 export const Header = forwardRef(({
     searchQuery,
     onSearchChange,
-    onSearchSubmit,
+    onKeyDown,
     onAdd,
     onUse,
     onEdit,
@@ -17,12 +17,6 @@ export const Header = forwardRef(({
     activeView,
     onSignOut
 }, ref) => {
-    const handleKeyDown = (event) => {
-        if (event.key === 'Enter') {
-            event.preventDefault(); // Prevent default form submission
-            onSearchSubmit(); // Trigger the navigation logic
-        }
-    };
 
     return (
         <header className="mb-8">
@@ -49,13 +43,14 @@ export const Header = forwardRef(({
             {/* Bottom Row: Search Bar */}
             <div className="mt-4 md:w-1/3">
                 <input
-                    ref={ref} // Attach the forwarded ref here
+                    ref={ref}
                     type="search"
-                    placeholder="Search content or type a view name and press Enter..."
+                    placeholder="Search anything..."
                     value={searchQuery}
                     onChange={onSearchChange}
-                    onKeyDown={handleKeyDown}
+                    onKeyDown={onKeyDown}
                     className="w-full p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    autoComplete="off"
                 />
             </div>
         </header>
