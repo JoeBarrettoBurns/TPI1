@@ -875,7 +875,10 @@ export default function App() {
                 materials={materials}
                 suppliers={suppliers}
                 usageLog={usageLog}
+                onExecuteOrder={(jobs) => handleAddOrEditOrder(jobs)}
+                onOpenModal={(type) => setModal({ type })}
             />
+
 
 
             {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} suppliers={suppliers} preselectedMaterial={modal.data?.preselectedMaterial} />}
