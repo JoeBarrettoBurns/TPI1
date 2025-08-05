@@ -86,7 +86,7 @@ export const UseStockForm = ({ onSave, inventory, materialTypes, inventorySummar
                     <FormInput label="Customer" name="customer" value={job.customer} onChange={(e) => handleJobChange(jobIndex, 'customer', e.target.value)} required />
                 </div>
 
-                <div className="flex items-center gap-4 p-2 bg-zinc-900/50 rounded-lg">
+                <div className="flex gap-4 p-2 bg-zinc-900/50 rounded-lg">
                     <button type="button" onClick={() => setOptions({ ...options, isScheduled: false })} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${!options.isScheduled ? 'bg-blue-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
                         <Minus size={16} /> Use Now
                     </button>

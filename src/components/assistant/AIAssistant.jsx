@@ -1,5 +1,3 @@
-// src/components/assistant/AIAssistant.jsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, User, CornerDownLeft, Loader, X, PlusCircle } from 'lucide-react';
 import { Button } from '../common/Button';
@@ -36,8 +34,6 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
             ${JSON.stringify(inventory.slice(0, 50), null, 2)}
             Here are the available materials and their properties:
             ${JSON.stringify(materials, null, 2)}
-            Here are the available suppliers:
-            ${JSON.stringify(suppliers, null, 2)}
         `;
 
         return `You are an advanced inventory analyst and assistant for the TecnoPan system.
@@ -51,15 +47,16 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
         - "open_manage_suppliers_modal": Use when the user wants to add or view suppliers.
         - "answer_question": Use for any other general query about inventory or data.
 
-        - For "create_order", you MUST gather all required details (material, quantity, supplier, cost) by asking follow-up questions if necessary before presenting the final order for confirmation.
-        - For other "open_..." actions, simply confirm the user's intent and use the corresponding action.
+        - For "create_order", you MUST use a supplier from the provided list of available suppliers. If the user provides a name that is similar to an existing supplier, use the existing one (e.g., if the user says "ryerson", you must use "RYERSON"). Do not create new suppliers.
+        - You MUST gather all required details (material, quantity, supplier, cost) by asking follow-up questions if necessary before presenting the final order for confirmation.
+        - If the user doesn't specify an arrival date for an "Ordered" status, assume today's date: ${new Date().toISOString().split('T')[0]}.
+        - If the user doesn't specify a job name, use "Stock".
 
-        Analyze the provided data and the entire conversation history carefully.
+        Available Suppliers:
+        ${JSON.stringify(suppliers)}
 
         Current Data Context:
         ${inventoryContext}
-
-        User's query: "${userInput}"
         `;
     };
 
@@ -114,7 +111,7 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
                         nullable: true,
                         properties: {
                             jobName: { type: "STRING" },
-                            supplier: { type: "STRING" },
+                            supplier: { type: "STRING", enum: suppliers },
                             status: { type: "STRING", enum: ["Ordered", "On Hand"] },
                             arrivalDate: { type: "STRING" },
                             items: {

@@ -54,11 +54,10 @@ export const calculateIncomingSummary = (inventory, materialTypes) => {
 export const calculateSheetCost = (sheet, materials) => {
     const materialInfo = materials[sheet.materialType];
     if (!materialInfo || !materialInfo.density || !materialInfo.thickness || !sheet.costPerPound) return 0;
-    const volume = (sheet.length * (sheet.width || 48) * materialInfo.thickness) / 1728; // cubic feet
+    const volume = (sheet.length * (sheet.width || 48) * materialInfo.thickness);
     const weight = volume * materialInfo.density;
     return weight * sheet.costPerPound;
 };
-
 
 export const calculateMaterialTransactions = (materialTypes, inventory, usageLog) => {
     const allTransactions = {};
@@ -142,12 +141,15 @@ export const calculateCostBySupplier = (inventory, materials) => {
         const cost = calculateSheetCost(sheet, materials);
         if (cost === 0) return;
 
-        if (!costData[sheet.supplier]) {
-            costData[sheet.supplier] = { totalCost: 0, totalSheets: 0 };
+        // Normalize supplier name to uppercase to group them correctly.
+        const normalizedSupplier = sheet.supplier.toUpperCase();
+
+        if (!costData[normalizedSupplier]) {
+            costData[normalizedSupplier] = { totalCost: 0, totalSheets: 0 };
         }
 
-        costData[sheet.supplier].totalCost += cost;
-        costData[sheet.supplier].totalSheets++;
+        costData[normalizedSupplier].totalCost += cost;
+        costData[normalizedSupplier].totalSheets++;
     });
 
     return Object.entries(costData).map(([supplier, data]) => ({
