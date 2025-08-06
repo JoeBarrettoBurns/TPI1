@@ -7,7 +7,7 @@ import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
-import { X } from 'lucide-react';
+import { X, Calendar, Minus } from 'lucide-react';
 
 export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary, incomingSummary, suppliers }) => {
     const {
@@ -18,8 +18,6 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary
         removeMaterial,
     } = useOrderForm(null, materialTypes, suppliers);
 
-    const [isScheduled, setIsScheduled] = useState(false);
-    const [scheduledDate, setScheduledDate] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [scheduleSuggestion, setScheduleSuggestion] = useState(null);
@@ -35,7 +33,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary
             return;
         }
 
-        const currentOptions = { isScheduled, scheduledDate, ...overrideOptions };
+        const currentOptions = { ...options, ...overrideOptions };
         if (currentOptions.isScheduled && !currentOptions.scheduledDate) {
             setError('Please select an expected use date for the scheduled order.');
             return;
@@ -81,6 +79,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary
 
     const jobIndex = 0;
     const job = jobs[0];
+    const [options, setOptions] = useState({ isScheduled: false, scheduledDate: '' });
     if (!job) return null;
 
     return (
@@ -117,11 +116,16 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary
                     </div>
                 </div>
                 <div className="space-y-4">
-                    <div className="flex items-center gap-3">
-                        <input id="schedule-toggle" type="checkbox" checked={isScheduled} onChange={(e) => setIsScheduled(e.target.checked)} className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-blue-500 focus:ring-blue-500" />
-                        <label htmlFor="schedule-toggle" className="text-slate-300">Schedule for a future date? (Uses stock after it arrives)</label>
+                    <div className="flex gap-4 p-2 bg-zinc-900/50 rounded-lg">
+                        <button type="button" onClick={() => setOptions({ ...options, isScheduled: false })} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${!options.isScheduled ? 'bg-blue-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
+                            <Minus size={16} /> Use Now
+                        </button>
+                        <button type="button" onClick={() => setOptions({ ...options, isScheduled: true })} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${options.isScheduled ? 'bg-purple-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
+                            <Calendar size={16} /> Schedule
+                        </button>
                     </div>
-                    {isScheduled && (<FormInput label="Expected Use Date" name="scheduledDate" type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} required />)}
+
+                    {options.isScheduled && (<FormInput label="Expected Use Date" name="scheduledDate" type="date" value={options.scheduledDate} onChange={(e) => setOptions({ ...options, scheduledDate: e.target.value })} required />)}
                 </div>
 
                 {error && <ErrorMessage message={error} />}

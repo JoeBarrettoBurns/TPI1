@@ -1,7 +1,7 @@
 // src/components/modals/AddOrderModal.jsx
 
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Check, Calendar } from 'lucide-react';
 import { useOrderForm } from '../../hooks/useOrderForm';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
@@ -62,10 +62,14 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', e.target.value)} placeholder="e.g. 12345 or Stock" />
                             <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
-                            <FormInput label="Status" name="status" value={job.status} onChange={(e) => setJobField(jobIndex, 'status', e.target.value)} as="select">
-                                <option value="Ordered">Ordered (Future)</option>
-                                <option value="On Hand">On Hand</option>
-                            </FormInput>
+                            <div className="flex gap-2 p-2 bg-zinc-800 rounded-lg">
+                                                               <button type="button" onClick={() => setJobField(jobIndex, 'status', 'On Hand')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'On Hand' ? 'bg-blue-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
+                                                                        <Check size={16} /> On Hand
+                                                                    </button>
+                                                                <button type="button" onClick={() => setJobField(jobIndex, 'status', 'Ordered')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'Ordered' ? 'bg-purple-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
+                                                                        <Calendar size={16} /> Ordered
+                                                                    </button>
+                                                            </div>
                         </div>
                         {job.status === 'Ordered' && <FormInput label="Expected Arrival Date" name="arrivalDate" type="date" value={job.arrivalDate} onChange={(e) => setJobField(jobIndex, 'arrivalDate', e.target.value)} />}
 
