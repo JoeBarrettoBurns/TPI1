@@ -23,7 +23,6 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isSortableDragging ? 0.4 : 1,
-        boxShadow: isDragging ? '0 25px 50px -12px rgb(0 0 0 / 0.25)' : '',
     };
 
     const materialTypes = useMemo(() => Object.keys(materials), [materials]);
@@ -94,8 +93,11 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
 
     const headerCursor = isEditMode ? 'cursor-default' : 'cursor-grab active:cursor-grabbing';
 
+    // Enhanced shadow effect for when the item is being dragged
+    const draggingClasses = isDragging || isSortableDragging ? 'shadow-2xl shadow-blue-500/20' : 'shadow-lg';
+
     return (
-        <div ref={setNodeRef} style={style} {...attributes} className={`bg-zinc-800 rounded-2xl shadow-lg flex flex-col transition-all duration-300 ${cardClasses}`}>
+        <div ref={setNodeRef} style={style} {...attributes} className={`bg-zinc-800 rounded-2xl flex flex-col transition-all duration-300 ${cardClasses} ${draggingClasses}`}>
             <div {...listeners} className={`flex justify-between items-center p-6 ${headerCursor}`}>
                 <h3 className="text-xl font-bold text-blue-400">{category}</h3>
                 <div className="flex items-center gap-2">
@@ -124,7 +126,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                         </thead>
                         <tbody>
                             {materialsInCategory.map(matType => (
-                                <tr key={matType} className="border-b border-zinc-700 last:border-b-0">
+                                <tr key={matType} className="border-b border-zinc-700 last:border-b-0 hover:bg-zinc-700/50 transition-colors">
                                     <td onClick={() => onMaterialClick(matType)} className="p-2 font-medium text-zinc-300 cursor-pointer hover:text-blue-400">{matType}</td>
                                     {STANDARD_LENGTHS.map(len => {
                                         const isEditingCell = isEditMode && editingCell?.matType === matType && editingCell?.len === len;
@@ -148,6 +150,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                                                     <div
                                                         onDoubleClick={() => { if (isEditMode) { setEditingCell({ matType, len }); setEditValue(stockCount); } }}
                                                         className={`flex items-center justify-center gap-2 ${isEditMode ? 'cursor-pointer' : ''}`}
+                                                        title={`${stockCount} sheets on hand`}
                                                     >
                                                         <span className={`font-bold text-2xl ${textColor}`}>{stockCount}</span>
                                                         <div className="w-4 h-10 rounded-full border-2 border-zinc-600 overflow-hidden">
@@ -156,7 +159,9 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                                                     </div>
                                                 )}
                                                 {incomingCount > 0 && (
-                                                    <div className="text-xs text-yellow-400 mt-1">(+{incomingCount} incoming)</div>
+                                                    <div className="text-xs text-yellow-400 mt-1" title={`${incomingCount} sheets incoming`}>
+                                                        (+{incomingCount} incoming)
+                                                    </div>
                                                 )}
                                             </td>
                                         );

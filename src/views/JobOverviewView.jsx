@@ -60,7 +60,7 @@ const JobDetails = ({ job }) => {
                         <p className="font-semibold text-blue-400">{materialType}</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-2">
                             {sizeGroups.map(group => (
-                                <div key={`${group.length}x${group.width}-${group.status}`} className={`p-2 rounded text-center text-sm ${group.status === 'Used' ? 'bg-red-900/50 text-zinc-400' : 'bg-green-900/50 text-green-300'}`}>
+                                <div key={`${group.length}x${group.width}-${group.status}`} className={`p-2 rounded text-center text-sm ${group.status === 'Used' ? 'bg-zinc-700/50 text-zinc-400' : 'bg-green-900/50 text-green-300'}`}>
                                     <p className="font-mono font-bold">{group.count}x <span className="font-normal">{group.length}" x {group.width}"</span></p>
                                     <p className="text-xs opacity-75">{group.status}</p>
                                 </div>

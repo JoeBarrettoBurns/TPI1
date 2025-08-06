@@ -33,7 +33,7 @@ export const SearchResultsDropdown = ({ results, onSelect, activeIndex, setActiv
                         key={`${result.item.type}-${result.item.name}-${result.refIndex}`}
                         onClick={() => onSelect(result)}
                         onMouseEnter={() => setActiveIndex(index)}
-                        className={`p-3 flex items-center cursor-pointer ${index === activeIndex ? 'bg-zinc-700' : 'hover:bg-zinc-700/50'
+                        className={`p-3 flex items-center cursor-pointer ${index === activeIndex ? 'bg-blue-800 text-white' : 'hover:bg-zinc-700/50'
                             }`}
                     >
                         <TypeIcon type={result.item.type} />
