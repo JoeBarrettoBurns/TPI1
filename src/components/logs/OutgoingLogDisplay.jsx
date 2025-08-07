@@ -76,7 +76,7 @@ export const OutgoingLogDisplay = ({ usageLog, onRowClick, onDelete, onEdit, onF
                             </td>
                             <td className="p-4 truncate text-zinc-300">{item.job}</td>
                             <td className="p-4 truncate text-zinc-300">{item.customer}</td>
-                            <td className="p-4 truncate text-zinc-300">{item.description}</td>
+                            <td className="p-4 text-zinc-300 whitespace-normal break-words">{item.description}</td>
                             <td className="p-4 text-red-400 font-mono text-right">{item.displayQty}</td>
                             <td className="p-4 text-center">
                                 {item.status === 'Scheduled' && (

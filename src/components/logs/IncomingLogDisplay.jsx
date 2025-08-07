@@ -61,7 +61,7 @@ export const IncomingLogDisplay = ({ incomingItems, onRowClick, onDelete, onEdit
                         <tr key={item.id} onClick={() => onRowClick(item)} className={`border-b border-zinc-700 hover:bg-zinc-700/50 cursor-pointer ${item.isFuture ? 'bg-yellow-900/20' : ''}`}>
                             <td className="p-4 truncate text-zinc-300">{item.job}</td>
                             <td className="p-4 truncate text-zinc-300">{item.customer}</td>
-                            <td className="p-4 truncate text-zinc-300">{item.description}</td>
+                            <td className="p-4 text-zinc-300 whitespace-normal break-words">{item.description}</td>
                             <td className="p-4 truncate text-zinc-300">{new Date(item.dateOrdered).toLocaleString()}</td>
                             <td className="p-4 truncate text-zinc-300">
                                 {item.dateIncoming ? new Date(item.dateIncoming).toLocaleDateString() : 'N/A'}
