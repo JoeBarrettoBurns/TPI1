@@ -40,7 +40,7 @@ import { JobOverviewView } from './views/JobOverviewView';
 import { AddOrderModal } from './components/modals/AddOrderModal';
 import { UseStockModal } from './components/modals/UseStockModal';
 import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
-import { AddCategoryModal } from './components/modals/AddCategoryModal';
+import { ManageCategoriesModal } from './components/modals/ManageCategoriesModal';
 import { ManageSuppliersModal } from './components/modals/ManageSuppliersModal';
 import { ConfirmationModal } from './components/modals/ConfirmationModal';
 
@@ -147,7 +147,7 @@ export default function App() {
         const commands = [
             { type: 'command', name: 'Add Stock', aliases: ['add', 'new', 'order'], action: () => setModal({ type: 'add' }) },
             { type: 'command', name: 'Use Stock', aliases: ['use'], action: () => setModal({ type: 'use' }) },
-            { type: 'command', name: 'Add Category', aliases: ['ac', 'add cat'], action: () => setModal({ type: 'add-category' }) },
+            { type: 'command', name: 'Manage Categories', aliases: ['mc', 'manage cat'], action: () => setModal({ type: 'manage-categories' }) },
             { type: 'command', name: 'Manage Suppliers', aliases: ['ms', 'manage sup'], action: () => setModal({ type: 'manage-suppliers' }) },
             { type: 'command', name: 'Edit/Finish', aliases: ['edit', 'finish'], action: () => isEditMode ? handleFinishEditing() : setIsEditMode(true), view: 'dashboard' },
             { type: 'command', name: 'Sign Out', aliases: ['sign out', 'logout', 'log off'], action: () => handleSignOut() },
@@ -454,20 +454,55 @@ export default function App() {
         }
     };
 
-    const handleAddCategory = async (categoryName, materialsToAdd) => {
+    const handleManageCategory = async (categoryName, updatedMaterials, mode) => {
         const batch = writeBatch(db);
+        const originalMaterials = Object.values(materials).filter(m => m.category === categoryName);
 
-        materialsToAdd.forEach(material => {
-            const materialId = material.name.replace(/\//g, '-');
-            const newMaterialRef = doc(db, `artifacts/${appId}/public/data/materials`, materialId);
-
-            batch.set(newMaterialRef, {
-                category: categoryName,
-                thickness: parseFloat(material.thickness),
-                density: parseFloat(material.density)
+        if (mode === 'add') {
+            updatedMaterials.forEach(material => {
+                const materialId = material.name.replace(/\//g, '-');
+                const newMaterialRef = doc(db, `artifacts/${appId}/public/data/materials`, materialId);
+                batch.set(newMaterialRef, {
+                    category: categoryName,
+                    thickness: parseFloat(material.thickness),
+                    density: parseFloat(material.density)
+                });
             });
-        });
+        } else { // mode === 'edit'
+            const originalMaterialMap = new Map(originalMaterials.map(m => [m.name, m]));
+            const updatedMaterialMap = new Map(updatedMaterials.map(m => [m.originalName, m]));
 
+            // Deletions
+            for (const original of originalMaterials) {
+                if (!updatedMaterialMap.has(original.name)) {
+                    const docRef = doc(db, `artifacts/${appId}/public/data/materials`, original.id);
+                    batch.delete(docRef);
+                }
+            }
+
+            // Updates and Additions
+            for (const updated of updatedMaterials) {
+                if (updated.isNew) {
+                    const materialId = updated.name.replace(/\//g, '-');
+                    const newMaterialRef = doc(db, `artifacts/${appId}/public/data/materials`, materialId);
+                    batch.set(newMaterialRef, {
+                        category: categoryName,
+                        thickness: parseFloat(updated.thickness),
+                        density: parseFloat(updated.density)
+                    });
+                } else {
+                    const original = originalMaterialMap.get(updated.originalName);
+                    if (original.name !== updated.name || original.thickness !== updated.thickness || original.density !== updated.density) {
+                        const docRef = doc(db, `artifacts/${appId}/public/data/materials`, original.id);
+                        batch.update(docRef, {
+                            name: updated.name,
+                            thickness: parseFloat(updated.thickness),
+                            density: parseFloat(updated.density)
+                        });
+                    }
+                }
+            }
+        }
         await batch.commit();
     };
 
@@ -828,7 +863,7 @@ export default function App() {
                     onEdit={() => isEditMode ? handleFinishEditing() : setIsEditMode(true)}
                     onSignOut={handleSignOut}
                     isEditMode={isEditMode}
-                    onAddCategory={() => setModal({ type: 'add-category' })}
+                    onManageCategories={() => setModal({ type: 'manage-categories' })}
                     onManageSuppliers={() => setModal({ type: 'manage-suppliers' })}
                     activeView={activeView}
                     searchQuery={searchQuery}
@@ -885,7 +920,7 @@ export default function App() {
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} suppliers={suppliers} />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
-            {modal.type === 'add-category' && <AddCategoryModal onClose={closeModal} onSave={handleAddCategory} />}
+            {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} />}
             {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} />}
             {modal.type === 'confirm-delete-categories' &&
                 <ConfirmationModal

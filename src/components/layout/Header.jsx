@@ -12,7 +12,7 @@ export const Header = forwardRef(({
     onUse,
     onEdit,
     isEditMode,
-    onAddCategory,
+    onManageCategories,
     onManageSuppliers,
     activeView,
     onSignOut
@@ -29,7 +29,7 @@ export const Header = forwardRef(({
                 <div className="flex flex-wrap justify-center md:justify-end gap-2">
                     <Button onClick={onAdd} className="px-3 py-2 md:px-5 md:py-3"><Plus size={20} /> <span className="hidden sm:inline">Add Stock</span></Button>
                     <Button onClick={onUse} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Minus size={20} /> <span className="hidden sm:inline">Use Stock</span></Button>
-                    <Button onClick={onAddCategory} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Box size={20} /> <span className="hidden sm:inline">Add Category</span></Button>
+                    <Button onClick={onManageCategories} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Box size={20} /> <span className="hidden sm:inline">Manage Categories</span></Button>
                     <Button onClick={onManageSuppliers} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Users size={20} /> <span className="hidden sm:inline">Manage Suppliers</span></Button>
                     {activeView === 'dashboard' && (
                         <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className="px-3 py-2 md:px-5 md:py-3">
