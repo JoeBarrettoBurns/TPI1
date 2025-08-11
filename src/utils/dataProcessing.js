@@ -67,8 +67,15 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
             const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
             if (!groupedInventory[key]) {
                 groupedInventory[key] = {
-                    id: key, job: item.job || item.supplier, date: item.createdAt, customer: item.supplier, isAddition: true, isDeletable: true,
-                    isFuture: item.status === 'Ordered', details: [], ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {})
+                    id: key, job: item.job || item.supplier, 
+                    date: item.createdAt, 
+                    arrivalDate: item.arrivalDate, // <-- Add arrivalDate
+                    customer: item.supplier, 
+                    isAddition: true, 
+                    isDeletable: true,
+                    isFuture: item.status === 'Ordered', 
+                    details: [], 
+                    ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {})
                 };
             }
             if (STANDARD_LENGTHS.includes(item.length)) {
@@ -85,11 +92,16 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
             const isScheduled = log.status === 'Scheduled';
 
             groupedUsage[log.id] = {
-                id: log.id, job: log.job, date: log.usedAt, customer: log.customer || 'N/A', isAddition: false,
+                id: log.id, job: log.job, 
+                date: log.createdAt, // Keep original creation date for sorting
+                usedAt: log.usedAt, // <-- Add usedAt
+                customer: log.customer || 'N/A', 
+                isAddition: false,
                 isDeletable: true,
                 isFulfillable: isScheduled,
                 isFuture: isScheduled,
-                details: log.details, ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {})
+                details: log.details, 
+                ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {})
             };
             log.details.forEach(detail => {
                 if (detail.materialType === matType && STANDARD_LENGTHS.includes(detail.length)) {
@@ -97,7 +109,16 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
                 }
             });
         });
-        allTransactions[matType] = [...Object.values(groupedInventory), ...Object.values(groupedUsage)].sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        const transactions = [...Object.values(groupedInventory), ...Object.values(groupedUsage)];
+        
+        transactions.sort((a, b) => {
+            const dateA = a.isAddition ? (a.arrivalDate || a.date) : (a.usedAt || a.date);
+            const dateB = b.isAddition ? (b.arrivalDate || b.date) : (b.usedAt || b.date);
+            return new Date(dateB) - new Date(dateA);
+        });
+
+        allTransactions[matType] = transactions;
     });
     return allTransactions;
 };

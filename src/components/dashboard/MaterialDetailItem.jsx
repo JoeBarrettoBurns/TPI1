@@ -136,11 +136,13 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
                                     : t.isFuture ? 'bg-yellow-900/20'
                                         : !t.isAddition ? 'bg-red-900/20'
                                             : '';
+                                
+                                const displayDate = t.isAddition ? t.arrivalDate : t.usedAt;
 
                                 return (
                                     <tr key={t.id} onClick={() => setDetailLog(t)} className={`border-b border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 ${rowClass}`}>
                                         <td className="p-3 whitespace-nowrap">{t.job}</td>
-                                        <td className="p-3 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
+                                        <td className="p-3 whitespace-nowrap">{displayDate ? new Date(displayDate).toLocaleDateString() : 'N/A'}</td>
                                         <td className="p-3 whitespace-nowrap">{t.customer}</td>
                                         {STANDARD_LENGTHS.map(len => (
                                             <td key={len} className={`p-3 text-center font-mono ${t[len] < 0 ? 'text-red-400' : 'text-zinc-300'}`}>{t[len] || ''}</td>
