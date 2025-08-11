@@ -137,7 +137,8 @@ export function useFirestoreData() {
         const unsubMaterials = onSnapshot(materialsRef, (snap) => {
             const materialsData = {};
             snap.docs.forEach(doc => {
-                materialsData[doc.id.replace(/-/g, '/')] = { id: doc.id, ...doc.data() };
+                const name = doc.id.replace(/-/g, '/');
+                materialsData[name] = { id: doc.id, name, ...doc.data() };
             });
             setMaterials(materialsData);
         }, (err) => {

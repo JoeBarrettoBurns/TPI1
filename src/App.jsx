@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, deleteDoc, updateDoc } from 'firebase/firestore';
+import { writeBatch, runTransaction, doc, collection, deleteDoc, updateDoc, getDocs, query, where } from 'firebase/firestore';
 import Fuse from 'fuse.js';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
@@ -455,76 +455,105 @@ export default function App() {
     };
 
     const handleManageCategory = async (categoryName, materialsFromModal, mode) => {
-        const batch = writeBatch(db);
+        const materialsCollectionRef = collection(db, `artifacts/${appId}/public/data/materials`);
+        const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
-        // Mode 1: Adding a completely new category and its materials.
-        if (mode === 'add') {
-            materialsFromModal.forEach(material => {
-                if (!material.name || !material.thickness || !material.density) return;
-                const materialId = material.name.replace(/\//g, '-');
-                const newMaterialRef = doc(db, `artifacts/${appId}/public/data/materials`, materialId);
-                batch.set(newMaterialRef, {
-                    category: categoryName,
-                    thickness: parseFloat(material.thickness),
-                    density: parseFloat(material.density),
+        try {
+            await runTransaction(db, async (transaction) => {
+                const allMaterialsSnapshot = await getDocs(materialsCollectionRef);
+                const allMaterials = {};
+                allMaterialsSnapshot.forEach(doc => {
+                    allMaterials[doc.id.replace(/-/g, '/')] = { id: doc.id, ...doc.data() };
                 });
-            });
-        }
-        // Mode 2: Editing an existing category.
-        else if (mode === 'edit') {
-            const originalMaterialsInDB = Object.values(materials).filter(m => m.category === categoryName);
-            const originalMaterialMap = new Map(originalMaterialsInDB.map(m => [m.id, m]));
-            const modalMaterialIds = new Set(materialsFromModal.filter(m => !m.isNew).map(m => m.id));
 
-            // Handle deletions: If a material from the DB is not in the modal submission, delete it.
-            for (const originalMaterial of originalMaterialsInDB) {
-                if (!modalMaterialIds.has(originalMaterial.id)) {
-                    const docRef = doc(db, `artifacts/${appId}/public/data/materials`, originalMaterial.id);
-                    batch.delete(docRef);
-                }
-            }
-
-            // Handle additions and updates.
-            for (const modalMaterial of materialsFromModal) {
-                if (modalMaterial.isNew) {
-                    // This is a new material to add.
-                    if (!modalMaterial.name || !modalMaterial.thickness || !modalMaterial.density) continue;
-                    const materialId = modalMaterial.name.replace(/\//g, '-');
-                    const newMaterialRef = doc(db, `artifacts/${appId}/public/data/materials`, materialId);
-                    batch.set(newMaterialRef, {
-                        category: categoryName,
-                        thickness: parseFloat(modalMaterial.thickness),
-                        density: parseFloat(modalMaterial.density),
-                    });
-                } else {
-                    // This is an existing material, check for updates.
-                    const originalMaterial = originalMaterialMap.get(modalMaterial.id);
-                    if (!originalMaterial) continue; // Safety check
-
-                    const newThickness = parseFloat(modalMaterial.thickness);
-                    const newDensity = parseFloat(modalMaterial.density);
-
-                    // Since name is used as ID, a name change requires deleting the old document and creating a new one.
-                    // This has cascading effects on inventory that are not handled here.
-                    // For now, we'll prevent name changes and only update other fields.
-                    if (originalMaterial.name !== modalMaterial.name) {
-                        console.error("Renaming materials is not supported in this version. Update other fields only.");
-                        // To properly support renaming, one would need to find all inventory items
-                        // with the old material name and update them to the new name within a transaction.
-                    }
-
-                    if (originalMaterial.thickness !== newThickness || originalMaterial.density !== newDensity) {
-                        const docRef = doc(db, `artifacts/${appId}/public/data/materials`, modalMaterial.id);
-                        batch.update(docRef, {
-                            thickness: newThickness,
-                            density: newDensity,
+                if (mode === 'add') {
+                    for (const material of materialsFromModal) {
+                        if (!material.name || !material.thickness || !material.density) continue;
+                        if (allMaterials[material.name]) {
+                            throw new Error(`A material named "${material.name}" already exists.`);
+                        }
+                        const materialId = material.name.replace(/\//g, '-');
+                        const newMaterialRef = doc(materialsCollectionRef, materialId);
+                        transaction.set(newMaterialRef, {
+                            category: categoryName,
+                            thickness: parseFloat(material.thickness),
+                            density: parseFloat(material.density),
                         });
                     }
-                }
-            }
-        }
+                } else if (mode === 'edit') {
+                    const originalMaterialsInDB = Object.values(allMaterials).filter(m => m.category === categoryName);
+                    const originalMaterialMap = new Map(originalMaterialsInDB.map(m => [m.id, m]));
+                    const modalMaterialIds = new Set(materialsFromModal.filter(m => !m.isNew).map(m => m.id));
 
-        await batch.commit();
+                    for (const originalMaterial of originalMaterialsInDB) {
+                        if (!modalMaterialIds.has(originalMaterial.id)) {
+                            const docRef = doc(materialsCollectionRef, originalMaterial.id);
+                            transaction.delete(docRef);
+                        }
+                    }
+
+                    for (const modalMaterial of materialsFromModal) {
+                        if (!modalMaterial.name || !modalMaterial.thickness || !modalMaterial.density) continue;
+
+                        const newThickness = parseFloat(modalMaterial.thickness);
+                        const newDensity = parseFloat(modalMaterial.density);
+
+                        if (modalMaterial.isNew) {
+                            const materialId = modalMaterial.name.replace(/\//g, '-');
+                            if (allMaterials[modalMaterial.name]) {
+                                throw new Error(`A material named "${modalMaterial.name}" already exists.`);
+                            }
+                            const newMaterialRef = doc(materialsCollectionRef, materialId);
+                            transaction.set(newMaterialRef, {
+                                category: categoryName,
+                                thickness: newThickness,
+                                density: newDensity,
+                            });
+                        } else {
+                            const originalMaterial = originalMaterialMap.get(modalMaterial.id);
+                            if (!originalMaterial) continue;
+
+                            const newName = modalMaterial.name.trim();
+                            const originalName = originalMaterial.name;
+
+                            if (originalName !== newName) {
+                                if (allMaterials[newName]) {
+                                    throw new Error(`A material named "${newName}" already exists. Please choose a different name.`);
+                                }
+
+                                const newMaterialId = newName.replace(/\//g, '-');
+                                const newMaterialRef = doc(materialsCollectionRef, newMaterialId);
+                                transaction.set(newMaterialRef, {
+                                    category: categoryName,
+                                    thickness: newThickness,
+                                    density: newDensity,
+                                });
+
+                                const inventoryQuery = query(inventoryCollectionRef, where("materialType", "==", originalName));
+                                const inventorySnapshot = await getDocs(inventoryQuery);
+                                inventorySnapshot.forEach(itemDoc => {
+                                    const itemRef = doc(inventoryCollectionRef, itemDoc.id);
+                                    transaction.update(itemRef, { materialType: newName });
+                                });
+
+                                const oldMaterialRef = doc(materialsCollectionRef, originalMaterial.id);
+                                transaction.delete(oldMaterialRef);
+
+                            } else if (originalMaterial.thickness !== newThickness || originalMaterial.density !== newDensity) {
+                                const docRef = doc(materialsCollectionRef, modalMaterial.id);
+                                transaction.update(docRef, {
+                                    thickness: newThickness,
+                                    density: newDensity,
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error("Transaction failed: ", error);
+            throw error;
+        }
     };
 
 
@@ -851,6 +880,8 @@ export default function App() {
                     materials={materials}
                     onRestock={handleRestock}
                     searchQuery={searchQuery}
+                    inventory={inventory}
+                    suppliers={suppliers}
                 />;
             default:
                 if (initialCategories.includes(activeView)) {

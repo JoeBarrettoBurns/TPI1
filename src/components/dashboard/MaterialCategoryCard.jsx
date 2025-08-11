@@ -25,8 +25,10 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         opacity: isSortableDragging ? 0.4 : 1,
     };
 
-    const materialTypes = useMemo(() => Object.keys(materials), [materials]);
-    const materialsInCategory = materialTypes.filter(m => materials[m].category === category);
+    // Defensive: ensure materials is always an object
+    const safeMaterials = materials || {};
+    const materialTypes = useMemo(() => Object.keys(safeMaterials), [safeMaterials]);
+    const materialsInCategory = materialTypes.filter(m => safeMaterials[m]?.category === category);
 
     const [editingCell, setEditingCell] = useState(null);
     const [editValue, setEditValue] = useState('');
