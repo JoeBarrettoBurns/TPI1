@@ -137,7 +137,8 @@ export function useFirestoreData() {
         const unsubMaterials = onSnapshot(materialsRef, (snap) => {
             const materialsData = {};
             snap.docs.forEach(doc => {
-                const name = doc.id.replace(/-/g, '/');
+                // Use canonical Firestore ID as the key and name to ensure consistency with inventory.materialType
+                const name = doc.id;
                 materialsData[name] = { id: doc.id, name, ...doc.data() };
             });
             setMaterials(materialsData);

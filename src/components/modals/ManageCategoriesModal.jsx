@@ -5,7 +5,11 @@ import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
-import { X, Edit, Trash2, PlusCircle } from 'lucide-react';
+import { X, Edit, Trash2, PlusCircle, HardDriveDownload, Wrench, RotateCcw } from 'lucide-react';
+import { db, appId } from '../../firebase/config';
+import { backupCollections, repairInventoryMaterialKeys, getLatestBackupInfo, restoreCollectionsFromBackup } from '../../utils/backupService';
+import { rebuildMissingMaterialsFromInventory } from '../../utils/recoveryService';
+import { replaceSlashWithDashInMaterialNames } from '../../utils/materialMigrations';
 
 export const ManageCategoriesModal = ({ onClose, onSave, categories, materials }) => {
     const [mode, setMode] = useState('edit'); // 'edit' or 'add'
@@ -14,12 +18,13 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials }
     const [categoryMaterials, setCategoryMaterials] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [busyMsg, setBusyMsg] = useState('');
 
     useEffect(() => {
         if (mode === 'edit' && selectedCategory) {
             const materialsInCategory = Object.entries(materials)
                 .filter(([, material]) => material.category === selectedCategory)
-                .map(([name, material]) => ({ ...material, name, originalName: name, isNew: false }));
+                .map(([id, material]) => ({ ...material, name: material.name || id, id, originalName: material.name || id, isNew: false }));
             setCategoryMaterials(materialsInCategory);
         } else {
             setCategoryMaterials([{ name: '', thickness: '', density: '', isNew: true }]);
@@ -69,7 +74,106 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials }
 
     return (
         <BaseModal onClose={onClose} title="Manage Categories and Materials">
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-between items-center mb-4 gap-2">
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="secondary"
+                        onClick={async () => {
+                            try {
+                                setBusyMsg('Backing up...');
+                                const result = await backupCollections(db, appId, ['materials', 'inventory', 'usage_logs']);
+                                setBusyMsg(`Backup created: ${result.backupId} (${result.totalDocs} docs)`);
+                            } catch (err) {
+                                setBusyMsg('');
+                                setError(err.message || 'Backup failed');
+                            } finally {
+                                setTimeout(() => setBusyMsg(''), 4000);
+                            }
+                        }}
+                        title="Backup Now"
+                    >
+                        <HardDriveDownload size={16} /> Backup Now
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={async () => {
+                            try {
+                                if (!window.confirm('This will overwrite current materials, inventory, and usage logs with the latest backup. Continue?')) return;
+                                setBusyMsg('Restoring from latest backup...');
+                                const latest = await getLatestBackupInfo(db, appId);
+                                if (!latest?.id) throw new Error('No backup found');
+                                await restoreCollectionsFromBackup(db, appId, latest.id, ['materials', 'inventory', 'usage_logs']);
+                                setBusyMsg(`Restore complete from ${latest.id}`);
+                            } catch (err) {
+                                setBusyMsg('');
+                                setError(err.message || 'Restore failed');
+                            } finally {
+                                setTimeout(() => setBusyMsg(''), 4000);
+                            }
+                        }}
+                        title="Restore Latest Backup"
+                    >
+                        <RotateCcw size={16} /> Restore Latest
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={async () => {
+                            try {
+                                setBusyMsg('Repairing material keys in inventory...');
+                                const materialsKeys = Object.keys(materials);
+                                const res = await repairInventoryMaterialKeys(db, appId, materialsKeys);
+                                setBusyMsg(`Repair complete. Updated ${res.updated} items.`);
+                            } catch (err) {
+                                setBusyMsg('');
+                                setError(err.message || 'Repair failed');
+                            } finally {
+                                setTimeout(() => setBusyMsg(''), 4000);
+                            }
+                        }}
+                        title="Repair Inventory Material Keys"
+                    >
+                        <Wrench size={16} /> Repair Keys
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={async () => {
+                            try {
+                                setBusyMsg('Rebuilding missing materials from inventory references...');
+                                const keys = Object.keys(materials);
+                                const res = await rebuildMissingMaterialsFromInventory(db, appId, keys);
+                                setBusyMsg(`Rebuilt ${res.created} missing materials.`);
+                            } catch (err) {
+                                setBusyMsg('');
+                                setError(err.message || 'Rebuild failed');
+                            } finally {
+                                setTimeout(() => setBusyMsg(''), 4000);
+                            }
+                        }}
+                        title="Rebuild Materials From Inventory"
+                    >
+                        <Wrench size={16} /> Rebuild Materials
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={async () => {
+                            try {
+                                if (!window.confirm('This will rename material IDs by replacing "/" with "-" and update inventory/log references. Continue?')) return;
+                                setBusyMsg('Replacing "/" with "-" across materials and references...');
+                                const res = await replaceSlashWithDashInMaterialNames(db, appId);
+                                setBusyMsg(`Done. Created: ${res.materialsCreated}, Deleted: ${res.materialsDeleted}, Inventory Updated: ${res.inventoryUpdated}, Logs Updated: ${res.usageLogsUpdated}, Name-only updates: ${res.nameOnlyUpdated}`);
+                            } catch (err) {
+                                setBusyMsg('');
+                                setError(err.message || 'Migration failed');
+                            } finally {
+                                setTimeout(() => setBusyMsg(''), 5000);
+                            }
+                        }}
+                        title="Replace Slashes in Material Names"
+                    >
+                        <Wrench size={16} /> Slash→Dash
+                    </Button>
+                    {busyMsg && <span className="text-xs text-zinc-400">{busyMsg}</span>}
+                </div>
                 <Button onClick={() => setMode(m => m === 'edit' ? 'add' : 'edit')} variant="secondary">
                     {mode === 'edit' ? 'Add New Category' : 'Edit Existing Category'}
                 </Button>

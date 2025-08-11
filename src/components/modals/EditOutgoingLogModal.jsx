@@ -70,16 +70,14 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                         <FormInput label="Customer" name="customer" value={jobData.customer} onChange={(e) => setJobData(prev => ({ ...prev, customer: e.target.value }))} required />
                     </div>
 
-                    {logEntry.status === 'Scheduled' && (
-                        <FormInput
-                            label="Scheduled Use Date"
-                            name="scheduledDate"
-                            type="date"
-                            value={jobData.date}
-                            onChange={(e) => setJobData(prev => ({ ...prev, date: e.target.value }))}
-                            required
-                        />
-                    )}
+                    <FormInput
+                        label={logEntry.status === 'Scheduled' ? 'Scheduled Use Date' : 'Date Used'}
+                        name={logEntry.status === 'Scheduled' ? 'scheduledDate' : 'usedDate'}
+                        type="date"
+                        value={jobData.date}
+                        onChange={(e) => setJobData(prev => ({ ...prev, date: e.target.value }))}
+                        required
+                    />
 
                     {jobData.items.map((item, itemIndex) => (
                         <div key={itemIndex} className="border border-slate-700 p-4 rounded-lg bg-slate-800">

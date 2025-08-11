@@ -14,6 +14,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, preselectedM
         supplier: suppliers[0],
         status: 'Ordered',
         arrivalDate: '',
+        createdAt: '',
         items: [createNewItem(preselectedMaterial)]
     }), [suppliers, materialTypes, preselectedMaterial]); // Dependencies for useCallback
 
@@ -29,6 +30,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, preselectedM
             supplier: data.customer || suppliers[0],
             status: data.isFuture ? 'Ordered' : 'On Hand',
             arrivalDate: arrivalDateForInput,
+            createdAt: data.date ? new Date(data.date).toISOString().split('T')[0] : '',
             items: []
         };
 

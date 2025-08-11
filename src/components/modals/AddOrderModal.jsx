@@ -71,6 +71,8 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                                                                     </button>
                                                             </div>
                         </div>
+                        {/* Order placed date */}
+                        <FormInput label="Date Ordered" name="createdAt" type="date" value={job.createdAt || ''} onChange={(e) => setJobField(jobIndex, 'createdAt', e.target.value)} />
                         {job.status === 'Ordered' && <FormInput label="Expected Arrival Date" name="arrivalDate" type="date" value={job.arrivalDate} onChange={(e) => setJobField(jobIndex, 'arrivalDate', e.target.value)} />}
 
                         {job.items.map((item, itemIndex) => (
