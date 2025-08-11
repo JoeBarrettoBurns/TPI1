@@ -13,8 +13,16 @@ const generateMailtoLinkForSupplier = (supplier, items) => {
 
     const subject = encodeURIComponent(info.subject || `Quote Request`);
 
+    // Build body lines from spreadsheet template when available
+    const defaultLine = (mat, lenLabel) => `${mat}%0A${lenLabel}144"x48" -QTY: %0A120"x48" -QTY: %0A96"x48" -QTY: %0A`;
+
     let itemsBody;
-    if (items && items.length > 0) {
+    if (info.bodyMaterial) {
+        // Use the supplier-specific material from the sheet and include the standard three lengths
+        const base = defaultLine(info.bodyMaterial, '%0A');
+        itemsBody = decodeURIComponent(base);
+    } else if (items && items.length > 0) {
+        // Fallback to dynamic low-stock list
         itemsBody = "Please provide a quote for the following low-stock items:\n\n" + items.map(item =>
             `- Material: ${item.materialType}\n` +
             `  Size: ${item.length}"x48"\n` +
@@ -25,11 +33,8 @@ const generateMailtoLinkForSupplier = (supplier, items) => {
         itemsBody = "Please provide a quote for the following items:\n\n[PLEASE LIST ITEMS]";
     }
 
-    const body = encodeURIComponent(
-        `Hello,\n\n` +
-        `${itemsBody}\n\n` +
-        `Thank you.`
-    );
+    const greetingName = info.contactName ? `Hi ${info.contactName},` : 'Hello,';
+    const body = encodeURIComponent(`${greetingName}\n\n${itemsBody}\n\nThank you.`);
 
     return `mailto:${info.email}?cc=${CC_EMAIL}&subject=${subject}&body=${body}`;
 };
