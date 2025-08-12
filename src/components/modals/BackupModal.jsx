@@ -6,6 +6,7 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { HardDriveDownload, RotateCcw, Upload, Download, List } from 'lucide-react';
 import { backupCollections, getLatestBackupInfo, restoreCollectionsFromBackup, listBackups, backfillBackupIndex } from '../../utils/backupService';
+import { exportToCSV } from '../../utils/csvExport';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db, appId, auth, onAuthStateChanged } from '../../firebase/config';
 
@@ -15,6 +16,7 @@ export const BackupModal = ({ onClose }) => {
   const [latest, setLatest] = useState(null);
   const [backups, setBackups] = useState([]);
   const [selectedBackupId, setSelectedBackupId] = useState('');
+  const [progress, setProgress] = useState(0);
 
   const [authReady, setAuthReady] = useState(!!auth?.currentUser);
 
@@ -91,11 +93,19 @@ export const BackupModal = ({ onClose }) => {
       if (!latest?.id) throw new Error('No backup found');
       if (!window.confirm('This will overwrite current data with the latest backup. Continue?')) return;
       setBusyMsg('Restoring from latest backup...');
+      setProgress(0);
       await restoreCollectionsFromBackup(db, appId, latest.id, ['materials', 'inventory', 'usage_logs'], (p) => {
-        if (p?.phase === 'read') setBusyMsg(`Restoring ${p.collection}: found ${p.count} docs...`);
-        if (p?.phase?.includes('progress')) setBusyMsg(`Restoring ${p.collection}...`);
-        if (p?.phase === 'collection-complete') setBusyMsg(`Finished ${p.collection}...`);
+        if (!p) return;
+        if (p.phase === 'read') setBusyMsg(`Restoring ${p.collection}: found ${p.count} docs...`);
+        if (p.phase?.includes('progress')) setBusyMsg(`Restoring ${p.collection}...`);
+        if (p.phase === 'collection-complete') setBusyMsg(`Finished ${p.collection}...`);
+        // Simple staged progress: 3 collections → ~33% per collection
+        const stageIndex = { materials: 0, inventory: 1, usage_logs: 2 }[p.collection] ?? 0;
+        const base = stageIndex * 33.34; // 0, 33.34, 66.68
+        const bump = p.phase === 'collection-complete' ? 33.34 : (p.phase?.includes('progress') ? 16.67 : 8);
+        setProgress((prev) => Math.min(100, Math.max(prev, Math.floor(base + bump))));
       });
+      setProgress(100);
       setBusyMsg(`Restore complete from ${latest.id}`);
     } catch (e) {
       setBusyMsg('');
@@ -110,11 +120,18 @@ export const BackupModal = ({ onClose }) => {
       if (!selectedBackupId) throw new Error('Select a backup');
       if (!window.confirm(`Overwrite current data with backup ${selectedBackupId}?`)) return;
       setBusyMsg(`Restoring ${selectedBackupId}...`);
+      setProgress(0);
       await restoreCollectionsFromBackup(db, appId, selectedBackupId, ['materials', 'inventory', 'usage_logs'], (p) => {
-        if (p?.phase === 'read') setBusyMsg(`Restoring ${p.collection}: found ${p.count} docs...`);
-        if (p?.phase?.includes('progress')) setBusyMsg(`Restoring ${p.collection}...`);
-        if (p?.phase === 'collection-complete') setBusyMsg(`Finished ${p.collection}...`);
+        if (!p) return;
+        if (p.phase === 'read') setBusyMsg(`Restoring ${p.collection}: found ${p.count} docs...`);
+        if (p.phase?.includes('progress')) setBusyMsg(`Restoring ${p.collection}...`);
+        if (p.phase === 'collection-complete') setBusyMsg(`Finished ${p.collection}...`);
+        const stageIndex = { materials: 0, inventory: 1, usage_logs: 2 }[p.collection] ?? 0;
+        const base = stageIndex * 33.34;
+        const bump = p.phase === 'collection-complete' ? 33.34 : (p.phase?.includes('progress') ? 16.67 : 8);
+        setProgress((prev) => Math.min(100, Math.max(prev, Math.floor(base + bump))));
       });
+      setProgress(100);
       setBusyMsg(`Restore complete from ${selectedBackupId}`);
     } catch (e) {
       setBusyMsg('');
@@ -136,28 +153,81 @@ export const BackupModal = ({ onClose }) => {
     }
   };
 
-  // Local export: download JSON snapshot of live data
+  // Local export: download a JSON system backup (for restore) and an inventory-only CSV (for human reading)
   const handleExportLocal = async () => {
     try {
-      setBusyMsg('Exporting local backup...');
-      const collections = ['materials', 'inventory', 'usage_logs'];
-      const data = {};
-      for (const coll of collections) {
-        const { collection, getDocs } = await import('firebase/firestore');
-        const ref = collection(db, `artifacts/${appId}/public/data/${coll}`);
-        const snap = await getDocs(ref);
-        data[coll] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setBusyMsg('Exporting local backup (JSON + CSV)...');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const { collection, getDocs } = await import('firebase/firestore');
+      // Fetch collections
+      const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
+      const inventoryRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+      const logsRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
+
+      const [materialsSnap, inventorySnap, logsSnap] = await Promise.all([
+        getDocs(materialsRef),
+        getDocs(inventoryRef),
+        getDocs(logsRef),
+      ]);
+
+      const materialsData = materialsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const inventoryData = inventorySnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const logsData = logsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // 1) System backup JSON (for restore)
+      const backupJson = {
+        appId,
+        createdAt: new Date().toISOString(),
+        data: {
+          materials: materialsData,
+          inventory: inventoryData,
+          usage_logs: logsData,
+        },
+      };
+      const jsonBlob = new Blob([JSON.stringify(backupJson, null, 2)], { type: 'application/json' });
+      const jsonUrl = URL.createObjectURL(jsonBlob);
+      const jsonLink = document.createElement('a');
+      jsonLink.href = jsonUrl;
+      jsonLink.download = `backup-${timestamp}.json`;
+      document.body.appendChild(jsonLink);
+      jsonLink.click();
+      jsonLink.remove();
+      URL.revokeObjectURL(jsonUrl);
+
+      // 2) Easy-to-read inventory-only CSV (for humans)
+      const inventoryRows = inventoryData.map((item) => ({
+        id: item.id,
+        materialType: item.materialType ?? '',
+        length: item.length ?? '',
+        width: item.width ?? '',
+        gauge: item.gauge ?? '',
+        supplier: item.supplier ?? '',
+        costPerPound: item.costPerPound ?? '',
+        job: item.job ?? '',
+        status: item.status ?? '',
+        createdAt: item.createdAt ?? '',
+        arrivalDate: item.arrivalDate ?? '',
+        dateReceived: item.dateReceived ?? '',
+      }));
+      const inventoryHeaders = [
+        { label: 'ID', key: 'id' },
+        { label: 'Material', key: 'materialType' },
+        { label: 'Length', key: 'length' },
+        { label: 'Width', key: 'width' },
+        { label: 'Gauge', key: 'gauge' },
+        { label: 'Supplier', key: 'supplier' },
+        { label: 'Cost Per Pound', key: 'costPerPound' },
+        { label: 'Job/PO', key: 'job' },
+        { label: 'Status', key: 'status' },
+        { label: 'Created At', key: 'createdAt' },
+        { label: 'Arrival Date', key: 'arrivalDate' },
+        { label: 'Date Received', key: 'dateReceived' },
+      ];
+      if (inventoryRows.length > 0) {
+        exportToCSV(inventoryRows, inventoryHeaders, `inventory-snapshot-${timestamp}.csv`);
       }
-      const blob = new Blob([JSON.stringify({ appId, createdAt: new Date().toISOString(), data }, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      setBusyMsg('Local backup saved');
+
+      setBusyMsg('Local backup saved (JSON + CSV)');
     } catch (e) {
       setBusyMsg('');
       setError(e.message || 'Export failed');
@@ -202,10 +272,10 @@ export const BackupModal = ({ onClose }) => {
         <div className="flex flex-wrap gap-2">
           <Button onClick={handleBackupNow}><HardDriveDownload size={16} /> Backup Now</Button>
           <Button variant="secondary" onClick={handleRestoreLatest}><RotateCcw size={16} /> Restore Latest</Button>
-          <Button variant="secondary" onClick={handleExportLocal}><Download size={16} /> Save Local Backup</Button>
+          <Button variant="secondary" onClick={handleExportLocal}><Download size={16} /> Save Local Backup (JSON + CSV)</Button>
           <label className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg cursor-pointer">
-            <Upload size={16} /> Restore From Local
-            <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && handleImportLocal(e.target.files[0])} />
+            <Upload size={16} /> Restore From Local (JSON)
+            <input type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && handleImportLocal(e.target.files[0])} />
           </label>
         </div>
         <div className="mt-2">
@@ -255,7 +325,12 @@ export const BackupModal = ({ onClose }) => {
         {latest && (
           <p className="text-sm text-zinc-400">Latest: {latest.id} • {latest.createdAt} • {latest.totalDocs} docs</p>
         )}
-        {busyMsg && <p className="text-xs text-zinc-400">{busyMsg}</p>}
+        {!!busyMsg && <p className="text-xs text-zinc-400">{busyMsg}</p>}
+        {progress > 0 && (
+          <div className="w-full h-2 bg-zinc-800 rounded overflow-hidden">
+            <div className="h-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        )}
         {error && <ErrorMessage message={error} />}
       </div>
     </BaseModal>

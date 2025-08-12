@@ -34,21 +34,23 @@ export const MaterialDetailView = ({
     const detailRefs = useRef({});
 
     useEffect(() => {
-        if (scrollToMaterial) {
-            setHighlightedMaterial(scrollToMaterial);
-            if (detailRefs.current[scrollToMaterial]?.current) {
-                detailRefs.current[scrollToMaterial].current.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center'
-                });
-            }
-            const timer = setTimeout(() => {
-                setHighlightedMaterial(null);
-                onScrollToComplete();
-            }, 1000);
-            return () => clearTimeout(timer);
-        }
-    }, [scrollToMaterial, onScrollToComplete]);
+        if (!scrollToMaterial) return;
+
+        const node = detailRefs.current[scrollToMaterial]?.current;
+        if (!node) return;
+
+        setHighlightedMaterial(scrollToMaterial);
+        node.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+
+        const timer = setTimeout(() => {
+            setHighlightedMaterial(null);
+            onScrollToComplete();
+        }, 1200);
+        return () => clearTimeout(timer);
+    }, [scrollToMaterial, displayMaterials, onScrollToComplete]);
 
     return (
         <DndContext

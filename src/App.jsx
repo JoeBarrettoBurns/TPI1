@@ -91,12 +91,14 @@ export default function App() {
                     closeModal();
                 } else if (searchQuery) {
                     clearSearch();
+                } else if (activeView !== 'dashboard') {
+                    setActiveView('dashboard');
                 }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [closeModal, clearSearch, modal.type, searchQuery, isAssistantVisible]);
+    }, [closeModal, clearSearch, modal.type, searchQuery, isAssistantVisible, activeView]);
 
     // Daily backup on first app open per day
     useEffect(() => {
@@ -959,6 +961,7 @@ export default function App() {
                     onSearchChange={handleSearchChange}
                     onKeyDown={handleSearchKeyDown}
                     onOpenBackup={() => setModal({ type: 'backup' })}
+                    onLogoClick={() => setActiveView('dashboard')}
                 />
 
                 <div className="relative">

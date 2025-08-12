@@ -6,17 +6,13 @@ import { Button } from '../components/common/Button';
 import { exportToCSV } from '../utils/csvExport';
 
 export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
-    // State to hold the selected thickness for filtering
-    const [selectedThickness, setSelectedThickness] = useState('All');
+    // State to hold the selected material type for filtering
+    const [selectedMaterialType, setSelectedMaterialType] = useState('All');
 
-    // Get a sorted list of unique thicknesses from the materials data
-    const thicknesses = useMemo(() => {
-        const uniqueThicknesses = new Set(Object.values(materials).map(m => m.thickness));
-        return ['All', ...Array.from(uniqueThicknesses)].sort((a, b) => {
-            if (a === 'All') return -1;
-            if (b === 'All') return 1;
-            return a - b;
-        });
+    // Get a sorted list of unique material types
+    const materialTypesForFilter = useMemo(() => {
+        const types = Object.keys(materials).sort((a, b) => a.localeCompare(b));
+        return ['All', ...types];
     }, [materials]);
 
     // Memoized calculation for the price history data
@@ -29,9 +25,9 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
             // Ensure the item has the necessary data to be included
             if (!materialInfo || !item.costPerPound || item.costPerPound <= 0) return false;
 
-            // Filter by selected thickness
-            const matchesThickness = selectedThickness === 'All' || materialInfo.thickness === selectedThickness;
-            if (!matchesThickness) return false;
+            // Filter by selected material type
+            const matchesMaterial = selectedMaterialType === 'All' || item.materialType === selectedMaterialType;
+            if (!matchesMaterial) return false;
 
             // Filter by search query if it exists
             if (searchQuery) {
@@ -57,7 +53,6 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
                     job: item.job,
                     dateReceived: item.dateReceived || item.createdAt,
                     costPerPound: item.costPerPound,
-                    thickness: materials[item.materialType]?.thickness || 'N/A',
                 });
             }
         });
@@ -66,14 +61,13 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
         return Array.from(uniquePricePoints.values())
             .sort((a, b) => new Date(b.dateReceived) - new Date(a.dateReceived));
 
-    }, [inventory, materials, selectedThickness, searchQuery]);
+    }, [inventory, materials, selectedMaterialType, searchQuery]);
 
     // Handle exporting the current view to a CSV file
     const handleExport = () => {
         const headers = [
             { label: 'Job/PO', key: 'job' },
             { label: 'Material', key: 'materialType' },
-            { label: 'Thickness', key: 'thickness' },
             { label: 'Supplier', key: 'supplier' },
             { label: 'Date Received', key: 'dateReceived' },
             { label: 'Cost Per Pound', key: 'costPerPound' },
@@ -88,7 +82,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
         exportToCSV(
             dataToExport,
             headers,
-            `price_history_thickness_${selectedThickness}.csv`
+            `price_history_material_${selectedMaterialType}.csv`
         );
     };
 
@@ -98,13 +92,13 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
             <div className="flex flex-col md:flex-row justify-between md:items-center mb-4 gap-4">
                 <h2 className="text-xl md:text-2xl font-bold text-white">Price History</h2>
                 <div className="flex items-center gap-4">
-                    {/* Dropdown for selecting thickness */}
+                    {/* Dropdown for selecting material type */}
                     <select
-                        value={selectedThickness}
-                        onChange={(e) => setSelectedThickness(e.target.value === 'All' ? 'All' : parseFloat(e.target.value))}
+                        value={selectedMaterialType}
+                        onChange={(e) => setSelectedMaterialType(e.target.value)}
                         className="bg-zinc-700 text-white border border-zinc-600 rounded-md px-3 py-2 text-sm md:text-base"
                     >
-                        {thicknesses.map(thick => <option key={thick} value={thick}>{thick === 'All' ? 'All Thicknesses' : `${thick}"`}</option>)}
+                        {materialTypesForFilter.map(m => <option key={m} value={m}>{m === 'All' ? 'All Materials' : m}</option>)}
                     </select>
                     <Button onClick={handleExport} variant="secondary">
                         <Download size={16} /> <span className="hidden sm:inline">Export</span>
@@ -135,7 +129,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
                         ))}
                     </tbody>
                 </table>
-                {priceHistory.length === 0 && <p className="text-center text-zinc-400 py-8">No price history available for this thickness or search query.</p>}
+                {priceHistory.length === 0 && <p className="text-center text-zinc-400 py-8">No price history available for this material type or search query.</p>}
             </div>
         </div>
     );

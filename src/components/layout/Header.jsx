@@ -16,7 +16,8 @@ export const Header = forwardRef(({
     onManageSuppliers,
     onOpenBackup,
     activeView,
-    onSignOut
+    onSignOut,
+    onLogoClick
 }, ref) => {
 
     return (
@@ -24,8 +25,8 @@ export const Header = forwardRef(({
             {/* Top Row: Title and Action Buttons */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-4">
-                    <img src="/tecnopan-logo.png" alt="TecnoPan Logo" className="h-12 md:h-16 w-auto" />
-                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white text-center sm:text-left">TecnoPan Inventory</h1>
+                    <img src="/tecnopan-logo.png" alt="TecnoPan Logo" onClick={onLogoClick} className="h-12 md:h-16 w-auto cursor-pointer" />
+                    <h1 onClick={onLogoClick} className="text-2xl sm:text-3xl md:text-4xl font-bold text-white text-center sm:text-left cursor-pointer">TecnoPan Inventory</h1>
                 </div>
                 <div className="flex flex-wrap justify-center md:justify-end gap-2">
                     <Button onClick={onAdd} className="px-3 py-2 md:px-5 md:py-3"><Plus size={20} /> <span className="hidden sm:inline">Add Stock</span></Button>
