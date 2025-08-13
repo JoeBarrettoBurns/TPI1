@@ -522,7 +522,7 @@ export default function App() {
                 const keepOriginalIds = new Set(
                     materialsFromModal.filter(m => !m.isNew && m.id).map(m => m.id)
                 );
-                for (const [origId, mat] of Object.entries(originalById)) {
+                for (const origId of Object.keys(originalById)) {
                     if (!keepOriginalIds.has(origId)) {
                         transaction.delete(doc(materialsCollectionRef, origId));
                     }

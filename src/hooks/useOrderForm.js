@@ -2,12 +2,12 @@ import { useState, useCallback } from 'react';
 import { STANDARD_LENGTHS } from '../constants/materials';
 
 export function useOrderForm(initialData, materialTypes, suppliers, preselectedMaterial) {
-    const createNewItem = (materialTypeOverride) => ({
+    const createNewItem = useCallback((materialTypeOverride) => ({
         materialType: materialTypeOverride || (materialTypes && materialTypes.length > 0 ? materialTypes[0] : ''),
         qty96: '', qty120: '', qty144: '',
         customWidth: '', customLength: '', customQty: '',
         costPerPound: ''
-    });
+    }), [materialTypes]);
     const createNewJob = useCallback(() => ({
         jobName: '',
         customer: '',
@@ -16,7 +16,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, preselectedM
         arrivalDate: '',
         createdAt: '',
         items: [createNewItem(preselectedMaterial)]
-    }), [suppliers, materialTypes, preselectedMaterial]); // Dependencies for useCallback
+    }), [suppliers, preselectedMaterial, createNewItem]);
 
     const transformInitialData = useCallback((data) => {
         if (!data) return [createNewJob()];

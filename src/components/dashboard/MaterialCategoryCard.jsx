@@ -27,8 +27,8 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         opacity: isSortableDragging ? 0.4 : 1,
     };
 
-    // Defensive: ensure materials is always an object
-    const safeMaterials = materials || {};
+    // Defensive: ensure materials is always an object, stabilized for hooks deps
+    const safeMaterials = useMemo(() => materials || {}, [materials]);
     const materialTypes = useMemo(() => Object.keys(safeMaterials), [safeMaterials]);
     const materialsInCategory = materialTypes.filter(m => safeMaterials[m]?.category === category);
 
@@ -49,7 +49,6 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
     // Enable drag-to-reorder materials within this category and persist to Firestore
     const {
         orderedItems: orderedMaterials,
-        activeItem: activeMaterial,
         handleDragStart,
         handleDragEnd,
         handleDragCancel,

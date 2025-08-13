@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useOrderForm } from '../../hooks/useOrderForm';
-import { STANDARD_LENGTHS } from '../../constants/materials';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';

@@ -1,6 +1,6 @@
 // src/utils/backupService.js
 
-import { collection, doc, getDocs, writeBatch, setDoc, getDoc, deleteDoc, collectionGroup } from 'firebase/firestore';
+import { collection, doc, getDocs, writeBatch, setDoc, getDoc, collectionGroup } from 'firebase/firestore';
 
 export function generateBackupId(date = new Date()) {
   // YYYY-MM-DDTHH-mm-ss

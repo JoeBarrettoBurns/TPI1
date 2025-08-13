@@ -1,6 +1,6 @@
 // src/views/ReorderView.jsx
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { PlusCircle, Mail } from 'lucide-react';
 import { STANDARD_LENGTHS } from '../constants/materials';
 import { SUPPLIER_INFO, CC_EMAIL } from '../constants/suppliers';
@@ -49,75 +49,36 @@ const generateMailtoLinkForSupplier = (supplier, items, supplierInfoOverrides, c
     return `mailto:${info.email}?cc=${CC_EMAIL}&subject=${subject}&body=${body}`;
 };
 
-const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoOverrides }) => {
-    const [expanded, setExpanded] = useState({});
-    const [customBodies, setCustomBodies] = useState({});
-
-    return (
-        <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
-            <h2 className="text-2xl font-bold text-white mb-4">Email Suppliers</h2>
-            <div className="space-y-4">
-                {allSuppliers.map((supplier) => {
-                    const items = lowStockItemsBySupplier[supplier] || [];
-                    const isExpanded = !!expanded[supplier];
-                    const supplierKey = (supplier || '').toUpperCase().replace(/\s+/g, '_');
-                    const info = supplierInfoOverrides?.[supplierKey] || SUPPLIER_INFO[supplierKey] || SUPPLIER_INFO.DEFAULT;
-                    const defaultBody = buildDefaultItemsBody(info, items);
-                    const currentBody = customBodies[supplier] ?? '';
-                    return (
-                        <div key={supplier} className="bg-zinc-900/50 rounded-xl border border-zinc-700 p-4">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h3 className="text-lg font-bold text-blue-400">{supplier}</h3>
-                                    <p className="text-sm text-zinc-400">
-                                        {items.length > 0 ? `${items.length} low stock item(s)` : 'No items currently low on stock'}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setExpanded(prev => ({ ...prev, [supplier]: !isExpanded }))}
-                                        className="text-blue-300 hover:text-blue-200 underline"
-                                    >
-                                        {isExpanded ? 'Done' : 'Edit Body'}
-                                    </button>
-                                    <a
-                                        href={generateMailtoLinkForSupplier(supplier, items, supplierInfoOverrides, currentBody || undefined)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        <Button variant="primary">
-                                            <Mail size={16} />
-                                            <span>Email Order</span>
-                                        </Button>
-                                    </a>
-                                </div>
-                            </div>
-                            {isExpanded && (
-                                <div className="mt-3">
-                                    <label className="block text-sm font-medium text-zinc-300">Email Body</label>
-                                    <textarea
-                                        className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        rows={6}
-                                        value={currentBody || defaultBody}
-                                        onChange={(e) => setCustomBodies(prev => ({ ...prev, [supplier]: e.target.value }))}
-                                    />
-                                    <div className="mt-2 flex gap-2">
-                                        <Button
-                                            variant="secondary"
-                                            onClick={() => setCustomBodies(prev => ({ ...prev, [supplier]: defaultBody }))}
-                                        >
-                                            Reset to Default
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
+const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoOverrides }) => (
+    <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
+        <h2 className="text-2xl font-bold text-white mb-4">Email Suppliers</h2>
+        <div className="space-y-4">
+            {allSuppliers.map((supplier) => {
+                const items = lowStockItemsBySupplier[supplier] || [];
+                return (
+                    <div key={supplier} className="bg-zinc-900/50 rounded-xl border border-zinc-700 p-4 flex justify-between items-center">
+                        <div>
+                            <h3 className="text-lg font-bold text-blue-400">{supplier}</h3>
+                            <p className="text-sm text-zinc-400">
+                                {items.length > 0 ? `${items.length} low stock item(s)` : 'No items currently low on stock'}
+                            </p>
                         </div>
-                    )
-                })}
-            </div>
+                        <a
+                            href={generateMailtoLinkForSupplier(supplier, items, supplierInfoOverrides)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <Button variant="primary">
+                                <Mail size={16} />
+                                <span>Email Order</span>
+                            </Button>
+                        </a>
+                    </div>
+                )
+            })}
         </div>
-    );
-};
+    </div>
+);
 
 export const ReorderView = ({ inventorySummary, materials, onRestock, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
     const lowStockItems = useMemo(() => {

@@ -25,7 +25,7 @@ export function useFirestoreDnd(initialItems, materials) {
         if (JSON.stringify(finalOrder) !== JSON.stringify(orderedItems)) {
             setOrderedItems(finalOrder);
         }
-    }, [initialItems, materials]);
+    }, [initialItems, materials, orderedItems]);
 
     const handleDragStart = (event) => {
         setActiveItem(event.active.id);
