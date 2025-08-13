@@ -62,6 +62,7 @@ export default function App() {
     const [activeCategory, setActiveCategory] = useState(null);
     const [suppliers, setSuppliers] = usePersistentState('suppliers', INITIAL_SUPPLIERS);
     const [categoriesToDelete, setCategoriesToDelete] = useState([]);
+    const [supplierInfo, setSupplierInfo] = usePersistentState('supplier-autofill', {});
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedJobFromSearch, setSelectedJobFromSearch] = useState(null);
     const searchInputRef = useRef(null);
@@ -593,12 +594,27 @@ export default function App() {
     };
 
 
-    const handleAddSupplier = (supplier) => {
+    const handleAddSupplier = (supplier, info) => {
         setSuppliers(prev => [...prev, supplier]);
+        if (info) {
+            const key = (supplier || '').toUpperCase().replace(/\s+/g, '_');
+            setSupplierInfo(prev => ({ ...prev, [key]: info }));
+        }
     };
 
     const handleDeleteSupplier = (supplier) => {
         setSuppliers(prev => prev.filter(s => s !== supplier));
+        const key = (supplier || '').toUpperCase().replace(/\s+/g, '_');
+        setSupplierInfo(prev => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+    };
+
+    const handleUpdateSupplierInfo = (supplierName, info) => {
+        const key = (supplierName || '').toUpperCase().replace(/\s+/g, '_');
+        setSupplierInfo(prev => ({ ...prev, [key]: info }));
     };
 
     const handleAddOrEditOrder = async (jobs, originalOrderGroup = null) => {
@@ -920,6 +936,7 @@ export default function App() {
                     searchQuery={searchQuery}
                     inventory={inventory}
                     suppliers={suppliers}
+                    supplierInfoOverrides={supplierInfo}
                 />;
             default:
                 if (initialCategories.includes(activeView)) {
@@ -1014,7 +1031,7 @@ export default function App() {
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
             {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} />}
-            {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} />}
+            {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} supplierInfo={supplierInfo} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} onUpdateSupplierInfo={handleUpdateSupplierInfo} />}
             {modal.type === 'confirm-delete-categories' &&
                 <ConfirmationModal
                     isOpen={true}

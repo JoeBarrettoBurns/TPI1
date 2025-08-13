@@ -16,13 +16,17 @@ export function usePersistentState(key, defaultValue) {
     });
 
     useEffect(() => {
-        // Do not persist the default value if it's empty, wait for the real value.
-        if (state.length > 0) {
-            try {
-                localStorage.setItem(key, JSON.stringify(state));
-            } catch (error) {
-                console.error("Error writing to localStorage", error);
-            }
+        // Do not persist the default value if it's empty for arrays/objects; otherwise persist.
+        const shouldPersist = Array.isArray(state)
+            ? state.length > 0
+            : (state && typeof state === 'object')
+                ? Object.keys(state).length > 0
+                : state !== undefined && state !== null;
+        if (!shouldPersist) return;
+        try {
+            localStorage.setItem(key, JSON.stringify(state));
+        } catch (error) {
+            console.error("Error writing to localStorage", error);
         }
     }, [key, state]);
 
