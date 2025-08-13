@@ -870,9 +870,9 @@ export default function App() {
                 return (
                     <DndContext
                         collisionDetection={closestCenter}
-                        onDragStart={handleDragStart}
-                        onDragEnd={handleDragEnd}
-                        onDragCancel={handleDragCancel}
+                        onDragStart={isEditMode ? handleDragStart : undefined}
+                        onDragEnd={isEditMode ? handleDragEnd : undefined}
+                        onDragCancel={isEditMode ? handleDragCancel : undefined}
                     >
                         <DashboardView
                             inventorySummary={inventorySummary}
@@ -951,6 +951,7 @@ export default function App() {
                         scrollToMaterial={scrollToMaterial}
                         onScrollToComplete={onScrollToComplete}
                         searchQuery={searchQuery}
+                         isEditMode={isEditMode}
                     />;
                 }
                 return null;

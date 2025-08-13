@@ -34,11 +34,9 @@ export const Header = forwardRef(({
                     <Button onClick={onManageCategories} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Box size={20} /> <span className="hidden sm:inline">Manage Categories</span></Button>
                     <Button onClick={onManageSuppliers} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Users size={20} /> <span className="hidden sm:inline">Manage Suppliers</span></Button>
                     <Button onClick={onOpenBackup} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Database size={20} /> <span className="hidden sm:inline">Backups</span></Button>
-                    {activeView === 'dashboard' && (
-                        <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className="px-3 py-2 md:px-5 md:py-3">
-                            <Edit size={20} /> <span className="hidden sm:inline">{isEditMode ? 'Finish Editing' : 'Edit Stock'}</span>
-                        </Button>
-                    )}
+                    <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className="px-3 py-2 md:px-5 md:py-3">
+                        <Edit size={20} /> <span className="hidden sm:inline">{isEditMode ? 'Finish Editing' : 'Edit'}</span>
+                    </Button>
                     <Button onClick={onSignOut} variant="danger" className="ml-0 md:ml-4 px-3 py-2 md:px-5 md:py-3"><LogOut size={20} /> <span className="hidden sm:inline">Sign Out</span></Button>
                 </div>
             </div>

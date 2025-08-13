@@ -7,7 +7,8 @@ import { MaterialDetailItem } from '../components/dashboard/MaterialDetailItem';
 export const MaterialDetailView = ({
     category, inventory, usageLog, inventorySummary, incomingSummary,
     onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog,
-    scrollToMaterial, onScrollToComplete, materials, materialTypes, searchQuery
+    scrollToMaterial, onScrollToComplete, materials, materialTypes, searchQuery,
+    isEditMode
 }) => {
     const stableMaterialsInCategory = useMemo(() => {
         return materialTypes
@@ -55,9 +56,9 @@ export const MaterialDetailView = ({
     return (
         <DndContext
             collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
+            onDragStart={isEditMode ? handleDragStart : undefined}
+            onDragEnd={isEditMode ? handleDragEnd : undefined}
+            onDragCancel={isEditMode ? handleDragCancel : undefined}
         >
             <div className="space-y-8">
                 <SortableContext items={orderedMaterials} strategy={verticalListSortingStrategy}>
@@ -76,6 +77,7 @@ export const MaterialDetailView = ({
                             onReceiveOrder={onReceiveOrder}
                             onFulfillLog={onFulfillLog}
                             materials={materials}
+                            isEditMode={isEditMode}
                             ref={el => detailRefs.current[matType] = { current: el }}
                             highlighted={highlightedMaterial === matType}
                         />

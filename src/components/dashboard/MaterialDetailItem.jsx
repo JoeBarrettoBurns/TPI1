@@ -9,7 +9,7 @@ import { LogDetailModal } from '../modals/LogDetailModal';
 import { ConfirmationModal } from '../modals/ConfirmationModal';
 import { Truck, Edit, Trash2, GripVertical } from 'lucide-react';
 
-export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog, inventorySummary, incomingSummary, onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog, materials, isDragging, highlighted }, ref) => {
+export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog, inventorySummary, incomingSummary, onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog, materials, isDragging, highlighted, isEditMode }, ref) => {
     const {
         attributes,
         listeners,
@@ -17,7 +17,7 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
         transform,
         transition,
         isDragging: isSortableDragging,
-    } = useSortable({ id });
+    } = useSortable({ id, disabled: !isEditMode });
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -65,7 +65,7 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
             {...attributes}
             className={`bg-zinc-800 rounded-xl shadow-lg border border-zinc-700 overflow-hidden transition-all duration-300 ${highlighted ? 'ring-2 ring-blue-500 shadow-xl shadow-blue-500/20' : 'ring-0 ring-transparent'}`}
         >
-            <div {...listeners} className="p-4 bg-zinc-900/50 flex flex-wrap justify-between items-center gap-4 cursor-grab active:cursor-grabbing">
+            <div {...listeners} className={`p-4 bg-zinc-900/50 flex flex-wrap justify-between items-center gap-4 ${isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
                 <div>
                     <h3 className="text-2xl font-bold text-blue-400">{matType}</h3>
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 mt-2">
@@ -108,7 +108,7 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <GripVertical className="text-zinc-500 mr-4" />
+                    {isEditMode && <GripVertical className="text-zinc-500 mr-4" />}
                     <label htmlFor={`show-orders-${matType}`} className="text-sm text-zinc-400">Show:</label>
                     <select id={`show-orders-${matType}`} value={numToShow > 20 ? 'all' : numToShow} onChange={(e) => setNumToShow(e.target.value === 'all' ? 10000 : parseInt(e.target.value, 10))} className="bg-zinc-700 text-white p-2 rounded-lg">
                         <option value={5}>5</option>

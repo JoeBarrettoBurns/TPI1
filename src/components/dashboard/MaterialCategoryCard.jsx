@@ -18,7 +18,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         isDragging: isSortableDragging
     } = useSortable({
         id: id,
-        disabled: isEditMode,
+        disabled: !isEditMode,
     });
 
     const style = {
@@ -117,7 +117,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         ? 'ring-2 ring-red-500 bg-red-900/20'
         : 'border border-zinc-700';
 
-    const headerCursor = isEditMode ? 'cursor-default' : 'cursor-grab active:cursor-grabbing';
+    const headerCursor = isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default';
 
     // Enhanced shadow effect for when the item is being dragged
     const draggingClasses = isDragging || isSortableDragging ? 'shadow-2xl shadow-blue-500/20' : 'shadow-lg';
@@ -136,16 +136,16 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                             {isMarkedForDeletion ? <RotateCcw size={18} /> : <Trash2 size={18} />}
                         </button>
                     )}
-                    <GripVertical className="text-zinc-500" />
+                    {isEditMode && <GripVertical className="text-zinc-500" />}
                 </div>
             </div>
             <div className="overflow-x-auto px-6 pb-6">
                 {materialsInCategory.length > 0 ? (
                     <DndContext
                         collisionDetection={closestCenter}
-                        onDragStart={handleDragStart}
-                        onDragEnd={handleDragEnd}
-                        onDragCancel={handleDragCancel}
+                        onDragStart={isEditMode ? handleDragStart : undefined}
+                        onDragEnd={isEditMode ? handleDragEnd : undefined}
+                        onDragCancel={isEditMode ? handleDragCancel : undefined}
                     >
                         <table className="w-full text-left">
                             <thead>
@@ -188,7 +188,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
 };
 
 function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, inventorySummary, incomingSummary, editingCell, setEditingCell, editValue, setEditValue, handleEditSave, getStockStyle }) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: isEditMode });
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !isEditMode });
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -200,9 +200,11 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
         <tr ref={setNodeRef} style={style} className="border-b border-zinc-700 last:border-b-0 hover:bg-zinc-700/50 transition-colors">
             <td className="p-2 font-medium text-zinc-300">
                 <div className="flex items-center gap-2">
-                    <span {...attributes} {...listeners} className={`text-zinc-500 ${isEditMode ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}>
-                        <GripVertical size={16} />
-                    </span>
+                    {isEditMode && (
+                        <span {...attributes} {...listeners} className={`text-zinc-500 ${isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
+                            <GripVertical size={16} />
+                        </span>
+                    )}
                     <span onClick={() => onMaterialClick(matType)} className="cursor-pointer hover:text-blue-400">{matType}</span>
                 </div>
             </td>
