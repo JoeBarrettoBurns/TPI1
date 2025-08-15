@@ -250,13 +250,15 @@ export const groupLogsByJob = (inventory, usageLog) => {
     // Second pass: collate all sheets under the correct job
     const allSheets = [
         ...inventory,
-        ...usageLog.flatMap(log => (log.details || []).map(d => ({
-            ...d,
-            status: 'Used',
-            id: d.id || `${log.id}-${d.materialType}`,
-            job: log.job,
-            customer: log.customer
-        })))
+        ...usageLog
+            .filter(log => (log.status || 'Completed') === 'Completed')
+            .flatMap(log => (log.details || []).map(d => ({
+                ...d,
+                status: 'Used',
+                id: d.id || `${log.id}-${d.materialType}`,
+                job: log.job,
+                customer: log.customer
+            })))
     ];
 
     allSheets.forEach(sheet => {

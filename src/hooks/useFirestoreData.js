@@ -74,7 +74,7 @@ export function useFirestoreData() {
                     }, {});
 
                     let canFulfill = true;
-                    const inventoryToDelete = [];
+                    const inventoryToUpdate = [];
 
                     for (const [key, qty] of Object.entries(itemsNeeded)) {
                         const [materialType, lengthStr] = key.split('|');
@@ -89,18 +89,39 @@ export function useFirestoreData() {
                             console.warn(`Cannot fulfill scheduled log ${log.id}: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                             break;
                         }
-                        inventoryToDelete.push(...availableSheets.slice(0, qty));
+                        inventoryToUpdate.push(...availableSheets.slice(0, qty));
                     }
 
-                    if (canFulfill) {
-                        inventoryToDelete.forEach(sheet => {
-                            const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
-                            transaction.delete(docRef);
+                    if (!canFulfill) return;
+
+                    const usedAtIso = now.toISOString();
+                    const updatedDetails = [];
+                    for (const sheet of inventoryToUpdate) {
+                        const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
+                        const snap = await transaction.get(docRef);
+                        if (!snap.exists()) {
+                            throw new Error('Selected stock no longer exists during scheduled fulfillment.');
+                        }
+                        const current = snap.data();
+                        if (current.status !== 'On Hand') {
+                            throw new Error('Selected stock is no longer available during scheduled fulfillment.');
+                        }
+                        transaction.update(docRef, {
+                            status: 'Used',
+                            usageLogId: log.id,
+                            jobNameUsed: log.job,
+                            customerUsed: log.customer,
+                            usedAt: usedAtIso
                         });
-
-                        const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
-                        transaction.update(logDocRef, { status: 'Completed' });
+                        updatedDetails.push({ id: sheet.id, ...current });
                     }
+
+                    const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
+                    transaction.update(logDocRef, {
+                        status: 'Completed',
+                        details: updatedDetails,
+                        fulfilledAt: usedAtIso
+                    });
                 }).catch(err => console.error(`Failed transaction for scheduled log ${log.id}:`, err));
             }
         };

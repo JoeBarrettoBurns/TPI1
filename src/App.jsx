@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, deleteDoc, updateDoc, getDocs, query, where } from 'firebase/firestore';
+import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where } from 'firebase/firestore';
 import Fuse from 'fuse.js';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
@@ -393,8 +393,16 @@ export default function App() {
                             }
 
                             const sheetsToUse = matchingSheets.slice(0, qty);
-                            sheetsToUse.forEach(sheet => {
+                            for (const sheet of sheetsToUse) {
                                 const stockDocRef = doc(inventoryCollectionRef, sheet.id);
+                                const stockSnap = await transaction.get(stockDocRef);
+                                if (!stockSnap.exists()) {
+                                    throw new Error('Selected stock no longer exists. Please retry.');
+                                }
+                                const current = stockSnap.data();
+                                if (current.status !== 'On Hand') {
+                                    throw new Error('Selected stock is no longer available. Please retry.');
+                                }
                                 transaction.update(stockDocRef, {
                                     status: 'Used',
                                     usageLogId: logDocRef.id,
@@ -402,8 +410,8 @@ export default function App() {
                                     customerUsed: job.customer,
                                     usedAt: new Date().toISOString()
                                 });
-                                usedItemsForLog.push(sheet);
-                            });
+                                usedItemsForLog.push({ id: sheet.id, ...current });
+                            }
                         }
                     }
 
@@ -448,8 +456,14 @@ export default function App() {
                     inventoryToUpdate.push(...availableSheets.slice(0, qty));
                 }
 
-                inventoryToUpdate.forEach(sheet => {
+                for (const sheet of inventoryToUpdate) {
                     const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
+                    const snap = await transaction.get(docRef);
+                    if (!snap.exists()) continue;
+                    const current = snap.data();
+                    if (current.status !== 'On Hand') {
+                        throw new Error('Selected stock is no longer available for fulfillment.');
+                    }
                     transaction.update(docRef, {
                         status: 'Used',
                         usageLogId: logToFulfill.id,
@@ -457,7 +471,7 @@ export default function App() {
                         customerUsed: logToFulfill.customer,
                         usedAt: new Date().toISOString()
                     });
-                });
+                }
 
                 const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
                 transaction.update(logDocRef, {
@@ -661,7 +675,38 @@ export default function App() {
 
     const handleDeleteLog = async (logId) => {
         const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logId);
-        await deleteDoc(logDocRef);
+        await runTransaction(db, async (transaction) => {
+            const logSnap = await transaction.get(logDocRef);
+            if (!logSnap.exists()) {
+                return;
+            }
+
+            const logData = logSnap.data();
+            const isCompleted = (logData.status || 'Completed') === 'Completed';
+            const details = Array.isArray(logData.details) ? logData.details : [];
+
+            if (isCompleted && details.length > 0) {
+                for (const d of details) {
+                    if (!d?.id) continue;
+                    const invRef = doc(db, `artifacts/${appId}/public/data/inventory`, d.id);
+                    const invSnap = await transaction.get(invRef);
+                    if (!invSnap.exists()) continue;
+                    const inv = invSnap.data();
+                    // Only revert sheets that were actually consumed by this log
+                    if (inv.status === 'Used' && inv.usageLogId === logId) {
+                        transaction.update(invRef, {
+                            status: 'On Hand',
+                            usageLogId: null,
+                            jobNameUsed: null,
+                            customerUsed: null,
+                            usedAt: null
+                        });
+                    }
+                }
+            }
+
+            transaction.delete(logDocRef);
+        });
     };
 
     const handleReceiveOrder = async (orderGroup) => {
@@ -717,10 +762,16 @@ export default function App() {
                 }
 
                 const sheetsToDelete = availableSheets.slice(0, sheetsToRemove);
-                sheetsToDelete.forEach(sheet => {
+                for (const sheet of sheetsToDelete) {
                     const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
+                    const snap = await transaction.get(docRef);
+                    if (!snap.exists()) continue;
+                    const current = snap.data();
+                    if (current.status !== 'On Hand') {
+                        throw new Error('Some selected sheets are no longer On Hand. Please refresh and try again.');
+                    }
                     transaction.delete(docRef);
-                });
+                }
             }
         });
     };
@@ -757,6 +808,69 @@ export default function App() {
             });
         } else {
             // Logic for editing a COMPLETED log
+            const now = new Date();
+            const targetDate = newLogData.date ? new Date(newLogData.date + 'T00:00:00') : null;
+            const shouldRevertToScheduled = targetDate && targetDate > now;
+
+            if (shouldRevertToScheduled) {
+                await runTransaction(db, async (transaction) => {
+                    const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+
+                    // Return currently used items for this log (that still exist) back to On Hand
+                    const originalItemIds = (originalLog.details || []).map(d => d.id).filter(Boolean);
+                    const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
+                    for (const item of itemsToReturn) {
+                        const docRef = doc(inventoryCollectionRef, item.id);
+                        const snap = await transaction.get(docRef);
+                        if (!snap.exists()) continue;
+                        const current = snap.data();
+                        if (current.status === 'Used' && current.usageLogId === originalLog.id) {
+                            transaction.update(docRef, {
+                                status: 'On Hand',
+                                usageLogId: null,
+                                jobNameUsed: null,
+                                customerUsed: null,
+                                usedAt: null
+                            });
+                        }
+                    }
+
+                    // Build new scheduled details (no concrete sheet IDs)
+                    const newDetails = [];
+                    let totalItems = 0;
+                    for (const item of newLogData.items) {
+                        for (const len of STANDARD_LENGTHS) {
+                            const qty = parseInt(item[`qty${len}`] || 0);
+                            if (qty > 0) {
+                                totalItems += qty;
+                                const materialInfo = materials[item.materialType];
+                                for (let i = 0; i < qty; i++) {
+                                    newDetails.push({
+                                        materialType: item.materialType,
+                                        length: len,
+                                        width: 48,
+                                        gauge: getGaugeFromMaterial(item.materialType),
+                                        density: materialInfo?.density || 0,
+                                        thickness: materialInfo?.thickness || 0,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    transaction.update(logDocRef, {
+                        job: newLogData.jobName.trim() || 'N/A',
+                        customer: newLogData.customer,
+                        usedAt: targetDate.toISOString(),
+                        details: newDetails,
+                        qty: -totalItems,
+                        status: 'Scheduled',
+                        fulfilledAt: null,
+                    });
+                });
+                return;
+            }
+
             await runTransaction(db, async (transaction) => {
                 const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
@@ -822,8 +936,16 @@ export default function App() {
                             throw new Error(`Concurrency Error: Not enough stock for ${item.materialType} @ ${len}" during edit.`);
                         }
 
-                        sheetsToUse.forEach((sheet) => {
+                        for (const sheet of sheetsToUse) {
                             const stockDocRef = doc(inventoryCollectionRef, sheet.id);
+                            const stockSnap = await transaction.get(stockDocRef);
+                            if (!stockSnap.exists()) {
+                                throw new Error('Selected stock no longer exists during edit.');
+                            }
+                            const current = stockSnap.data();
+                            if (current.status !== 'On Hand') {
+                                throw new Error('Selected stock became unavailable during edit.');
+                            }
                             transaction.update(stockDocRef, {
                                 status: 'Used',
                                 usageLogId: originalLog.id,
@@ -831,8 +953,8 @@ export default function App() {
                                 customerUsed: newLogData.customer,
                                 usedAt: new Date().toISOString()
                             });
-                            updatedUsedItemsForLog.push(sheet);
-                        });
+                            updatedUsedItemsForLog.push({ id: sheet.id, ...current });
+                        }
                     }
                 }
 

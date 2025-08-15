@@ -1,6 +1,7 @@
 // src/views/JobOverviewView.jsx
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { STANDARD_LENGTHS } from '../constants/materials';
 
 const JobCard = ({ job, onSelectJob, isSelected }) => (
     <div
@@ -22,26 +23,25 @@ const JobCard = ({ job, onSelectJob, isSelected }) => (
 );
 
 const JobDetails = ({ job }) => {
-    // Group sheets by size and status
-    const groupedMaterials = useMemo(() => {
-        const materials = {};
-        for (const matType in job.materials) {
-            const sizeGroups = {};
-            job.materials[matType].forEach(sheet => {
-                const key = `${sheet.length}x${sheet.width || 48}-${sheet.status}`;
-                if (!sizeGroups[key]) {
-                    sizeGroups[key] = {
-                        length: sheet.length,
-                        width: sheet.width || 48,
-                        status: sheet.status,
-                        count: 0,
-                    };
+    // Aggregate counts by material -> length -> status
+    const aggregated = useMemo(() => {
+        const byMaterial = {};
+        for (const materialType in job.materials) {
+            const byLength = {};
+            job.materials[materialType].forEach((sheet) => {
+                const len = sheet.length;
+                if (!byLength[len]) {
+                    byLength[len] = { Used: 0, Other: 0 };
                 }
-                sizeGroups[key].count += 1;
+                if ((sheet.status || '').toLowerCase() === 'used') {
+                    byLength[len].Used += 1;
+                } else {
+                    byLength[len].Other += 1; // treat non-Used as available/other
+                }
             });
-            materials[matType] = Object.values(sizeGroups).sort((a, b) => a.length - b.length);
+            byMaterial[materialType] = byLength;
         }
-        return materials;
+        return byMaterial;
     }, [job.materials]);
 
     return (
@@ -52,20 +52,45 @@ const JobDetails = ({ job }) => {
                 <p className="text-sm text-zinc-500">{new Date(job.date).toLocaleDateString()}</p>
             </div>
 
-            <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2">
-                {Object.entries(groupedMaterials).map(([materialType, sizeGroups]) => (
-                    <div key={materialType} className="bg-zinc-900/50 p-3 rounded-lg">
-                        <p className="font-semibold text-blue-400">{materialType}</p>
-                        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2 mt-2">
-                            {sizeGroups.map(group => (
-                                <div key={`${group.length}x${group.width}-${group.status}`} className={`p-2 rounded text-center text-sm border ${group.status === 'Used' ? 'bg-red-900/40 text-red-300 border-red-700' : 'bg-green-900/50 text-green-300 border-green-700'}`}>
-                                    <p className="font-mono font-bold">{group.count}x <span className="font-normal">{group.length}" x {group.width}"</span></p>
-                                    <p className="text-xs opacity-75">{group.status}</p>
-                                </div>
-                            ))}
-                        </div>
+            <div className="max-h-[40vh] overflow-y-auto pr-2">
+                <div className="bg-zinc-900/50 p-3 rounded-lg">
+                    {/* Column headers (sizes) shown once at the top */}
+                    <div className="grid grid-cols-[140px,repeat(3,minmax(0,1fr))] gap-3 text-xs text-zinc-400 px-1 select-none">
+                        <div></div>
+                        {STANDARD_LENGTHS.map((len) => (
+                            <div key={len} className="text-center font-mono">{len}" x 48"</div>
+                        ))}
                     </div>
-                ))}
+
+                    {/* Rows: material label on the left, visualizers per size on the right */}
+                    <div className="mt-2 grid grid-cols-[140px,repeat(3,minmax(0,1fr))] gap-3">
+                        {Object.entries(aggregated).map(([materialType, byLength]) => (
+                            <React.Fragment key={materialType}>
+                                <div className="flex items-center justify-start">
+                                    <span className="font-semibold text-blue-400">{materialType}</span>
+                                </div>
+                                {STANDARD_LENGTHS.map((len) => {
+                                    const counts = byLength[len] || { Used: 0, Other: 0 };
+                                    const total = (counts.Other || 0) + (counts.Used || 0);
+                                    const blocks = [
+                                        ...Array.from({ length: counts.Other }, (_, i) => ({ key: `o-${i}`, color: 'bg-green-500/70' })),
+                                        ...Array.from({ length: counts.Used }, (_, i) => ({ key: `u-${i}`, color: 'bg-red-500/70' })),
+                                    ];
+                                    return (
+                                        <div key={`${materialType}-${len}`} className="p-2 rounded border border-zinc-700 bg-zinc-800/40 min-h-[40px]">
+                                            <div className="flex items-center flex-wrap gap-1">
+                                                {blocks.map((b) => (
+                                                    <div key={b.key} className={`${b.color} h-3 w-4 rounded-sm`} />
+                                                ))}
+                                                <span className="ml-2 text-xs font-mono text-zinc-300">{total}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </React.Fragment>
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     );

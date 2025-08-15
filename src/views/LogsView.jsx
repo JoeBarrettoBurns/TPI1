@@ -108,7 +108,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                 onClose={() => setLogToDelete(null)}
                 onConfirm={handleConfirmDeleteLog}
                 title="Delete Entry"
-                message="Are you sure you want to delete this entry? This action cannot be undone and will not revert inventory changes."
+                message="Are you sure you want to delete this entry? This action cannot be undone. Deleting a completed usage log will return its sheets to On Hand."
             />
 
             <div>
