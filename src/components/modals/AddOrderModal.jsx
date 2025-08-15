@@ -60,7 +60,7 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                 <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2 border-t border-b border-zinc-700 py-4">
                     <div className="p-4 border border-zinc-700 rounded-lg bg-zinc-900/50 relative space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', e.target.value)} placeholder="e.g. 12345 or Stock" />
+                            <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
                             <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
                             <div className="flex gap-2 p-2 bg-zinc-800 rounded-lg">
                                                                <button type="button" onClick={() => setJobField(jobIndex, 'status', 'On Hand')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'On Hand' ? 'bg-blue-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>

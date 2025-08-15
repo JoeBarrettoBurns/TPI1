@@ -82,8 +82,8 @@ export const UseStockForm = ({ onSave, inventory, materialTypes, inventorySummar
         <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormInput label="Job Name" name="jobName" value={job.jobName} onChange={(e) => handleJobChange(jobIndex, 'jobName', e.target.value)} required />
-                    <FormInput label="Customer" name="customer" value={job.customer} onChange={(e) => handleJobChange(jobIndex, 'customer', e.target.value)} required />
+                    <FormInput label="Job Name" name="jobName" value={job.jobName} onChange={(e) => handleJobChange(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} required style={{ textTransform: 'uppercase' }} />
+                    <FormInput label="Customer" name="customer" value={job.customer} onChange={(e) => handleJobChange(jobIndex, 'customer', (e.target.value || '').toUpperCase())} required style={{ textTransform: 'uppercase' }} />
                 </div>
 
                 <div className="flex gap-4 p-2 bg-zinc-900/50 rounded-lg">

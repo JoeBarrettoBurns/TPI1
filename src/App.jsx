@@ -122,16 +122,7 @@ export default function App() {
         doDailyBackup();
     }, []);
 
-    useEffect(() => {
-        const handleGlobalKeyPress = (event) => {
-            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
-            if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
-                searchInputRef.current?.focus();
-            }
-        };
-        window.addEventListener('keydown', handleGlobalKeyPress);
-        return () => window.removeEventListener('keydown', handleGlobalKeyPress);
-    }, []);
+    // Removed global "type to focus search" behavior; users must click the search bar to type
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
     const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);

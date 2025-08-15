@@ -66,8 +66,8 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="p-4 border border-slate-700 rounded-lg bg-slate-900/50 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormInput label="Job #" name="jobName" value={jobData.jobName} onChange={(e) => setJobData(prev => ({ ...prev, jobName: e.target.value }))} />
-                        <FormInput label="Customer" name="customer" value={jobData.customer} onChange={(e) => setJobData(prev => ({ ...prev, customer: e.target.value }))} required />
+                        <FormInput label="Job #" name="jobName" value={jobData.jobName} onChange={(e) => setJobData(prev => ({ ...prev, jobName: (e.target.value || '').toUpperCase() }))} style={{ textTransform: 'uppercase' }} />
+                        <FormInput label="Customer" name="customer" value={jobData.customer} onChange={(e) => setJobData(prev => ({ ...prev, customer: (e.target.value || '').toUpperCase() }))} required style={{ textTransform: 'uppercase' }} />
                     </div>
 
                     <FormInput

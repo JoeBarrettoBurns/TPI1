@@ -1,8 +1,6 @@
 // src/views/JobOverviewView.jsx
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AddStockForm } from '../components/jobs/AddStockForm';
-import { UseStockForm } from '../components/jobs/UseStockForm'; // New import
 
 const JobCard = ({ job, onSelectJob, isSelected }) => (
     <div
@@ -58,9 +56,9 @@ const JobDetails = ({ job }) => {
                 {Object.entries(groupedMaterials).map(([materialType, sizeGroups]) => (
                     <div key={materialType} className="bg-zinc-900/50 p-3 rounded-lg">
                         <p className="font-semibold text-blue-400">{materialType}</p>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-2">
+                        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2 mt-2">
                             {sizeGroups.map(group => (
-                                <div key={`${group.length}x${group.width}-${group.status}`} className={`p-2 rounded text-center text-sm ${group.status === 'Used' ? 'bg-zinc-700/50 text-zinc-400' : 'bg-green-900/50 text-green-300'}`}>
+                                <div key={`${group.length}x${group.width}-${group.status}`} className={`p-2 rounded text-center text-sm border ${group.status === 'Used' ? 'bg-red-900/40 text-red-300 border-red-700' : 'bg-green-900/50 text-green-300 border-green-700'}`}>
                                     <p className="font-mono font-bold">{group.count}x <span className="font-normal">{group.length}" x {group.width}"</span></p>
                                     <p className="text-xs opacity-75">{group.status}</p>
                                 </div>
@@ -100,7 +98,7 @@ export const JobOverviewView = ({ allJobs, inventory, usageLog, materials, suppl
     }, [filteredJobs, selectedJob]);
 
     return (
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             <div className="xl:col-span-2 space-y-8">
                 <div className="bg-zinc-800 rounded-lg shadow-lg border border-zinc-700 min-h-[200px]">
                     {selectedJob ? (
@@ -112,29 +110,12 @@ export const JobOverviewView = ({ allJobs, inventory, usageLog, materials, suppl
                     )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredJobs.map(job => (
+                    {filteredJobs.slice(0, 6).map(job => (
                         <JobCard key={job.id} job={job} onSelectJob={setSelectedJob} isSelected={selectedJob?.id === job.id} />
                     ))}
                 </div>
             </div>
 
-            <div className="bg-zinc-800 rounded-lg shadow-lg p-6 border border-zinc-700 h-fit sticky top-8">
-                <h3 className="text-2xl font-bold text-white mb-4">Add New Stock / PO</h3>
-                <AddStockForm
-                    materialTypes={Object.keys(materials)}
-                    suppliers={suppliers}
-                    onSave={handleAddOrEditOrder}
-                />
-            </div>
-
-            <div className="bg-zinc-800 rounded-lg shadow-lg p-6 border border-zinc-700 h-fit sticky top-8">
-                <h3 className="text-2xl font-bold text-white mb-4">Use Stock</h3>
-                <UseStockForm
-                    onSave={handleUseStock}
-                    inventory={inventory}
-                    materialTypes={Object.keys(materials)}
-                />
-            </div>
         </div>
     );
 };

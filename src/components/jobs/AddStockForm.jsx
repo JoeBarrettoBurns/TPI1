@@ -57,7 +57,7 @@ export const AddStockForm = ({ materialTypes, suppliers, onSave }) => {
         <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', e.target.value)} placeholder="e.g. 12345 or Stock" />
+                    <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
                     <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
                 </div>
                 <div className="flex gap-4 p-2 bg-zinc-900/50 rounded-lg">

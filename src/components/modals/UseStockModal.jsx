@@ -86,9 +86,9 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2 border-t border-b border-slate-700 py-4">
                     <div className="p-4 border border-slate-700 rounded-lg bg-slate-900/50 relative">
-                        <FormInput label="Customer" name="customer" value={job.customer} onChange={(e) => { setJobField(jobIndex, 'customer', e.target.value); clearError(); }} required />
+                        <FormInput label="Customer" name="customer" value={job.customer} onChange={(e) => { const v = e.target.value.toUpperCase(); setJobField(jobIndex, 'customer', v); clearError(); }} required style={{ textTransform: 'uppercase' }} />
                         <div className="mt-4">
-                            <FormInput label={`Job Name / Project`} name="jobName" value={job.jobName} onChange={(e) => { setJobField(jobIndex, 'jobName', e.target.value); clearError(); }} />
+                            <FormInput label={`Job Name / Project`} name="jobName" value={job.jobName} onChange={(e) => { const v = e.target.value.toUpperCase(); setJobField(jobIndex, 'jobName', v); clearError(); }} style={{ textTransform: 'uppercase' }} />
                         </div>
                         <div className="mt-4 space-y-2">
                             {job.items.map((item, itemIndex) => {
