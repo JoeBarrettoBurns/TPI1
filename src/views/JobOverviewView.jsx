@@ -44,6 +44,10 @@ const JobDetails = ({ job }) => {
         return byMaterial;
     }, [job.materials]);
 
+    const boxColorClasses = job.status === 'In Stock'
+        ? 'bg-green-900/30 border-green-700 text-green-100'
+        : 'bg-red-900/30 border-red-700 text-red-100';
+
     return (
         <div className="p-6">
             <div className="pb-4 border-b border-zinc-700 mb-4">
@@ -62,7 +66,7 @@ const JobDetails = ({ job }) => {
                         ))}
                     </div>
 
-                    {/* Rows: material label on the left, visualizers per size on the right */}
+                    {/* Rows: material label on the left, large numeric totals per size on the right */}
                     <div className="mt-2 grid grid-cols-[140px,repeat(3,minmax(0,1fr))] gap-3">
                         {Object.entries(aggregated).map(([materialType, byLength]) => (
                             <React.Fragment key={materialType}>
@@ -72,18 +76,12 @@ const JobDetails = ({ job }) => {
                                 {STANDARD_LENGTHS.map((len) => {
                                     const counts = byLength[len] || { Used: 0, Other: 0 };
                                     const total = (counts.Other || 0) + (counts.Used || 0);
-                                    const blocks = [
-                                        ...Array.from({ length: counts.Other }, (_, i) => ({ key: `o-${i}`, color: 'bg-green-500/70' })),
-                                        ...Array.from({ length: counts.Used }, (_, i) => ({ key: `u-${i}`, color: 'bg-red-500/70' })),
-                                    ];
+                                    const cellColorClasses = total === 0
+                                        ? 'bg-zinc-800/40 border-zinc-700 text-zinc-300'
+                                        : boxColorClasses;
                                     return (
-                                        <div key={`${materialType}-${len}`} className="p-2 rounded border border-zinc-700 bg-zinc-800/40 min-h-[40px]">
-                                            <div className="flex items-center flex-wrap gap-1">
-                                                {blocks.map((b) => (
-                                                    <div key={b.key} className={`${b.color} h-3 w-4 rounded-sm`} />
-                                                ))}
-                                                <span className="ml-2 text-xs font-mono text-zinc-300">{total}</span>
-                                            </div>
+                                        <div key={`${materialType}-${len}`} className={`p-2 rounded border min-h-[64px] flex items-center justify-center ${cellColorClasses}`}>
+                                            <span className="text-3xl md:text-4xl font-extrabold">{total}</span>
                                         </div>
                                     );
                                 })}
