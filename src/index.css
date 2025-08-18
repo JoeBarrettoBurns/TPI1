@@ -6,3 +6,31 @@
 body {
     background-color: #18181b; /* bg-zinc-900 */
 }
+
+/* Themed dark scrollbar for overflow containers */
+.custom-scrollbar {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: #3f3f46 #27272a; /* thumb, track (zinc-700 on zinc-800) */
+}
+
+/* Chrome, Edge, and Safari */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #27272a; /* zinc-800 */
+    border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #3f3f46; /* zinc-700 */
+    border-radius: 8px;
+    border: 2px solid #27272a; /* creates padding around thumb */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #52525b; /* zinc-600 */
+}

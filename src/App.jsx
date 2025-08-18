@@ -34,6 +34,7 @@ import { CostAnalyticsView } from './views/CostAnalyticsView';
 import { PriceHistoryView } from './views/PriceHistoryView';
 import { ReorderView } from './views/ReorderView';
 import { JobOverviewView } from './views/JobOverviewView';
+import { SheetCostCalculatorView } from './views/SheetCostCalculatorView';
 
 
 // Modals
@@ -177,6 +178,7 @@ export default function App() {
             { type: 'view', name: 'Logs', id: 'logs' },
             { type: 'view', name: 'Price History', id: 'price-history' },
             { type: 'view', name: 'Analytics', id: 'analytics' },
+            { type: 'view', name: 'Sheet Calculator', id: 'sheet-calculator' },
             { type: 'view', name: 'Reorder', id: 'reorder' },
         ];
 
@@ -337,8 +339,9 @@ export default function App() {
             const usageLogCollectionRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
             const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
-            for (const job of jobs) {
-                if (isScheduled) {
+            // If scheduling, we only write the log entries
+            if (isScheduled) {
+                for (const job of jobs) {
                     const itemsForLog = [];
                     let totalItems = 0;
 
@@ -375,58 +378,81 @@ export default function App() {
                         };
                         transaction.set(logDocRef, logEntry);
                     }
-                } else {
-                    const usedItemsForLog = [];
-                    const logDocRef = doc(usageLogCollectionRef);
+                }
+                return;
+            }
 
-                    for (const item of job.items) {
-                        for (const len of STANDARD_LENGTHS) {
-                            const qty = parseInt(item[`qty${len}`] || 0);
-                            if (qty <= 0) continue;
+            // Use Now: plan reads and writes so that ALL reads happen before ANY writes
+            const plans = [];
 
-                            const matchingSheets = inventory.filter(i =>
-                                i.materialType === item.materialType && i.length === len && i.status === 'On Hand'
-                            ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            for (const job of jobs) {
+                const logDocRef = doc(usageLogCollectionRef);
+                const updates = [];
 
-                            if (matchingSheets.length < qty) {
-                                throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
-                            }
+                for (const item of job.items) {
+                    for (const len of STANDARD_LENGTHS) {
+                        const qty = parseInt(item[`qty${len}`] || 0);
+                        if (qty <= 0) continue;
 
-                            const sheetsToUse = matchingSheets.slice(0, qty);
-                            for (const sheet of sheetsToUse) {
-                                const stockDocRef = doc(inventoryCollectionRef, sheet.id);
-                                const stockSnap = await transaction.get(stockDocRef);
-                                if (!stockSnap.exists()) {
-                                    throw new Error('Selected stock no longer exists. Please retry.');
-                                }
-                                const current = stockSnap.data();
-                                if (current.status !== 'On Hand') {
-                                    throw new Error('Selected stock is no longer available. Please retry.');
-                                }
-                                transaction.update(stockDocRef, {
-                                    status: 'Used',
-                                    usageLogId: logDocRef.id,
-                                    jobNameUsed: job.jobName.trim() || 'N/A',
-                                    customerUsed: job.customer,
-                                    usedAt: new Date().toISOString()
-                                });
-                                usedItemsForLog.push({ id: sheet.id, ...current });
-                            }
+                        const matchingSheets = inventory
+                            .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand')
+                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+                        if (matchingSheets.length < qty) {
+                            throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}\". Only ${matchingSheets.length} available.`);
+                        }
+
+                        const sheetsToUse = matchingSheets.slice(0, qty);
+                        for (const sheet of sheetsToUse) {
+                            updates.push({ ref: doc(inventoryCollectionRef, sheet.id), job });
                         }
                     }
+                }
 
-                    if (usedItemsForLog.length > 0) {
-                        const logEntry = {
-                            job: job.jobName.trim() || 'N/A',
-                            customer: job.customer,
-                            usedAt: new Date().toISOString(),
-                            createdAt: new Date().toISOString(),
-                            status: 'Completed',
-                            details: usedItemsForLog,
-                            qty: -usedItemsForLog.length,
-                        };
-                        transaction.set(logDocRef, logEntry);
+                plans.push({ job, logDocRef, updates, usedItems: [] });
+            }
+
+            // READS: validate all inventory docs before ANY write occurs
+            for (const plan of plans) {
+                for (const target of plan.updates) {
+                    const snap = await transaction.get(target.ref);
+                    if (!snap.exists()) {
+                        throw new Error('Selected stock no longer exists. Please retry.');
                     }
+                    const current = snap.data();
+                    if (current.status !== 'On Hand') {
+                        throw new Error('Selected stock is no longer available. Please retry.');
+                    }
+                    plan.usedItems.push({ id: target.ref.id, ...current });
+                }
+            }
+
+            // WRITES: update inventory then create logs
+            const nowIso = new Date().toISOString();
+            for (const plan of plans) {
+                for (const target of plan.updates) {
+                    transaction.update(target.ref, {
+                        status: 'Used',
+                        usageLogId: plan.logDocRef.id,
+                        jobNameUsed: plan.job.jobName.trim() || 'N/A',
+                        customerUsed: plan.job.customer,
+                        usedAt: nowIso,
+                    });
+                }
+            }
+
+            for (const plan of plans) {
+                if (plan.usedItems.length > 0) {
+                    const logEntry = {
+                        job: plan.job.jobName.trim() || 'N/A',
+                        customer: plan.job.customer,
+                        usedAt: nowIso,
+                        createdAt: nowIso,
+                        status: 'Completed',
+                        details: plan.usedItems,
+                        qty: -plan.usedItems.length,
+                    };
+                    transaction.set(plan.logDocRef, logEntry);
                 }
             }
         });
@@ -441,43 +467,52 @@ export default function App() {
                     return acc;
                 }, {});
 
-                const inventoryToUpdate = [];
+                // Prepare selection based on current in-memory inventory
+                const selectedSheets = [];
                 for (const [key, qty] of Object.entries(itemsNeeded)) {
                     const [materialType, lengthStr] = key.split('|');
                     const length = parseInt(lengthStr, 10);
 
-                    const availableSheets = inventory.filter(i =>
-                        i.materialType === materialType && i.length === length && i.status === 'On Hand'
-                    ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    const availableSheets = inventory
+                        .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
+                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
                     if (availableSheets.length < qty) {
-                        throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
+                        throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}\". Only ${availableSheets.length} available.`);
                     }
-                    inventoryToUpdate.push(...availableSheets.slice(0, qty));
+                    selectedSheets.push(...availableSheets.slice(0, qty));
                 }
 
-                for (const sheet of inventoryToUpdate) {
-                    const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
-                    const snap = await transaction.get(docRef);
+                // READS first: validate availability inside transaction
+                const refs = selectedSheets.map(s => doc(db, `artifacts/${appId}/public/data/inventory`, s.id));
+                const validatedDetails = [];
+                for (const r of refs) {
+                    const snap = await transaction.get(r);
                     if (!snap.exists()) continue;
                     const current = snap.data();
                     if (current.status !== 'On Hand') {
                         throw new Error('Selected stock is no longer available for fulfillment.');
                     }
-                    transaction.update(docRef, {
+                    validatedDetails.push({ id: r.id, ...current });
+                }
+
+                // WRITES
+                const nowIso = new Date().toISOString();
+                for (const r of refs) {
+                    transaction.update(r, {
                         status: 'Used',
                         usageLogId: logToFulfill.id,
                         jobNameUsed: logToFulfill.job,
                         customerUsed: logToFulfill.customer,
-                        usedAt: new Date().toISOString()
+                        usedAt: nowIso,
                     });
                 }
 
                 const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
                 transaction.update(logDocRef, {
                     status: 'Completed',
-                    details: inventoryToUpdate,
-                    fulfilledAt: new Date().toISOString()
+                    details: validatedDetails,
+                    fulfilledAt: nowIso,
                 });
             });
         } catch (error) {
@@ -751,26 +786,34 @@ export default function App() {
                 }
             } else {
                 const sheetsToRemove = Math.abs(diff);
-                const availableSheets = inventory.filter(
-                    item => item.materialType === materialType &&
-                        item.length === length &&
-                        item.status === 'On Hand'
-                ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                const availableSheets = inventory
+                    .filter(
+                        item => item.materialType === materialType &&
+                            item.length === length &&
+                            item.status === 'On Hand'
+                    )
+                    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
                 if (availableSheets.length < sheetsToRemove) {
                     throw new Error(`Cannot remove ${sheetsToRemove} sheets. Only ${availableSheets.length} available.`);
                 }
 
                 const sheetsToDelete = availableSheets.slice(0, sheetsToRemove);
-                for (const sheet of sheetsToDelete) {
-                    const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
-                    const snap = await transaction.get(docRef);
+                const refs = sheetsToDelete.map(s => doc(db, `artifacts/${appId}/public/data/inventory`, s.id));
+
+                // READS first
+                for (const r of refs) {
+                    const snap = await transaction.get(r);
                     if (!snap.exists()) continue;
                     const current = snap.data();
                     if (current.status !== 'On Hand') {
                         throw new Error('Some selected sheets are no longer On Hand. Please refresh and try again.');
                     }
-                    transaction.delete(docRef);
+                }
+
+                // WRITES
+                for (const r of refs) {
+                    transaction.delete(r);
                 }
             }
         });
@@ -819,20 +862,28 @@ export default function App() {
                     // Return currently used items for this log (that still exist) back to On Hand
                     const originalItemIds = (originalLog.details || []).map(d => d.id).filter(Boolean);
                     const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
-                    for (const item of itemsToReturn) {
-                        const docRef = doc(inventoryCollectionRef, item.id);
-                        const snap = await transaction.get(docRef);
+                    const returnRefs = itemsToReturn.map(i => doc(inventoryCollectionRef, i.id));
+
+                    // READS
+                    const validReturnRefs = [];
+                    for (const r of returnRefs) {
+                        const snap = await transaction.get(r);
                         if (!snap.exists()) continue;
                         const current = snap.data();
                         if (current.status === 'Used' && current.usageLogId === originalLog.id) {
-                            transaction.update(docRef, {
-                                status: 'On Hand',
-                                usageLogId: null,
-                                jobNameUsed: null,
-                                customerUsed: null,
-                                usedAt: null
-                            });
+                            validReturnRefs.push(r);
                         }
+                    }
+
+                    // WRITES: make them On Hand
+                    for (const r of validReturnRefs) {
+                        transaction.update(r, {
+                            status: 'On Hand',
+                            usageLogId: null,
+                            jobNameUsed: null,
+                            customerUsed: null,
+                            usedAt: null,
+                        });
                     }
 
                     // Build new scheduled details (no concrete sheet IDs)
@@ -902,60 +953,79 @@ export default function App() {
                         ).length;
 
                         if (currentStock < needed) {
-                            throw new Error(`Not enough stock for ${materialType} @ ${length}". Needed: ${needed}, Available: ${currentStock}.`);
+                            throw new Error(`Not enough stock for ${materialType} @ ${length}\". Needed: ${needed}, Available: ${currentStock}.`);
                         }
                     }
                 }
 
                 const originalItemIds = (originalLog.details || []).map(d => d.id);
                 const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
-                itemsToReturn.forEach(item => {
-                    const docRef = doc(inventoryCollectionRef, item.id);
-                    transaction.update(docRef, {
-                        status: 'On Hand',
-                        usageLogId: null,
-                        jobNameUsed: null,
-                        customerUsed: null,
-                        usedAt: null
-                    });
-                });
+                const returnRefs = itemsToReturn.map(item => doc(inventoryCollectionRef, item.id));
 
-                const updatedUsedItemsForLog = [];
+                // Plan new selections
+                const plannedNewRefs = [];
                 for (const item of newLogData.items) {
                     for (const len of STANDARD_LENGTHS) {
                         const qty = parseInt(item[`qty${len}`] || 0);
                         if (qty <= 0) continue;
 
-                        const matchingSheets = inventory.filter(
-                            (i) => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !originalItemIds.includes(i.id)
-                        ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                        const matchingSheets = inventory
+                            .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !originalItemIds.includes(i.id))
+                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
                         const sheetsToUse = matchingSheets.slice(0, qty);
-
                         if (sheetsToUse.length < qty) {
-                            throw new Error(`Concurrency Error: Not enough stock for ${item.materialType} @ ${len}" during edit.`);
+                            throw new Error(`Concurrency Error: Not enough stock for ${item.materialType} @ ${len}\" during edit.`);
                         }
-
-                        for (const sheet of sheetsToUse) {
-                            const stockDocRef = doc(inventoryCollectionRef, sheet.id);
-                            const stockSnap = await transaction.get(stockDocRef);
-                            if (!stockSnap.exists()) {
-                                throw new Error('Selected stock no longer exists during edit.');
-                            }
-                            const current = stockSnap.data();
-                            if (current.status !== 'On Hand') {
-                                throw new Error('Selected stock became unavailable during edit.');
-                            }
-                            transaction.update(stockDocRef, {
-                                status: 'Used',
-                                usageLogId: originalLog.id,
-                                jobNameUsed: newLogData.jobName,
-                                customerUsed: newLogData.customer,
-                                usedAt: new Date().toISOString()
-                            });
-                            updatedUsedItemsForLog.push({ id: sheet.id, ...current });
-                        }
+                        sheetsToUse.forEach(s => plannedNewRefs.push(doc(inventoryCollectionRef, s.id)));
                     }
+                }
+
+                // READS first: validate returns and new selections
+                const updatedUsedItemsForLog = [];
+                const validReturnRefs = [];
+
+                for (const r of returnRefs) {
+                    const snap = await transaction.get(r);
+                    if (!snap.exists()) continue;
+                    const current = snap.data();
+                    if (current.status === 'Used' && current.usageLogId === originalLog.id) {
+                        validReturnRefs.push(r);
+                    }
+                }
+
+                for (const r of plannedNewRefs) {
+                    const snap = await transaction.get(r);
+                    if (!snap.exists()) {
+                        throw new Error('Selected stock no longer exists during edit.');
+                    }
+                    const current = snap.data();
+                    if (current.status !== 'On Hand') {
+                        throw new Error('Selected stock became unavailable during edit.');
+                    }
+                    updatedUsedItemsForLog.push({ id: r.id, ...current });
+                }
+
+                // WRITES: return then use
+                for (const r of validReturnRefs) {
+                    transaction.update(r, {
+                        status: 'On Hand',
+                        usageLogId: null,
+                        jobNameUsed: null,
+                        customerUsed: null,
+                        usedAt: null,
+                    });
+                }
+
+                const nowIso = new Date().toISOString();
+                for (const r of plannedNewRefs) {
+                    transaction.update(r, {
+                        status: 'Used',
+                        usageLogId: originalLog.id,
+                        jobNameUsed: newLogData.jobName,
+                        customerUsed: newLogData.customer,
+                        usedAt: nowIso,
+                    });
                 }
 
                 transaction.update(logDocRef, {
@@ -963,7 +1033,6 @@ export default function App() {
                     customer: newLogData.customer,
                     details: updatedUsedItemsForLog,
                     qty: -updatedUsedItemsForLog.length,
-                    // Allow editing the usedAt date for completed logs if provided
                     ...(newLogData.date ? { usedAt: new Date(newLogData.date + 'T00:00:00').toISOString() } : {})
                 });
             });
@@ -1041,6 +1110,8 @@ export default function App() {
                     costBySupplier={costBySupplier}
                     analyticsByCategory={analyticsByCategory}
                 />;
+            case 'sheet-calculator':
+                return <SheetCostCalculatorView />;
             case 'reorder':
                 return <ReorderView
                     inventorySummary={inventorySummary}

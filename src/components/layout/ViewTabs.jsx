@@ -23,6 +23,7 @@ export const ViewTabs = ({ activeView, setActiveView, categories }) => {
         { label: 'Logs', view: 'logs' },
         { label: 'Price History', view: 'price-history' },
         { label: 'Analytics', view: 'analytics' },
+        { label: 'Sheet Calculator', view: 'sheet-calculator' },
         { label: 'Reorder', view: 'reorder' }
     ];
 

@@ -1,9 +1,10 @@
 // src/views/PriceHistoryView.jsx
 
-import React, { useState, useMemo } from 'react';
-import { Download } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Download, ChevronDown, Check } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { exportToCSV } from '../utils/csvExport';
+import { calculateSheetCost } from '../utils/dataProcessing';
 
 export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
     // State to hold the selected material type for filtering
@@ -39,7 +40,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
             return true;
         });
 
-        // Now, create a de-duplicated list of unique price points
+        // Now, create a de-duplicated list of unique price points (ignore dimensions)
         const uniquePricePoints = new Map();
         filteredInventory.forEach(item => {
             const dateKey = (item.dateReceived || item.createdAt).split('T')[0];
@@ -87,22 +88,114 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
     };
 
 
+    // Lightweight custom select to have full control over menu size and styling
+    const CompactSelect = ({ value, onChange, options, className = '' }) => {
+        const [isOpen, setIsOpen] = useState(false);
+        const [highlightIndex, setHighlightIndex] = useState(() => Math.max(0, options.indexOf(value)));
+        const containerRef = useRef(null);
+
+        useEffect(() => {
+            const handleClickOutside = (event) => {
+                if (containerRef.current && !containerRef.current.contains(event.target)) {
+                    setIsOpen(false);
+                }
+            };
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }, []);
+
+        useEffect(() => {
+            setHighlightIndex(Math.max(0, options.indexOf(value)));
+        }, [value, options]);
+
+        const getLabel = (opt) => (opt === 'All' ? 'All Materials' : opt);
+
+        const handleKeyDown = (e) => {
+            if (!isOpen && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                setIsOpen(true);
+                return;
+            }
+            if (!isOpen) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setHighlightIndex((prev) => Math.min(options.length - 1, prev + 1));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setHighlightIndex((prev) => Math.max(0, prev - 1));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                onChange(options[highlightIndex]);
+                setIsOpen(false);
+            } else if (e.key === 'Escape') {
+                setIsOpen(false);
+            }
+        };
+
+        return (
+            <div ref={containerRef} className={`relative ${className}`}>
+                <button
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded={isOpen}
+                    onClick={() => setIsOpen((o) => !o)}
+                    onKeyDown={handleKeyDown}
+                    className="w-full bg-zinc-800 text-white border border-zinc-600 rounded-md px-3 py-1.5 text-sm flex items-center justify-between shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+                >
+                    <span className="truncate">{getLabel(value)}</span>
+                    <ChevronDown className="w-4 h-4 text-zinc-300 ml-2" />
+                </button>
+
+                {isOpen && (
+                    <ul
+                        role="listbox"
+                        className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-zinc-700 bg-zinc-800 shadow-lg text-sm custom-scrollbar"
+                    >
+                        {options.map((opt, idx) => {
+                            const selected = opt === value;
+                            const highlighted = idx === highlightIndex;
+                            return (
+                                <li
+                                    key={opt}
+                                    role="option"
+                                    aria-selected={selected}
+                                    onMouseEnter={() => setHighlightIndex(idx)}
+                                    onMouseDown={(e) => {
+                                        // onMouseDown to prevent blur before click registers
+                                        e.preventDefault();
+                                        onChange(opt);
+                                        setIsOpen(false);
+                                    }}
+                                    className={`px-3 py-1.5 cursor-pointer flex items-center gap-2 ${highlighted ? 'bg-blue-800 text-white' : 'hover:bg-zinc-700/60'} ${selected ? 'font-semibold' : ''}`}
+                                >
+                                    {selected ? <Check className="w-4 h-4" /> : <span className="w-4 h-4" />}
+                                    <span className="truncate">{getLabel(opt)}</span>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
-            <div className="flex flex-col md:flex-row justify-between md:items-center mb-4 gap-4">
-                <h2 className="text-xl md:text-2xl font-bold text-white">Price History</h2>
-                <div className="flex items-center gap-4">
-                    {/* Dropdown for selecting material type */}
-                    <select
-                        value={selectedMaterialType}
-                        onChange={(e) => setSelectedMaterialType(e.target.value)}
-                        className="bg-zinc-700 text-white border border-zinc-600 rounded-md px-3 py-2 text-sm md:text-base"
-                    >
-                        {materialTypesForFilter.map(m => <option key={m} value={m}>{m === 'All' ? 'All Materials' : m}</option>)}
-                    </select>
-                    <Button onClick={handleExport} variant="secondary">
-                        <Download size={16} /> <span className="hidden sm:inline">Export</span>
-                    </Button>
+            <div className="mb-4">
+                <div className="flex flex-wrap items-center gap-3 bg-zinc-700/40 border border-zinc-600/40 rounded-md px-3 py-2">
+                    <h2 className="text-xl md:text-2xl font-bold text-white mr-3">Price History</h2>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {/* Dropdown for selecting material type */}
+                        <CompactSelect
+                            value={selectedMaterialType}
+                            onChange={setSelectedMaterialType}
+                            options={materialTypesForFilter}
+                            className="w-full sm:w-72 min-w-[220px]"
+                        />
+                        <Button onClick={handleExport} variant="secondary" className="shrink-0">
+                            <Download size={16} /> <span className="hidden sm:inline">Export</span>
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -115,18 +208,29 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
                             <th className="p-2 font-semibold text-zinc-400">Supplier</th>
                             <th className="p-2 font-semibold text-zinc-400">Material</th>
                             <th className="p-2 font-semibold text-zinc-400 text-right">Cost Per Pound</th>
+                            <th className="p-2 font-semibold text-zinc-400 text-right">96</th>
+                            <th className="p-2 font-semibold text-zinc-400 text-right">120</th>
+                            <th className="p-2 font-semibold text-zinc-400 text-right">144</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {priceHistory.map((order, index) => (
-                            <tr key={order.id || index} className={`border-b border-zinc-700 last:border-b-0 ${index % 2 === 0 ? 'bg-zinc-800' : 'bg-zinc-800/50'}`}>
-                                <td className="p-2">{new Date(order.dateReceived).toLocaleDateString()}</td>
-                                <td className="p-2">{order.job}</td>
-                                <td className="p-2">{order.supplier}</td>
-                                <td className="p-2">{order.materialType}</td>
-                                <td className="p-2 text-right font-mono text-green-400">${order.costPerPound.toFixed(2)}</td>
-                            </tr>
-                        ))}
+                        {priceHistory.map((order, index) => {
+                            const price96 = calculateSheetCost({ materialType: order.materialType, length: 96, width: 48, costPerPound: order.costPerPound }, materials);
+                            const price120 = calculateSheetCost({ materialType: order.materialType, length: 120, width: 48, costPerPound: order.costPerPound }, materials);
+                            const price144 = calculateSheetCost({ materialType: order.materialType, length: 144, width: 48, costPerPound: order.costPerPound }, materials);
+                            return (
+                                <tr key={order.id || index} className={`border-b border-zinc-700 last:border-b-0 ${index % 2 === 0 ? 'bg-zinc-800' : 'bg-zinc-800/50'}`}>
+                                    <td className="p-2">{new Date(order.dateReceived).toLocaleDateString()}</td>
+                                    <td className="p-2">{order.job}</td>
+                                    <td className="p-2">{order.supplier}</td>
+                                    <td className="p-2">{order.materialType}</td>
+                                    <td className="p-2 text-right font-mono text-green-400">${order.costPerPound.toFixed(2)}</td>
+                                    <td className="p-2 text-right font-mono">${price96.toFixed(2)}</td>
+                                    <td className="p-2 text-right font-mono">${price120.toFixed(2)}</td>
+                                    <td className="p-2 text-right font-mono">${price144.toFixed(2)}</td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
                 {priceHistory.length === 0 && <p className="text-center text-zinc-400 py-8">No price history available for this material type or search query.</p>}

@@ -74,31 +74,32 @@ export function useFirestoreData() {
                     }, {});
 
                     let canFulfill = true;
-                    const inventoryToUpdate = [];
+                    const selectedSheets = [];
 
                     for (const [key, qty] of Object.entries(itemsNeeded)) {
                         const [materialType, lengthStr] = key.split('|');
                         const length = parseInt(lengthStr, 10);
 
-                        const availableSheets = currentInventory.filter(i =>
-                            i.materialType === materialType && i.length === length && i.status === 'On Hand'
-                        ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                        const availableSheets = currentInventory
+                            .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
+                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
                         if (availableSheets.length < qty) {
                             canFulfill = false;
-                            console.warn(`Cannot fulfill scheduled log ${log.id}: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
+                            console.warn(`Cannot fulfill scheduled log ${log.id}: Not enough stock for ${qty}x ${materialType} @ ${length}\". Only ${availableSheets.length} available.`);
                             break;
                         }
-                        inventoryToUpdate.push(...availableSheets.slice(0, qty));
+                        selectedSheets.push(...availableSheets.slice(0, qty));
                     }
 
                     if (!canFulfill) return;
 
+                    // READS: validate all docs first
+                    const refs = selectedSheets.map(s => doc(db, `artifacts/${appId}/public/data/inventory`, s.id));
                     const usedAtIso = now.toISOString();
                     const updatedDetails = [];
-                    for (const sheet of inventoryToUpdate) {
-                        const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, sheet.id);
-                        const snap = await transaction.get(docRef);
+                    for (const r of refs) {
+                        const snap = await transaction.get(r);
                         if (!snap.exists()) {
                             throw new Error('Selected stock no longer exists during scheduled fulfillment.');
                         }
@@ -106,21 +107,25 @@ export function useFirestoreData() {
                         if (current.status !== 'On Hand') {
                             throw new Error('Selected stock is no longer available during scheduled fulfillment.');
                         }
-                        transaction.update(docRef, {
+                        updatedDetails.push({ id: r.id, ...current });
+                    }
+
+                    // WRITES
+                    for (const r of refs) {
+                        transaction.update(r, {
                             status: 'Used',
                             usageLogId: log.id,
                             jobNameUsed: log.job,
                             customerUsed: log.customer,
-                            usedAt: usedAtIso
+                            usedAt: usedAtIso,
                         });
-                        updatedDetails.push({ id: sheet.id, ...current });
                     }
 
                     const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
                     transaction.update(logDocRef, {
                         status: 'Completed',
                         details: updatedDetails,
-                        fulfilledAt: usedAtIso
+                        fulfilledAt: usedAtIso,
                     });
                 }).catch(err => console.error(`Failed transaction for scheduled log ${log.id}:`, err));
             }
