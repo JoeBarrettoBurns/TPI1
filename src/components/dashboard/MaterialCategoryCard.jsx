@@ -8,7 +8,7 @@ import { STANDARD_LENGTHS } from '../../constants/materials';
 import { GripVertical, Trash2, RotateCcw } from 'lucide-react';
 import { useFirestoreDnd } from '../../hooks/useFirestoreDnd';
 
-export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingSummary, isEditMode, onSave, onMaterialClick, materials, isDragging, onDeleteCategory, isMarkedForDeletion }) => {
+export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingSummary, scheduledOutgoingSummary, isEditMode, onSave, onMaterialClick, materials, isDragging, onDeleteCategory, isMarkedForDeletion }) => {
     const {
         attributes,
         listeners,
@@ -187,7 +187,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
     );
 };
 
-function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, inventorySummary, incomingSummary, editingCell, setEditingCell, editValue, setEditValue, handleEditSave, getStockStyle }) {
+function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, inventorySummary, incomingSummary, scheduledOutgoingSummary, editingCell, setEditingCell, editValue, setEditValue, handleEditSave, getStockStyle }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !isEditMode });
 
     const style = {
@@ -212,6 +212,7 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
                 const isEditingCell = isEditMode && editingCell?.matType === matType && editingCell?.len === len;
                 const stockCount = inventorySummary[matType]?.[len] || 0;
                 const incomingCount = incomingSummary[matType]?.lengths[len] || 0;
+                const scheduledOutCount = scheduledOutgoingSummary?.[matType]?.lengths?.[len] || 0;
                 const { style: stockStyle, textColor } = getStockStyle(stockCount);
 
                 return (
@@ -241,6 +242,11 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
                         {incomingCount > 0 && (
                             <div className="text-xs text-yellow-400 mt-1" title={`${incomingCount} sheets incoming`}>
                                 (+{incomingCount} incoming)
+                            </div>
+                        )}
+                        {scheduledOutCount > 0 && (
+                            <div className="text-xs text-purple-300 mt-1" title={`${scheduledOutCount} sheets scheduled for use`}>
+                                (-{scheduledOutCount} scheduled)
                             </div>
                         )}
                     </td>

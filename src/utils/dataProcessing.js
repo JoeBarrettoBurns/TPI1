@@ -51,6 +51,45 @@ export const calculateIncomingSummary = (inventory, materialTypes) => {
     return summary;
 };
 
+// Summarize scheduled outgoing usage by material and length
+export const calculateScheduledOutgoingSummary = (usageLog, materialTypes) => {
+    const summary = {};
+    materialTypes.forEach(type => {
+        summary[type] = {
+            lengths: { ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {}), custom: 0 },
+            totalCount: 0,
+            earliestUseDate: null,
+        };
+    });
+
+    (usageLog || [])
+        .filter(log => (log.status || '') === 'Scheduled')
+        .forEach(log => {
+            (log.details || []).forEach(d => {
+                const type = d.materialType;
+                if (!summary[type]) return;
+                if (STANDARD_LENGTHS.includes(d.length)) {
+                    summary[type].lengths[d.length]++;
+                } else {
+                    summary[type].lengths.custom++;
+                }
+                summary[type].totalCount++;
+            });
+            if (log.usedAt) {
+                const current = summary[(log.details?.[0]?.materialType) || '']?.earliestUseDate;
+                const ts = log.usedAt;
+                if (!current || new Date(ts) < new Date(current)) {
+                    const typeForEarliest = (log.details?.[0]?.materialType) || null;
+                    if (typeForEarliest && summary[typeForEarliest]) {
+                        summary[typeForEarliest].earliestUseDate = ts;
+                    }
+                }
+            }
+        });
+
+    return summary;
+};
+
 export const calculateSheetCost = (sheet, materials) => {
     const materialInfo = materials[sheet.materialType];
     if (!materialInfo || !materialInfo.density || !materialInfo.thickness || !sheet.costPerPound) return 0;

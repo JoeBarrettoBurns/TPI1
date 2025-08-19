@@ -21,7 +21,7 @@ export const ViewTabs = ({ activeView, setActiveView, categories }) => {
         { label: 'Dashboard', view: 'dashboard' },
         { label: 'Jobs', view: 'jobs' },
         { label: 'Logs', view: 'logs' },
-        { label: 'Analytics', view: 'analytics' },
+        { label: 'Price History', view: 'price-history' },
         { label: 'Sheet Calculator', view: 'sheet-calculator' },
         { label: 'Reorder', view: 'reorder' }
     ];

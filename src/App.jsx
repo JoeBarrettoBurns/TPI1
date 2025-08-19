@@ -11,6 +11,7 @@ import { usePersistentState } from './hooks/usePersistentState';
 import {
     calculateInventorySummary,
     calculateIncomingSummary,
+    calculateScheduledOutgoingSummary,
     getGaugeFromMaterial,
     calculateCostBySupplier,
     calculateAnalyticsByCategory,
@@ -30,7 +31,7 @@ import { AuthView } from './views/AuthView';
 import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
-import { CostAnalyticsView } from './views/CostAnalyticsView';
+import { PriceHistoryView } from './views/PriceHistoryView';
 import { ReorderView } from './views/ReorderView';
 import { JobOverviewView } from './views/JobOverviewView';
 import { SheetCostCalculatorView } from './views/SheetCostCalculatorView';
@@ -143,8 +144,8 @@ export default function App() {
     const allJobs = useMemo(() => groupLogsByJob(inventory, usageLog), [inventory, usageLog]);
     const inventorySummary = useMemo(() => calculateInventorySummary(inventory, materialTypes), [inventory, materialTypes]);
     const incomingSummary = useMemo(() => calculateIncomingSummary(inventory, materialTypes), [inventory, materialTypes]);
+    const scheduledOutgoingSummary = useMemo(() => calculateScheduledOutgoingSummary(usageLog, materialTypes), [usageLog, materialTypes]);
     const costBySupplier = useMemo(() => calculateCostBySupplier(inventory, materials), [inventory, materials]);
-    const analyticsByCategory = useMemo(() => calculateAnalyticsByCategory(inventory, materials), [inventory, materials]);
 
     const handleSignOut = useCallback(() => {
         localStorage.removeItem('isLoggedIn');
@@ -175,7 +176,7 @@ export default function App() {
             { type: 'view', name: 'Dashboard', id: 'dashboard' },
             { type: 'view', name: 'Jobs', id: 'jobs' },
             { type: 'view', name: 'Logs', id: 'logs' },
-            { type: 'view', name: 'Analytics', id: 'analytics' },
+            { type: 'view', name: 'Price History', id: 'price-history' },
             { type: 'view', name: 'Sheet Calculator', id: 'sheet-calculator' },
             { type: 'view', name: 'Reorder', id: 'reorder' },
         ];
@@ -1163,6 +1164,7 @@ export default function App() {
                         <DashboardView
                             inventorySummary={inventorySummary}
                             incomingSummary={incomingSummary}
+                            scheduledOutgoingSummary={scheduledOutgoingSummary}
                             isEditMode={isEditMode}
                             materials={materials}
                             categories={categories}
@@ -1203,11 +1205,8 @@ export default function App() {
                     onReceiveOrder={handleReceiveOrder}
                     searchQuery={searchQuery}
                 />;
-            case 'analytics':
-                return <CostAnalyticsView
-                    costBySupplier={costBySupplier}
-                    analyticsByCategory={analyticsByCategory}
-                />;
+            case 'price-history':
+                return <PriceHistoryView inventory={inventory} materials={materials} searchQuery={searchQuery} />;
             case 'sheet-calculator':
                 return <SheetCostCalculatorView />;
             case 'reorder':

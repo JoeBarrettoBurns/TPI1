@@ -8,6 +8,7 @@ import { MaterialCategoryCard } from '../components/dashboard/MaterialCategoryCa
 export const DashboardView = ({
     inventorySummary,
     incomingSummary,
+    scheduledOutgoingSummary,
     isEditMode,
     onSave,
     onMaterialClick,
@@ -42,6 +43,7 @@ export const DashboardView = ({
                         category={category}
                         inventorySummary={inventorySummary}
                         incomingSummary={incomingSummary}
+                        scheduledOutgoingSummary={scheduledOutgoingSummary}
                         isEditMode={isEditMode}
                         onSave={onSave}
                         onMaterialClick={onMaterialClick}
@@ -59,6 +61,7 @@ export const DashboardView = ({
                         category={activeCategory}
                         inventorySummary={inventorySummary}
                         incomingSummary={incomingSummary}
+                        scheduledOutgoingSummary={scheduledOutgoingSummary}
                         isEditMode={isEditMode}
                         onSave={onSave}
                         onMaterialClick={onMaterialClick}
