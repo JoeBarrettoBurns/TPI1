@@ -63,7 +63,15 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
     const allTransactions = {};
     materialTypes.forEach(matType => {
         const groupedInventory = {};
-        inventory.filter(item => item.materialType === matType).forEach(item => {
+        inventory
+            .filter(item => item.materialType === matType)
+            // Hide internal/server-side only inventory adjustments from UI transactions
+            .filter(item => !(
+                (item.job || '').startsWith('MODIFICATION') ||
+                (item.supplier === 'Manual Edit') ||
+                (item.supplier === 'Rescheduled Return')
+            ))
+            .forEach(item => {
             const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
             if (!groupedInventory[key]) {
                 groupedInventory[key] = {

@@ -25,6 +25,14 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
 
     if (!isOpen || !logEntry) return null;
 
+    // Prefer usedAt for outgoing usage logs; prefer arrivalDate/date for incoming
+    const displayDateIso = (() => {
+        if (logEntry.arrivalDate) return logEntry.arrivalDate;
+        if (logEntry.status) return logEntry.usedAt || logEntry.createdAt;
+        if (logEntry.isAddition) return logEntry.arrivalDate || logEntry.date || logEntry.createdAt;
+        return logEntry.usedAt || logEntry.date || logEntry.createdAt;
+    })();
+
     const calculateWeight = (item) => {
         const material = materials[item.materialType];
         if (!material) return 0;
@@ -39,7 +47,7 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
     return (
         <BaseModal onClose={onClose} title="Log Entry Details">
             <div className="space-y-4 text-slate-300">
-                <p><strong className="text-slate-400">Date:</strong> {new Date(logEntry.date || logEntry.usedAt || logEntry.createdAt).toLocaleString()}</p>
+                <p><strong className="text-slate-400">Date:</strong> {displayDateIso ? new Date(displayDateIso).toLocaleString() : 'N/A'}</p>
                 <p><strong className="text-slate-400">Job/PO:</strong> {logEntry.job}</p>
                 <p><strong className="text-slate-400">Customer/Supplier:</strong> {logEntry.customer}</p>
                 {logEntry.description && <p><strong className="text-slate-400">Description:</strong> {logEntry.description}</p>}

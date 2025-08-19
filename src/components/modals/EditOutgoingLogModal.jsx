@@ -27,7 +27,17 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                 }
             });
 
-            const dateForInput = logEntry.usedAt ? new Date(logEntry.usedAt).toISOString().split('T')[0] : '';
+            // Format to YYYY-MM-DD using local time components to avoid off-by-one
+            const formatDateForInput = (isoString) => {
+                if (!isoString) return '';
+                const d = new Date(isoString);
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            const dateForInput = formatDateForInput(logEntry.usedAt || logEntry.createdAt);
 
             setJobData({
                 jobName: logEntry.job || '',

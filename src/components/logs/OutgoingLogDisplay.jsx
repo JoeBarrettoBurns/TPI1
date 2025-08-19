@@ -27,8 +27,9 @@ export const OutgoingLogDisplay = ({ usageLog, onRowClick, onDelete, onEdit, onF
             .filter(item => {
                 const job = item.job || '';
                 const isModification = job.startsWith('MODIFICATION');
-                // Show standard usage logs OR negative modifications (stock removal)
-                return (item.customer && !isModification) || (isModification && item.qty < 0);
+                // Hide all modification entries from UI; they are server-side only
+                if (isModification) return false;
+                return !!item.customer;
             })
             .map(item => ({
                 ...item,

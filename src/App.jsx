@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where } from 'firebase/firestore';
+import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where, getDoc } from 'firebase/firestore';
 import Fuse from 'fuse.js';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
@@ -31,7 +31,6 @@ import { DashboardView } from './views/DashboardView';
 import { LogsView } from './views/LogsView';
 import { MaterialDetailView } from './views/MaterialDetailView';
 import { CostAnalyticsView } from './views/CostAnalyticsView';
-import { PriceHistoryView } from './views/PriceHistoryView';
 import { ReorderView } from './views/ReorderView';
 import { JobOverviewView } from './views/JobOverviewView';
 import { SheetCostCalculatorView } from './views/SheetCostCalculatorView';
@@ -176,7 +175,6 @@ export default function App() {
             { type: 'view', name: 'Dashboard', id: 'dashboard' },
             { type: 'view', name: 'Jobs', id: 'jobs' },
             { type: 'view', name: 'Logs', id: 'logs' },
-            { type: 'view', name: 'Price History', id: 'price-history' },
             { type: 'view', name: 'Analytics', id: 'analytics' },
             { type: 'view', name: 'Sheet Calculator', id: 'sheet-calculator' },
             { type: 'view', name: 'Reorder', id: 'reorder' },
@@ -367,11 +365,13 @@ export default function App() {
 
                     if (itemsForLog.length > 0) {
                         const logDocRef = doc(usageLogCollectionRef);
+                        // Schedule at end-of-day to prevent immediate auto-fulfill for "today"
+                        const scheduledUsedAtIso = new Date(scheduledDate + 'T23:59:59').toISOString();
                         const logEntry = {
                             job: job.jobName.trim() || 'N/A',
                             customer: job.customer,
                             createdAt: new Date().toISOString(),
-                            usedAt: new Date(scheduledDate + 'T00:00:00').toISOString(),
+                            usedAt: scheduledUsedAtIso,
                             status: 'Scheduled',
                             details: itemsForLog,
                             qty: -totalItems,
@@ -496,16 +496,10 @@ export default function App() {
                     validatedDetails.push({ id: r.id, ...current });
                 }
 
-                // WRITES
+                // WRITES: delete selected sheets to fully consume them
                 const nowIso = new Date().toISOString();
                 for (const r of refs) {
-                    transaction.update(r, {
-                        status: 'Used',
-                        usageLogId: logToFulfill.id,
-                        jobNameUsed: logToFulfill.job,
-                        customerUsed: logToFulfill.customer,
-                        usedAt: nowIso,
-                    });
+                    transaction.delete(r);
                 }
 
                 const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
@@ -720,24 +714,35 @@ export default function App() {
             const isCompleted = (logData.status || 'Completed') === 'Completed';
             const details = Array.isArray(logData.details) ? logData.details : [];
 
+            // Plan reads first: gather all candidate inventory refs to revert
+            const candidateRefs = [];
             if (isCompleted && details.length > 0) {
                 for (const d of details) {
                     if (!d?.id) continue;
-                    const invRef = doc(db, `artifacts/${appId}/public/data/inventory`, d.id);
-                    const invSnap = await transaction.get(invRef);
-                    if (!invSnap.exists()) continue;
-                    const inv = invSnap.data();
-                    // Only revert sheets that were actually consumed by this log
-                    if (inv.status === 'Used' && inv.usageLogId === logId) {
-                        transaction.update(invRef, {
-                            status: 'On Hand',
-                            usageLogId: null,
-                            jobNameUsed: null,
-                            customerUsed: null,
-                            usedAt: null
-                        });
-                    }
+                    candidateRefs.push(doc(db, `artifacts/${appId}/public/data/inventory`, d.id));
                 }
+            }
+
+            // READS: validate inventory docs that should be reverted
+            const validReturnRefs = [];
+            for (const r of candidateRefs) {
+                const snap = await transaction.get(r);
+                if (!snap.exists()) continue;
+                const current = snap.data();
+                if (current.status === 'Used' && current.usageLogId === logId) {
+                    validReturnRefs.push(r);
+                }
+            }
+
+            // WRITES: revert inventory first, then delete the log
+            for (const r of validReturnRefs) {
+                transaction.update(r, {
+                    status: 'On Hand',
+                    usageLogId: null,
+                    jobNameUsed: null,
+                    customerUsed: null,
+                    usedAt: null
+                });
             }
 
             transaction.delete(logDocRef);
@@ -822,7 +827,12 @@ export default function App() {
     const handleEditOutgoingLog = async (originalLog, newLogData) => {
         const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, originalLog.id);
 
-        if (originalLog.status === 'Scheduled') {
+        // Always fetch the latest log status from Firestore to avoid relying on derived objects
+        const latestSnap = await getDoc(logDocRef);
+        const latestLog = latestSnap.exists() ? { id: latestSnap.id, ...latestSnap.data() } : originalLog;
+        const latestStatus = (latestLog.status || 'Completed');
+
+        if (latestStatus === 'Scheduled') {
             const newDetails = [];
             let totalItems = 0;
             for (const item of newLogData.items) {
@@ -842,17 +852,84 @@ export default function App() {
                     }
                 }
             }
-            await updateDoc(logDocRef, {
-                job: newLogData.jobName.trim() || 'N/A',
-                customer: newLogData.customer,
-                usedAt: new Date(newLogData.date + 'T00:00:00').toISOString(),
-                details: newDetails,
-                qty: -totalItems
-            });
+
+            // Build target date at local midnight to avoid timezone drift
+            const targetDate = new Date(`${newLogData.date}T00:00:00`);
+            const now = new Date();
+
+            // If the scheduled date is today or earlier, fulfill immediately
+            if (targetDate <= now) {
+                await runTransaction(db, async (transaction) => {
+                    const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+
+                    // Determine items needed by type/length
+                    const itemsNeeded = newDetails.reduce((acc, d) => {
+                        const key = `${d.materialType}|${d.length}`;
+                        acc[key] = (acc[key] || 0) + 1;
+                        return acc;
+                    }, {});
+
+                    const selectedRefs = [];
+                    for (const [key, qty] of Object.entries(itemsNeeded)) {
+                        const [materialType, lengthStr] = key.split('|');
+                        const length = parseInt(lengthStr, 10);
+                        const availableSheets = inventory
+                            .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
+                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                        if (availableSheets.length < qty) {
+                            throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}\". Only ${availableSheets.length} available.`);
+                        }
+                        availableSheets.slice(0, qty).forEach(s => selectedRefs.push(doc(inventoryCollectionRef, s.id)));
+                    }
+
+                    // Validate all selected docs
+                    const validatedDetails = [];
+                    for (const r of selectedRefs) {
+                        const snap = await transaction.get(r);
+                        if (!snap.exists()) {
+                            throw new Error('Selected stock no longer exists during fulfillment.');
+                        }
+                        const current = snap.data();
+                        if (current.status !== 'On Hand') {
+                            throw new Error('Selected stock is no longer available during fulfillment.');
+                        }
+                        validatedDetails.push({ id: r.id, ...current });
+                    }
+
+                    // Update inventory (delete) and usage log
+                    const usedAtIso = new Date().toISOString();
+                    for (const r of selectedRefs) {
+                        transaction.delete(r);
+                    }
+
+                    transaction.update(logDocRef, {
+                        job: newLogData.jobName.trim() || 'N/A',
+                        customer: newLogData.customer,
+                        status: 'Completed',
+                        details: validatedDetails,
+                        qty: -validatedDetails.length,
+                        usedAt: usedAtIso,
+                        fulfilledAt: usedAtIso,
+                    });
+                });
+            } else {
+                // Save as scheduled at end-of-day to avoid immediate auto-fulfill
+                const scheduledUsedAtIso = new Date(`${newLogData.date}T23:59:59`).toISOString();
+                await updateDoc(logDocRef, {
+                    job: newLogData.jobName.trim() || 'N/A',
+                    customer: newLogData.customer,
+                    usedAt: scheduledUsedAtIso,
+                    details: newDetails,
+                    qty: -totalItems,
+                    status: 'Scheduled',
+                    fulfilledAt: null,
+                });
+            }
         } else {
             // Logic for editing a COMPLETED log
             const now = new Date();
-            const targetDate = newLogData.date ? new Date(newLogData.date + 'T00:00:00') : null;
+            // Build target date at local midnight to avoid timezone drift
+            const targetDate = newLogData.date ? new Date(`${newLogData.date}T00:00:00`) : null;
             const shouldRevertToScheduled = targetDate && targetDate > now;
 
             if (shouldRevertToScheduled) {
@@ -860,7 +937,7 @@ export default function App() {
                     const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
                     // Return currently used items for this log (that still exist) back to On Hand
-                    const originalItemIds = (originalLog.details || []).map(d => d.id).filter(Boolean);
+                    const originalItemIds = (latestLog.details || []).map(d => d.id).filter(Boolean);
                     const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
                     const returnRefs = itemsToReturn.map(i => doc(inventoryCollectionRef, i.id));
 
@@ -870,7 +947,7 @@ export default function App() {
                         const snap = await transaction.get(r);
                         if (!snap.exists()) continue;
                         const current = snap.data();
-                        if (current.status === 'Used' && current.usageLogId === originalLog.id) {
+                        if (current.status === 'Used' && current.usageLogId === latestLog.id) {
                             validReturnRefs.push(r);
                         }
                     }
@@ -884,6 +961,30 @@ export default function App() {
                             customerUsed: null,
                             usedAt: null,
                         });
+                    }
+
+                    // For any items that no longer exist or are not revertable, recreate a matching sheet back to On Hand
+                    const validReturnIds = new Set(validReturnRefs.map(ref => ref.id));
+                    const missingDetails = (latestLog.details || []).filter(d => d.id && !validReturnIds.has(d.id));
+                    const nowIso = new Date().toISOString();
+                    for (const d of missingDetails) {
+                        const recreated = {
+                            materialType: d.materialType,
+                            gauge: d.gauge ?? getGaugeFromMaterial(d.materialType),
+                            supplier: d.supplier || 'Rescheduled Return',
+                            costPerPound: d.costPerPound || 0,
+                            createdAt: nowIso,
+                            job: d.job || 'N/A',
+                            status: 'On Hand',
+                            arrivalDate: null,
+                            dateReceived: nowIso.slice(0, 10),
+                            width: d.width || 48,
+                            length: d.length,
+                            density: d.density ?? materials[d.materialType]?.density ?? 0,
+                            thickness: d.thickness ?? materials[d.materialType]?.thickness ?? 0,
+                        };
+                        const newRef = doc(inventoryCollectionRef);
+                        transaction.set(newRef, recreated);
                     }
 
                     // Build new scheduled details (no concrete sheet IDs)
@@ -909,10 +1010,13 @@ export default function App() {
                         }
                     }
 
+                    // Schedule at end-of-day to avoid immediate auto-fulfill
+                    const localYmd = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+                    const scheduledUsedAtIso = new Date(`${localYmd}T23:59:59`).toISOString();
                     transaction.update(logDocRef, {
                         job: newLogData.jobName.trim() || 'N/A',
                         customer: newLogData.customer,
-                        usedAt: targetDate.toISOString(),
+                        usedAt: scheduledUsedAtIso,
                         details: newDetails,
                         qty: -totalItems,
                         status: 'Scheduled',
@@ -926,7 +1030,7 @@ export default function App() {
                 const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
                 const netChange = {};
-                (originalLog.details || []).forEach(item => {
+                (latestLog.details || []).forEach(item => {
                     const key = `${item.materialType}|${item.length}`;
                     netChange[key] = (netChange[key] || 0) + 1;
                 });
@@ -958,7 +1062,7 @@ export default function App() {
                     }
                 }
 
-                const originalItemIds = (originalLog.details || []).map(d => d.id);
+                const originalItemIds = (latestLog.details || []).map(d => d.id);
                 const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
                 const returnRefs = itemsToReturn.map(item => doc(inventoryCollectionRef, item.id));
 
@@ -989,7 +1093,7 @@ export default function App() {
                     const snap = await transaction.get(r);
                     if (!snap.exists()) continue;
                     const current = snap.data();
-                    if (current.status === 'Used' && current.usageLogId === originalLog.id) {
+                    if (current.status === 'Used' && current.usageLogId === latestLog.id) {
                         validReturnRefs.push(r);
                     }
                 }
@@ -1021,7 +1125,7 @@ export default function App() {
                 for (const r of plannedNewRefs) {
                     transaction.update(r, {
                         status: 'Used',
-                        usageLogId: originalLog.id,
+                        usageLogId: latestLog.id,
                         jobNameUsed: newLogData.jobName,
                         customerUsed: newLogData.customer,
                         usedAt: nowIso,
@@ -1097,12 +1201,6 @@ export default function App() {
                     materials={materials}
                     onFulfillLog={handleFulfillScheduledLog}
                     onReceiveOrder={handleReceiveOrder}
-                    searchQuery={searchQuery}
-                />;
-            case 'price-history':
-                return <PriceHistoryView
-                    inventory={inventory}
-                    materials={materials}
                     searchQuery={searchQuery}
                 />;
             case 'analytics':
@@ -1211,9 +1309,9 @@ export default function App() {
 
 
 
-            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} suppliers={suppliers} preselectedMaterial={modal.data?.preselectedMaterial} />}
-            {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} suppliers={suppliers} />}
-            {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
+            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} materials={materials} suppliers={suppliers} preselectedMaterial={modal.data?.preselectedMaterial} />}
+            {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} materials={materials} suppliers={suppliers} />}
+            {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} materials={materials} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
             {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} />}
             {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} supplierInfo={supplierInfo} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} onUpdateSupplierInfo={handleUpdateSupplierInfo} />}

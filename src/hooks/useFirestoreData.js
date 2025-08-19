@@ -110,15 +110,9 @@ export function useFirestoreData() {
                         updatedDetails.push({ id: r.id, ...current });
                     }
 
-                    // WRITES
+                    // WRITES: delete inventory sheets to fully consume
                     for (const r of refs) {
-                        transaction.update(r, {
-                            status: 'Used',
-                            usageLogId: log.id,
-                            jobNameUsed: log.job,
-                            customerUsed: log.customer,
-                            usedAt: usedAtIso,
-                        });
+                        transaction.delete(r);
                     }
 
                     const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);

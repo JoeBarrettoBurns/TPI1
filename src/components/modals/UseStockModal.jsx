@@ -1,6 +1,6 @@
 // src/components/modals/UseStockModal.jsx
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useOrderForm } from '../../hooks/useOrderForm';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
@@ -8,7 +8,7 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X, Calendar, Minus } from 'lucide-react';
 
-export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary, incomingSummary, suppliers }) => {
+export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inventorySummary, incomingSummary, suppliers }) => {
     const {
         jobs,
         setJobField,
@@ -20,6 +20,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [scheduleSuggestion, setScheduleSuggestion] = useState(null);
+    const categories = useMemo(() => [...new Set(Object.values(materials || {}).map(m => m.category))], [materials]);
 
     const clearError = () => {
         setError('');
@@ -99,9 +100,33 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, inventorySummary
                                 return (
                                     <div key={itemIndex} className="border border-slate-700 p-4 rounded-lg bg-slate-800 relative">
                                         {job.items.length > 1 && (<button type="button" onClick={() => removeMaterial(jobIndex, itemIndex)} className="absolute top-2 right-2 text-red-400 hover:text-red-300"><X size={18} /></button>)}
-                                        <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} onChange={(e) => { setItemField(jobIndex, itemIndex, 'materialType', e.target.value); clearError(); }} as="select">
-                                            {materialTypes.map((type) => (<option key={type}>{type}</option>))}
-                                        </FormInput>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            <FormInput
+                                                label={`Category #${itemIndex + 1}`}
+                                                name={`category-${itemIndex}`}
+                                                value={materials[item.materialType]?.category || categories[0] || ''}
+                                                onChange={(e) => {
+                                                    const newCategory = e.target.value;
+                                                    const firstInCat = materialTypes.find(t => (materials[t]?.category) === newCategory) || '';
+                                                    setItemField(jobIndex, itemIndex, 'materialType', firstInCat);
+                                                    clearError();
+                                                }}
+                                                as="select"
+                                            >
+                                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </FormInput>
+                                            <FormInput
+                                                label={`Material Type`}
+                                                name={`materialType-${itemIndex}`}
+                                                value={item.materialType}
+                                                onChange={(e) => { setItemField(jobIndex, itemIndex, 'materialType', e.target.value); clearError(); }}
+                                                as="select"
+                                            >
+                                                {materialTypes
+                                                    .filter(t => (materials[t]?.category) === (materials[item.materialType]?.category || categories[0]))
+                                                    .map(type => <option key={type} value={type}>{type}</option>)}
+                                            </FormInput>
+                                        </div>
                                         <p className="text-sm font-medium text-slate-300 mt-2">Quantities to Use (On Hand):</p>
                                         <div className="grid grid-cols-3 gap-2">
                                             <FormInput label={`96"x48" (${stock96})`} name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => { setItemField(jobIndex, itemIndex, 'qty96', e.target.value); clearError(); }} />

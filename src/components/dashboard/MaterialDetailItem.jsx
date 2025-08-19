@@ -33,10 +33,36 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
     const [logToDelete, setLogToDelete] = useState(null);
     const [numToShow, setNumToShow] = useState(5);
 
-    const matTransactions = transactions[matType] || [];
+    const matTransactions = (transactions[matType] || []).filter(t => !(t.job || '').startsWith('MODIFICATION'));
     const visibleTransactions = matTransactions.slice(0, numToShow);
     const totalIncomingSheets = incomingSummary[matType]?.totalCount || 0;
     const latestArrival = incomingSummary[matType]?.latestArrivalDate;
+
+    // Compute FUTURE USE (scheduled) summary for this material
+    const futureUseByLength = useMemo(() => {
+        const totals = { 96: 0, 120: 0, 144: 0 };
+        (usageLog || [])
+            .filter(log => (log.status || 'Completed') === 'Scheduled' && Array.isArray(log.details))
+            .forEach(log => {
+                log.details.forEach(d => {
+                    if (d.materialType === matType && STANDARD_LENGTHS.includes(d.length)) {
+                        totals[d.length] = (totals[d.length] || 0) + 1;
+                    }
+                });
+            });
+        return totals;
+    }, [usageLog, matType]);
+
+    const totalFutureUseSheets = (futureUseByLength[96] || 0) + (futureUseByLength[120] || 0) + (futureUseByLength[144] || 0);
+    const nextScheduledUse = useMemo(() => {
+        const dates = (usageLog || [])
+            .filter(log => (log.status || 'Completed') === 'Scheduled' && Array.isArray(log.details) && log.details.some(d => d.materialType === matType))
+            .map(log => log.usedAt)
+            .filter(Boolean)
+            .map(d => new Date(d))
+            .sort((a, b) => a - b);
+        return dates.length > 0 ? dates[0] : null;
+    }, [usageLog, matType]);
 
     const handleConfirmDelete = () => {
         if (!logToDelete) return;
@@ -101,6 +127,26 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
                                 {latestArrival && (
                                     <div className="text-xs text-yellow-400 mt-1 text-center sm:text-left">
                                         (Latest Due: {new Date(latestArrival).toLocaleDateString()})
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {totalFutureUseSheets > 0 && (
+                            <div>
+                                <h4 className="text-sm font-semibold text-zinc-400 mb-1">FUTURE USE</h4>
+                                <div className="flex gap-4">
+                                    {STANDARD_LENGTHS.map(len => (
+                                        <div key={len} className="text-center">
+                                            <div className="text-xs text-zinc-500">{len}"x48"</div>
+                                            <div className="text-2xl font-bold text-purple-300">
+                                                {futureUseByLength[len] || 0}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {nextScheduledUse && (
+                                    <div className="text-xs text-purple-300 mt-1 text-center sm:text-left">
+                                        (Next: {new Date(nextScheduledUse).toLocaleDateString()})
                                     </div>
                                 )}
                             </div>

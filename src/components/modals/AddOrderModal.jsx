@@ -1,6 +1,6 @@
 // src/components/modals/AddOrderModal.jsx
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, Check, Calendar } from 'lucide-react';
 import { useOrderForm } from '../../hooks/useOrderForm';
 import { BaseModal } from './BaseModal';
@@ -8,10 +8,11 @@ import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 
-export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock", materialTypes, suppliers, preselectedMaterial }) => {
+export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock", materialTypes, materials, suppliers, preselectedMaterial }) => {
     const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes, suppliers, preselectedMaterial);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const categories = useMemo(() => [...new Set(Object.values(materials || {}).map(m => m.category))], [materials]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -80,7 +81,32 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                                 {!initialData && job.items.length > 1 && (
                                     <button type="button" onClick={() => removeMaterial(jobIndex, itemIndex)} className="absolute top-2 right-2 text-red-400 hover:text-red-300"><X size={18} /></button>
                                 )}
-                                <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} onChange={(e) => setItemField(jobIndex, itemIndex, 'materialType', e.target.value)} as="select">{materialTypes.map(type => <option key={type}>{type}</option>)}</FormInput>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <FormInput
+                                        label={`Category #${itemIndex + 1}`}
+                                        name={`category-${itemIndex}`}
+                                        value={materials[item.materialType]?.category || categories[0] || ''}
+                                        onChange={(e) => {
+                                            const newCategory = e.target.value;
+                                            const firstInCat = materialTypes.find(t => (materials[t]?.category) === newCategory) || '';
+                                            setItemField(jobIndex, itemIndex, 'materialType', firstInCat);
+                                        }}
+                                        as="select"
+                                    >
+                                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </FormInput>
+                                    <FormInput
+                                        label={`Material Type`}
+                                        name={`materialType-${itemIndex}`}
+                                        value={item.materialType}
+                                        onChange={(e) => setItemField(jobIndex, itemIndex, 'materialType', e.target.value)}
+                                        as="select"
+                                    >
+                                        {materialTypes
+                                            .filter(t => (materials[t]?.category) === (materials[item.materialType]?.category || categories[0]))
+                                            .map(type => <option key={type} value={type}>{type}</option>)}
+                                    </FormInput>
+                                </div>
                                 <p className="text-sm font-medium text-zinc-300 mt-2">Standard Quantities:</p>
                                 <div className="grid grid-cols-3 gap-2">
                                     <FormInput label='96"x48"' name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty96', e.target.value)} />
