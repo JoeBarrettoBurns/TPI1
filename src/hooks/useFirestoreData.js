@@ -1,7 +1,7 @@
 // src/hooks/useFirestoreData.js
 
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, writeBatch, runTransaction, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, writeBatch, runTransaction, getDocs } from 'firebase/firestore';
 import { db, appId, auth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from '../firebase/config';
 
 export function useFirestoreData() {
@@ -37,11 +37,11 @@ export function useFirestoreData() {
         if (!userId) return;
 
         setLoading(true);
-        const inventoryRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+        const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
         const usageLogRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
         const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
 
-        const qInventory = query(inventoryRef, orderBy("createdAt", "desc"));
+        const qInventory = query(inventoryCollectionRef, orderBy("createdAt", "desc"));
         const qUsageLog = query(usageLogRef, orderBy("createdAt", "desc"), limit(500));
 
         const handleAutoReceive = (inventoryData) => {
