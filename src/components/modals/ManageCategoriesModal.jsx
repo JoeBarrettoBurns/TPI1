@@ -9,7 +9,7 @@ import { db, appId } from '../../firebase/config';
 import { repairInventoryMaterialKeys } from '../../utils/backupService';
 import { rebuildMissingMaterialsFromInventory } from '../../utils/recoveryService';
 
-export const ManageCategoriesModal = ({ onClose, onSave, categories, materials }) => {
+export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, refetchMaterials }) => {
 	const [mode, setMode] = useState('edit'); // 'edit' or 'add'
 	const [selectedCategory, setSelectedCategory] = useState(categories[0] || '');
 	const [newCategoryName, setNewCategoryName] = useState('');
@@ -61,6 +61,9 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials }
 
 		try {
 			await onSave(finalCategoryName, categoryMaterials, mode);
+            if (refetchMaterials) {
+                await refetchMaterials();
+            }
 			onClose();
 		} catch (err) {
 			setError(err.message || 'Failed to save changes.');
