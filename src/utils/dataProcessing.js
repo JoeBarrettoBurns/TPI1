@@ -11,13 +11,18 @@ export const calculateInventorySummary = (inventory, materialTypes) => {
     materialTypes.forEach(type => {
         summary[type] = {
             ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {}),
+            'custom': 0,
             'total': 0,
         };
     });
 
     inventory.forEach(item => {
-        if (item.status === 'On Hand' && summary[item.materialType] && STANDARD_LENGTHS.includes(item.length)) {
-            summary[item.materialType][item.length]++;
+        if (item.status === 'On Hand' && summary[item.materialType]) {
+            if (STANDARD_LENGTHS.includes(item.length)) {
+                summary[item.materialType][item.length]++;
+            } else {
+                summary[item.materialType]['custom']++;
+            }
             summary[item.materialType]['total']++;
         }
     });
@@ -315,7 +320,7 @@ export const groupLogsByJob = (inventory, usageLog) => {
             if (!jobs[key].materials[sheet.materialType]) {
                 jobs[key].materials[sheet.materialType] = [];
             }
-            const sheetWithId = { ...sheet, id: sheet.id || `${key}-${sheet.materialType}-${Math.random()}` };
+            const sheetWithId = { ...sheet, id: sheet.id || `${key}-${sheet.materialType}-${crypto.randomUUID()}` };
             jobs[key].materials[sheet.materialType].push(sheetWithId);
         }
     });

@@ -46,6 +46,14 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         return withOrder.map(x => x.name);
     }, [materialsInCategory, safeMaterials]);
 
+    const hasCustomItems = useMemo(() => {
+        return materialsInCategory.some(m => (inventorySummary[m]?.custom || 0) > 0 || (incomingSummary[m]?.lengths?.custom || 0) > 0);
+    }, [materialsInCategory, inventorySummary, incomingSummary]);
+
+    const displayLengths = useMemo(() => {
+        return hasCustomItems ? [...STANDARD_LENGTHS, 'custom'] : STANDARD_LENGTHS;
+    }, [hasCustomItems]);
+
     // Enable drag-to-reorder materials within this category and persist to Firestore
     const {
         orderedItems: orderedMaterials,
@@ -151,8 +159,10 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                             <thead>
                                 <tr className="border-b border-zinc-700">
                                     <th className="p-2 font-semibold text-zinc-400">Material</th>
-                                    {STANDARD_LENGTHS.map(len => (
-                                        <th key={len} className="p-2 font-semibold text-center text-zinc-400 border-l border-zinc-700">{len}"x48"</th>
+                                    {displayLengths.map(len => (
+                                        <th key={len} className="p-2 font-semibold text-center text-zinc-400 border-l border-zinc-700">
+                                            {len === 'custom' ? 'Custom' : `${len}"x48"`}
+                                        </th>
                                     ))}
                                 </tr>
                             </thead>
@@ -167,12 +177,14 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                                             onMaterialClick={onMaterialClick}
                                             inventorySummary={inventorySummary}
                                             incomingSummary={incomingSummary}
+                                            scheduledOutgoingSummary={scheduledOutgoingSummary}
                                             editingCell={editingCell}
                                             setEditingCell={setEditingCell}
                                             editValue={editValue}
                                             setEditValue={setEditValue}
                                             handleEditSave={handleEditSave}
                                             getStockStyle={getStockStyle}
+                                            displayLengths={displayLengths}
                                         />
                                     ))}
                                 </tbody>
@@ -187,7 +199,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
     );
 };
 
-function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, inventorySummary, incomingSummary, scheduledOutgoingSummary, editingCell, setEditingCell, editValue, setEditValue, handleEditSave, getStockStyle }) {
+function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, inventorySummary, incomingSummary, scheduledOutgoingSummary, editingCell, setEditingCell, editValue, setEditValue, handleEditSave, getStockStyle, displayLengths }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !isEditMode });
 
     const style = {
@@ -208,11 +220,22 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
                     <span onClick={() => onMaterialClick(matType)} className="cursor-pointer hover:text-blue-400">{matType}</span>
                 </div>
             </td>
-            {STANDARD_LENGTHS.map(len => {
+            {displayLengths.map(len => {
+                const isCustom = len === 'custom';
                 const isEditingCell = isEditMode && editingCell?.matType === matType && editingCell?.len === len;
-                const stockCount = inventorySummary[matType]?.[len] || 0;
-                const incomingCount = incomingSummary[matType]?.lengths[len] || 0;
-                const scheduledOutCount = scheduledOutgoingSummary?.[matType]?.lengths?.[len] || 0;
+                
+                const stockCount = isCustom 
+                    ? (inventorySummary[matType]?.custom || 0)
+                    : (inventorySummary[matType]?.[len] || 0);
+                
+                const incomingCount = isCustom
+                    ? (incomingSummary[matType]?.lengths?.custom || 0)
+                    : (incomingSummary[matType]?.lengths[len] || 0);
+                
+                const scheduledOutCount = isCustom
+                    ? (scheduledOutgoingSummary?.[matType]?.lengths?.custom || 0)
+                    : (scheduledOutgoingSummary?.[matType]?.lengths?.[len] || 0);
+
                 const { style: stockStyle, textColor } = getStockStyle(stockCount);
 
                 return (
@@ -229,9 +252,9 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
                             />
                         ) : (
                             <div
-                                onDoubleClick={() => { if (isEditMode) { setEditingCell({ matType, len }); setEditValue(stockCount); } }}
-                                className={`flex items-center justify-center gap-2 ${isEditMode ? 'cursor-pointer' : ''}`}
-                                title={`${stockCount} sheets on hand`}
+                                onDoubleClick={() => { if (isEditMode && !isCustom) { setEditingCell({ matType, len }); setEditValue(stockCount); } }}
+                                className={`flex items-center justify-center gap-2 ${isEditMode && !isCustom ? 'cursor-pointer' : ''}`}
+                                title={isCustom ? `${stockCount} custom/non-standard sheets` : `${stockCount} sheets on hand`}
                             >
                                 <span className={`font-bold text-2xl ${textColor}`}>{stockCount}</span>
                                 <div className="w-4 h-10 rounded-full border-2 border-zinc-600 overflow-hidden">
