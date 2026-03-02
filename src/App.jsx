@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where, getDoc } from 'firebase/firestore';
+import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where, getDoc } from './firebase/firestoreWithTracking';
 import Fuse from 'fuse.js';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
@@ -45,17 +45,15 @@ import { ManageCategoriesModal } from './components/modals/ManageCategoriesModal
 import { BackupModal } from './components/modals/BackupModal';
 import { ManageSuppliersModal } from './components/modals/ManageSuppliersModal';
 import { ConfirmationModal } from './components/modals/ConfirmationModal';
-import { backupCollections, getLatestBackupInfo } from './utils/backupService';
 
 // AI Assistant
 import { AIAssistant } from './components/assistant/AIAssistant';
+import { DebugPanel } from './components/debug/DebugPanel';
 import { Bot } from 'lucide-react';
 
 
 export default function App() {
     const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('isLoggedIn') === 'true');
-    const { inventory, usageLog, materials, loading, error, userId, refetchMaterials } = useFirestoreData();
-
     const [activeView, setActiveView] = useState('dashboard');
     const [modal, setModal] = useState({ type: null, data: null, error: null });
     const [isEditMode, setIsEditMode] = useState(false);
@@ -72,6 +70,37 @@ export default function App() {
     const [fuse, setFuse] = useState(null);
     const searchTimeoutRef = useRef(null);
     const [isAssistantVisible, setIsAssistantVisible] = useState(false);
+    const [inventoryDetailsRequested, setInventoryDetailsRequested] = useState(false);
+    const shouldLoadInventoryDetails = useMemo(() => {
+        const lightweightViews = new Set(['dashboard', 'reorder', 'sheet-calculator']);
+        const inventoryDependentModals = new Set(['use', 'edit-log', 'edit-order']);
+        return !lightweightViews.has(activeView) || isEditMode || inventoryDependentModals.has(modal.type);
+    }, [activeView, isEditMode, modal.type]);
+
+    useEffect(() => {
+        if (shouldLoadInventoryDetails) {
+            setInventoryDetailsRequested(true);
+        }
+    }, [shouldLoadInventoryDetails]);
+
+    useEffect(() => {
+        if (!isLoggedIn) {
+            setInventoryDetailsRequested(false);
+        }
+    }, [isLoggedIn]);
+
+    const {
+        inventory,
+        usageLog,
+        materials,
+        inventorySummaryData,
+        incomingSummaryData,
+        inventoryReady,
+        loading,
+        error,
+        userId,
+        refetchMaterials
+    } = useFirestoreData({ loadInventoryDetails: inventoryDetailsRequested });
 
     const closeModal = useCallback(() => setModal({ type: null, data: null, error: null }), []);
 
@@ -102,27 +131,6 @@ export default function App() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [closeModal, clearSearch, modal.type, searchQuery, isAssistantVisible, activeView]);
 
-    // Daily backup on first app open per day
-    useEffect(() => {
-        const doDailyBackup = async () => {
-            try {
-                const todayKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-                const lastBackupKey = localStorage.getItem('lastBackupDate');
-                if (lastBackupKey === todayKey) return;
-                // Make a lightweight check of latest backup; if not today, run backup
-                const latest = await getLatestBackupInfo(db, appId);
-                const isToday = latest?.createdAt?.slice(0, 10) === todayKey;
-                if (!isToday) {
-                    await backupCollections(db, appId, ['materials', 'inventory', 'usage_logs']);
-                }
-                localStorage.setItem('lastBackupDate', todayKey);
-            } catch (e) {
-                console.warn('Daily backup skipped:', e?.message || e);
-            }
-        };
-        doDailyBackup();
-    }, []);
-
     // Removed global "type to focus search" behavior; users must click the search bar to type
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
@@ -142,10 +150,19 @@ export default function App() {
     // Derive material types from Firestore doc IDs (now canonical)
     const materialTypes = useMemo(() => Object.keys(materials), [materials]);
     const allJobs = useMemo(() => groupLogsByJob(inventory, usageLog), [inventory, usageLog]);
-    const inventorySummary = useMemo(() => calculateInventorySummary(inventory, materialTypes), [inventory, materialTypes]);
-    const incomingSummary = useMemo(() => calculateIncomingSummary(inventory, materialTypes), [inventory, materialTypes]);
+    const calculatedInventorySummary = useMemo(() => calculateInventorySummary(inventory, materialTypes), [inventory, materialTypes]);
+    const calculatedIncomingSummary = useMemo(() => calculateIncomingSummary(inventory, materialTypes), [inventory, materialTypes]);
+    const inventorySummary = useMemo(() => {
+        if (inventory.length > 0) return calculatedInventorySummary;
+        return Object.keys(inventorySummaryData || {}).length > 0 ? inventorySummaryData : calculatedInventorySummary;
+    }, [inventory.length, calculatedInventorySummary, inventorySummaryData]);
+    const incomingSummary = useMemo(() => {
+        if (inventory.length > 0) return calculatedIncomingSummary;
+        return Object.keys(incomingSummaryData || {}).length > 0 ? incomingSummaryData : calculatedIncomingSummary;
+    }, [inventory.length, calculatedIncomingSummary, incomingSummaryData]);
     const scheduledOutgoingSummary = useMemo(() => calculateScheduledOutgoingSummary(usageLog, materialTypes), [usageLog, materialTypes]);
     const costBySupplier = useMemo(() => calculateCostBySupplier(inventory, materials), [inventory, materials]);
+    const showLoading = loading || (shouldLoadInventoryDetails && !inventoryReady);
 
     const handleSignOut = useCallback(() => {
         localStorage.removeItem('isLoggedIn');
@@ -939,8 +956,7 @@ export default function App() {
 
                     // Return currently used items for this log (that still exist) back to On Hand
                     const originalItemIds = (latestLog.details || []).map(d => d.id).filter(Boolean);
-                    const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
-                    const returnRefs = itemsToReturn.map(i => doc(inventoryCollectionRef, i.id));
+                    const returnRefs = originalItemIds.map((id) => doc(inventoryCollectionRef, id));
 
                     // READS
                     const validReturnRefs = [];
@@ -1063,9 +1079,8 @@ export default function App() {
                     }
                 }
 
-                const originalItemIds = (latestLog.details || []).map(d => d.id);
-                const itemsToReturn = inventory.filter(i => originalItemIds.includes(i.id));
-                const returnRefs = itemsToReturn.map(item => doc(inventoryCollectionRef, item.id));
+                const originalItemIds = (latestLog.details || []).map(d => d.id).filter(Boolean);
+                const returnRefs = originalItemIds.map((id) => doc(inventoryCollectionRef, id));
 
                 // Plan new selections
                 const plannedNewRefs = [];
@@ -1278,13 +1293,16 @@ export default function App() {
                 <ViewTabs activeView={activeView} setActiveView={setActiveView} categories={categories} />
                 {error && <ErrorMessage message={error} />}
 
-                {loading ? <LoadingSpinner /> : renderActiveView()}
+                {showLoading ? <LoadingSpinner /> : renderActiveView()}
 
                 <footer className="text-center text-zinc-500 mt-8 text-sm">
                     <p>TecnoPan Inventory System</p>
                     <p>User: <span className="font-mono bg-zinc-800 px-2 py-1 rounded">{userId}</span></p>
                 </footer>
             </div>
+
+            {/* Debug Panel - Firestore usage tracker */}
+            <DebugPanel />
 
             {/* AI Assistant Button and Window */}
             <button

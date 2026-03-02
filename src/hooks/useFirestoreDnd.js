@@ -1,6 +1,6 @@
 // src/hooks/useFirestoreDnd.js
 import { useState, useEffect, useCallback } from 'react';
-import { doc, writeBatch } from 'firebase/firestore';
+import { doc, writeBatch } from '../firebase/firestoreWithTracking';
 import { arrayMove } from '@dnd-kit/sortable';
 import { db, appId } from '../firebase/config';
 

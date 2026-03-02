@@ -1,6 +1,6 @@
 // src/utils/recoveryService.js
 
-import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, writeBatch } from '../firebase/firestoreWithTracking';
 import { getGaugeFromMaterial } from './dataProcessing';
 
 function guessCategory(materialType) {

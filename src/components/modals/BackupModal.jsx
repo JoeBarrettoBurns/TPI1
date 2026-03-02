@@ -7,7 +7,7 @@ import { ErrorMessage } from '../common/ErrorMessage';
 import { HardDriveDownload, RotateCcw, Upload, Download, List } from 'lucide-react';
 import { backupCollections, getLatestBackupInfo, restoreCollectionsFromBackup, listBackups, backfillBackupIndex } from '../../utils/backupService';
 import { exportToCSV } from '../../utils/csvExport';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot } from '../../firebase/firestoreWithTracking';
 import { db, appId, auth, onAuthStateChanged } from '../../firebase/config';
 
 export const BackupModal = ({ onClose }) => {
@@ -158,7 +158,7 @@ export const BackupModal = ({ onClose }) => {
     try {
       setBusyMsg('Exporting local backup (JSON + CSV)...');
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const { collection, getDocs } = await import('firebase/firestore');
+      const { collection, getDocs } = await import('../../firebase/firestoreWithTracking');
       // Fetch collections
       const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
       const inventoryRef = collection(db, `artifacts/${appId}/public/data/inventory`);
@@ -244,7 +244,7 @@ export const BackupModal = ({ onClose }) => {
       const parsed = JSON.parse(text);
       if (!parsed?.data) throw new Error('Invalid backup file');
       const collections = Object.keys(parsed.data);
-      const { writeBatch, doc } = await import('firebase/firestore');
+      const { writeBatch, doc } = await import('../../firebase/firestoreWithTracking');
       let total = 0;
       for (const coll of collections) {
         const batch = writeBatch(db);
