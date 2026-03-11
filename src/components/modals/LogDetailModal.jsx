@@ -5,15 +5,16 @@ import { BaseModal } from './BaseModal';
 
 export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
     const groupedDetails = useMemo(() => {
-        if (!logEntry?.details) return [];
+        const sourceDetails = logEntry?.displayDetails || logEntry?.details;
+        if (!sourceDetails) return [];
 
         const isModificationOrDeletion = logEntry.job && (logEntry.job.startsWith('MODIFICATION') || logEntry.job.startsWith('DELETION'));
         if (isModificationOrDeletion) {
-            return logEntry.details.map(d => ({ ...d, count: d.qty }));
+            return sourceDetails.map(d => ({ ...d, count: d.qty }));
         }
 
         const groups = {};
-        logEntry.details.forEach(item => {
+        sourceDetails.forEach(item => {
             const key = `${item.materialType}|${item.width}|${item.length}|${item.costPerPound}`;
             if (!groups[key]) {
                 groups[key] = { ...item, count: 0 };

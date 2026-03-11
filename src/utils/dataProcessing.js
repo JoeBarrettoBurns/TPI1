@@ -107,15 +107,15 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
     const allTransactions = {};
     materialTypes.forEach(matType => {
         const groupedInventory = {};
-        inventory
-            .filter(item => item.materialType === matType)
-            // Hide internal/server-side only inventory adjustments from UI transactions
-            .filter(item => !(
+        
+        const processInventoryItem = (item) => {
+            if (item.materialType !== matType) return;
+            if (
                 (item.job || '').startsWith('MODIFICATION') ||
                 (item.supplier === 'Manual Edit') ||
                 (item.supplier === 'Rescheduled Return')
-            ))
-            .forEach(item => {
+            ) return;
+
             const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
             if (!groupedInventory[key]) {
                 groupedInventory[key] = {
@@ -127,14 +127,54 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
                     isDeletable: true,
                     isFuture: item.status === 'Ordered', 
                     details: [], 
+                    displayDetails: [],
+                    _detailIds: new Set(),
+                    _displayDetailIds: new Set(),
                     ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {})
                 };
             }
-            if (STANDARD_LENGTHS.includes(item.length)) {
-                groupedInventory[key][item.length]++;
+            
+            const group = groupedInventory[key];
+            const dedupeKey = item.id || `${item.materialType}|${item.length}|${item.createdAt}|${item.supplier}|${item.job}`;
+            
+            return { group, dedupeKey };
+        };
+
+        inventory.forEach(item => {
+            const processed = processInventoryItem(item);
+            if (!processed) return;
+            const { group, dedupeKey } = processed;
+            
+            if (!group._detailIds.has(dedupeKey)) {
+                group._detailIds.add(dedupeKey);
+                group.details.push(item);
             }
-            groupedInventory[key].details.push(item);
+            if (!group._displayDetailIds.has(dedupeKey)) {
+                group._displayDetailIds.add(dedupeKey);
+                if (STANDARD_LENGTHS.includes(item.length)) {
+                    group[item.length]++;
+                }
+                group.displayDetails.push(item);
+            }
         });
+
+        (usageLog || [])
+            .filter(log => (log.status || 'Completed') === 'Completed')
+            .forEach(log => {
+                (log.details || []).forEach(item => {
+                    const processed = processInventoryItem(item);
+                    if (!processed) return;
+                    const { group, dedupeKey } = processed;
+                    
+                    if (!group._displayDetailIds.has(dedupeKey)) {
+                        group._displayDetailIds.add(dedupeKey);
+                        if (STANDARD_LENGTHS.includes(item.length)) {
+                            group[item.length]++;
+                        }
+                        group.displayDetails.push(item);
+                    }
+                });
+            });
 
         const groupedUsage = {};
         usageLog.filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
@@ -162,7 +202,13 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
             });
         });
         
-        const transactions = [...Object.values(groupedInventory), ...Object.values(groupedUsage)];
+        const transactions = [
+            ...Object.values(groupedInventory).map(({ _detailIds, _displayDetailIds, ...rest }) => ({
+                ...rest,
+                isDeletable: rest.details.length > 0
+            })), 
+            ...Object.values(groupedUsage)
+        ];
         
         transactions.sort((a, b) => {
             const dateA = a.isAddition ? (a.arrivalDate || a.date) : (a.usedAt || a.date);
@@ -175,10 +221,16 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
     return allTransactions;
 };
 
-export const groupInventoryByJob = (inventory) => {
+export const groupInventoryByJob = (inventory, usageLog = []) => {
     const grouped = {};
-    inventory.forEach(item => {
-        const key = `${item.job || 'N/A'}|${item.createdAt.split('T')[0]}`;
+
+    const getGroupKey = (item) => {
+        const createdDate = item.createdAt ? item.createdAt.split('T')[0] : 'unknown-date';
+        return `${item.job || 'N/A'}|${createdDate}`;
+    };
+
+    const ensureGroup = (item) => {
+        const key = getGroupKey(item);
         if (!grouped[key]) {
             grouped[key] = {
                 id: key,
@@ -190,19 +242,63 @@ export const groupInventoryByJob = (inventory) => {
                 isReceived: !!item.dateReceived,
                 isAddition: true,
                 materials: {},
-                details: []
+                details: [],
+                displayDetails: [],
+                _detailIds: new Set(),
+                _displayDetailIds: new Set(),
             };
         }
-        if (!grouped[key].materials[item.materialType]) {
-            grouped[key].materials[item.materialType] = {};
+
+        const group = grouped[key];
+        if (!group.date && item.createdAt) group.date = item.createdAt;
+        if (!group.supplier && item.supplier) {
+            group.supplier = item.supplier;
+            group.customer = item.supplier;
         }
-        if (!grouped[key].materials[item.materialType][item.length]) {
-            grouped[key].materials[item.materialType][item.length] = 0;
+        group.isFuture = group.isFuture || item.status === 'Ordered';
+        group.isReceived = group.isReceived || !!item.dateReceived;
+        return group;
+    };
+
+    const addMaterialCount = (group, item) => {
+        if (!group.materials[item.materialType]) {
+            group.materials[item.materialType] = {};
         }
-        grouped[key].materials[item.materialType][item.length]++;
-        grouped[key].details.push(item);
+        if (!group.materials[item.materialType][item.length]) {
+            group.materials[item.materialType][item.length] = 0;
+        }
+        group.materials[item.materialType][item.length]++;
+    };
+
+    const pushUniqueDetail = (target, ids, item) => {
+        const dedupeKey = item.id || `${item.materialType}|${item.length}|${item.createdAt}|${item.supplier}|${item.job}`;
+        if (ids.has(dedupeKey)) return false;
+        ids.add(dedupeKey);
+        target.push(item);
+        return true;
+    };
+
+    inventory.forEach(item => {
+        const group = ensureGroup(item);
+        if (pushUniqueDetail(group.details, group._detailIds, item)) {
+            addMaterialCount(group, item);
+        }
+        pushUniqueDetail(group.displayDetails, group._displayDetailIds, item);
     });
-    return Object.values(grouped).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    (usageLog || [])
+        .filter(log => (log.status || 'Completed') === 'Completed')
+        .forEach(log => {
+            (log.details || []).forEach(item => {
+                if (!item?.job || !item?.createdAt) return;
+                const group = ensureGroup(item);
+                pushUniqueDetail(group.displayDetails, group._displayDetailIds, item);
+            });
+        });
+
+    return Object.values(grouped)
+        .map(({ _detailIds, _displayDetailIds, ...group }) => group)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
 };
 
 export const calculateCostBySupplier = (inventory, materials) => {

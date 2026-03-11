@@ -25,15 +25,29 @@ const generateDescription = (details) => {
 
 export const IncomingLogDisplay = ({ incomingItems, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }) => {
     const processedItems = useMemo(() => {
-        return incomingItems.map(item => ({
-            ...item,
-            description: generateDescription(item.details),
-            dateOrdered: item.date,
-            customer: item.supplier,
-            qty: item.details.length,
-            isDeletable: true,
-            dateIncoming: item.isFuture ? item.details.reduce((latest, curr) => !latest || (curr.arrivalDate && new Date(curr.arrivalDate) > new Date(latest)) ? curr.arrivalDate : latest, null) : item.dateReceived
-        }));
+        return incomingItems.map(item => {
+            const displayDetails = item.displayDetails || item.details || [];
+            const latestIncomingDate = item.isFuture
+                ? displayDetails.reduce(
+                    (latest, curr) => !latest || (curr.arrivalDate && new Date(curr.arrivalDate) > new Date(latest)) ? curr.arrivalDate : latest,
+                    null
+                )
+                : displayDetails.reduce(
+                    (latest, curr) => !latest || (curr.dateReceived && new Date(curr.dateReceived) > new Date(latest)) ? curr.dateReceived : latest,
+                    null
+                );
+
+            return {
+                ...item,
+                displayDetails,
+                description: generateDescription(displayDetails),
+                dateOrdered: item.date,
+                customer: item.supplier,
+                qty: displayDetails.length,
+                isDeletable: (item.details || []).length > 0,
+                dateIncoming: latestIncomingDate,
+            };
+        });
     }, [incomingItems]);
 
     const visibleItems = processedItems.slice(0, ordersToShow);
@@ -68,7 +82,7 @@ export const IncomingLogDisplay = ({ incomingItems, onRowClick, onDelete, onEdit
                             </td>
                             <td className="p-4 text-green-400 font-mono text-right">+{item.qty}</td>
                             <td className="p-4 text-center">
-                                {item.isFuture && (
+                                {item.isFuture && (item.details || []).length > 0 && (
                                     <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(item); }} className="text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>
                                 )}
                                 {item.isDeletable && (

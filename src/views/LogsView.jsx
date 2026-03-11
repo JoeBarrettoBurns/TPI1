@@ -17,15 +17,15 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
     const [outgoingOrdersToShow, setOutgoingOrdersToShow] = useState(5);
 
     const incomingItems = useMemo(() => {
-        const grouped = groupInventoryByJob(inventory);
+        const grouped = groupInventoryByJob(inventory, usageLog);
         if (!searchQuery) return grouped;
         const lowercasedQuery = (searchQuery || '').toLowerCase();
         return grouped.filter(group =>
             (group.job || '').toLowerCase().includes(lowercasedQuery) ||
             (group.supplier || '').toLowerCase().includes(lowercasedQuery) ||
-            group.details.some(d => d.materialType.toLowerCase().includes(lowercasedQuery))
+            (group.displayDetails || group.details || []).some(d => d.materialType.toLowerCase().includes(lowercasedQuery))
         );
-    }, [inventory, searchQuery]);
+    }, [inventory, usageLog, searchQuery]);
 
     const filteredUsageLog = useMemo(() => {
         const filtered = usageLog.filter(log => log.status !== 'Archived');
@@ -60,18 +60,29 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
             { label: 'Status', key: 'status' },
         ];
 
-        const dataToExport = incomingItems.flatMap(group =>
-            group.details.map(item => ({
+        const dataToExport = incomingItems.flatMap(group => {
+            const displayDetails = group.displayDetails || group.details || [];
+            const dateIncoming = group.isFuture
+                ? displayDetails.reduce(
+                    (latest, curr) => !latest || (curr.arrivalDate && new Date(curr.arrivalDate) > new Date(latest)) ? curr.arrivalDate : latest,
+                    null
+                )
+                : displayDetails.reduce(
+                    (latest, curr) => !latest || (curr.dateReceived && new Date(curr.dateReceived) > new Date(latest)) ? curr.dateReceived : latest,
+                    null
+                );
+
+            return displayDetails.map(item => ({
                 dateOrdered: new Date(group.date).toLocaleDateString(),
-                dateIncoming: group.dateIncoming ? new Date(group.dateIncoming).toLocaleDateString() : 'N/A',
+                dateIncoming: dateIncoming ? new Date(dateIncoming).toLocaleDateString() : 'N/A',
                 job: group.job,
                 supplier: group.customer,
                 materialType: item.materialType,
                 length: item.length,
                 qty: 1,
                 status: item.status,
-            }))
-        );
+            }));
+        });
 
         exportToCSV(dataToExport, headers, 'incoming_stock_logs.csv');
     };
