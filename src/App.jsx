@@ -417,7 +417,7 @@ export default function App() {
                             .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
                         if (matchingSheets.length < qty) {
-                            throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}\". Only ${matchingSheets.length} available.`);
+                            throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
                         }
 
                         const sheetsToUse = matchingSheets.slice(0, qty);
@@ -496,7 +496,7 @@ export default function App() {
                         .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
                     if (availableSheets.length < qty) {
-                        throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}\". Only ${availableSheets.length} available.`);
+                        throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                     }
                     selectedSheets.push(...availableSheets.slice(0, qty));
                 }
@@ -895,7 +895,7 @@ export default function App() {
                             .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
                             .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
                         if (availableSheets.length < qty) {
-                            throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}\". Only ${availableSheets.length} available.`);
+                            throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                         }
                         availableSheets.slice(0, qty).forEach(s => selectedRefs.push(doc(inventoryCollectionRef, s.id)));
                     }
@@ -1074,36 +1074,81 @@ export default function App() {
                         ).length;
 
                         if (currentStock < needed) {
-                            throw new Error(`Not enough stock for ${materialType} @ ${length}\". Needed: ${needed}, Available: ${currentStock}.`);
+                            throw new Error(`Not enough stock for ${materialType} @ ${length}". Needed: ${needed}, Available: ${currentStock}.`);
                         }
                     }
                 }
 
-                const originalItemIds = (latestLog.details || []).map(d => d.id).filter(Boolean);
-                const returnRefs = originalItemIds.map((id) => doc(inventoryCollectionRef, id));
+                const originalDetails = (latestLog.details || []).filter(d => d.id);
+                const originalItemIds = originalDetails.map(d => d.id);
+                const originalItemsByKey = {};
+                const desiredCounts = {};
 
-                // Plan new selections
+                originalDetails.forEach(detail => {
+                    const key = `${detail.materialType}|${detail.length}`;
+                    if (!originalItemsByKey[key]) originalItemsByKey[key] = [];
+                    originalItemsByKey[key].push(detail);
+                });
+
+                newLogData.items.forEach(item => {
+                    STANDARD_LENGTHS.forEach(len => {
+                        const qty = parseInt(item[`qty${len}`] || 0, 10);
+                        if (qty > 0) {
+                            const key = `${item.materialType}|${len}`;
+                            desiredCounts[key] = (desiredCounts[key] || 0) + qty;
+                        }
+                    });
+                });
+
+                const keptOriginalDetails = [];
+                const returnDetailIds = new Set();
+
+                Object.entries(originalItemsByKey).forEach(([key, details]) => {
+                    const desiredQty = desiredCounts[key] || 0;
+                    const keepCount = Math.min(details.length, desiredQty);
+                    keptOriginalDetails.push(...details.slice(0, keepCount));
+                    details.slice(keepCount).forEach(detail => returnDetailIds.add(detail.id));
+                });
+
+                const keptOriginalRefs = keptOriginalDetails.map(detail => doc(inventoryCollectionRef, detail.id));
+                const returnRefs = Array.from(returnDetailIds).map(id => doc(inventoryCollectionRef, id));
+
+                // Only allocate additional stock for the deficit after reusing matching sheets already on this log.
                 const plannedNewRefs = [];
-                for (const item of newLogData.items) {
-                    for (const len of STANDARD_LENGTHS) {
-                        const qty = parseInt(item[`qty${len}`] || 0);
-                        if (qty <= 0) continue;
+                Object.entries(desiredCounts).forEach(([key, desiredQty]) => {
+                    const keptCount = keptOriginalDetails.filter(detail => `${detail.materialType}|${detail.length}` === key).length;
+                    const neededQty = desiredQty - keptCount;
+                    if (neededQty <= 0) return;
 
-                        const matchingSheets = inventory
-                            .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !originalItemIds.includes(i.id))
-                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    const [materialType, lengthStr] = key.split('|');
+                    const len = parseInt(lengthStr, 10);
+                    const matchingSheets = inventory
+                        .filter(i => i.materialType === materialType && i.length === len && i.status === 'On Hand' && !originalItemIds.includes(i.id))
+                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-                        const sheetsToUse = matchingSheets.slice(0, qty);
-                        if (sheetsToUse.length < qty) {
-                            throw new Error(`Concurrency Error: Not enough stock for ${item.materialType} @ ${len}\" during edit.`);
-                        }
-                        sheetsToUse.forEach(s => plannedNewRefs.push(doc(inventoryCollectionRef, s.id)));
+                    const sheetsToUse = matchingSheets.slice(0, neededQty);
+                    if (sheetsToUse.length < neededQty) {
+                        throw new Error(`Concurrency Error: Not enough stock for ${materialType} @ ${len}" during edit.`);
                     }
-                }
+                    sheetsToUse.forEach(sheet => plannedNewRefs.push(doc(inventoryCollectionRef, sheet.id)));
+                });
 
-                // READS first: validate returns and new selections
+                // READS first: validate kept items, returns, and new selections
+                const keptItemsForLog = [];
                 const updatedUsedItemsForLog = [];
                 const validReturnRefs = [];
+
+                for (const r of keptOriginalRefs) {
+                    const snap = await transaction.get(r);
+                    if (!snap.exists()) {
+                        throw new Error('A sheet already assigned to this log no longer exists during edit.');
+                    }
+                    const current = snap.data();
+                    if (current.status !== 'Used' || current.usageLogId !== latestLog.id) {
+                        throw new Error('A sheet already assigned to this log changed unexpectedly during edit.');
+                    }
+                    keptItemsForLog.push({ id: r.id, ...current });
+                }
 
                 for (const r of returnRefs) {
                     const snap = await transaction.get(r);
@@ -1126,7 +1171,18 @@ export default function App() {
                     updatedUsedItemsForLog.push({ id: r.id, ...current });
                 }
 
-                // WRITES: return then use
+                const usedAtIso = newLogData.date
+                    ? new Date(newLogData.date + 'T00:00:00').toISOString()
+                    : (latestLog.usedAt || new Date().toISOString());
+                const usageUpdate = {
+                    status: 'Used',
+                    usageLogId: latestLog.id,
+                    jobNameUsed: newLogData.jobName,
+                    customerUsed: newLogData.customer,
+                    usedAt: usedAtIso,
+                };
+
+                // WRITES: return extras, refresh kept items, then use newly allocated sheets
                 for (const r of validReturnRefs) {
                     transaction.update(r, {
                         status: 'On Hand',
@@ -1137,23 +1193,21 @@ export default function App() {
                     });
                 }
 
-                const nowIso = new Date().toISOString();
-                for (const r of plannedNewRefs) {
-                    transaction.update(r, {
-                        status: 'Used',
-                        usageLogId: latestLog.id,
-                        jobNameUsed: newLogData.jobName,
-                        customerUsed: newLogData.customer,
-                        usedAt: nowIso,
-                    });
+                for (const r of keptOriginalRefs) {
+                    transaction.update(r, usageUpdate);
                 }
 
+                for (const r of plannedNewRefs) {
+                    transaction.update(r, usageUpdate);
+                }
+
+                const finalUsedItemsForLog = [...keptItemsForLog, ...updatedUsedItemsForLog];
                 transaction.update(logDocRef, {
                     job: newLogData.jobName,
                     customer: newLogData.customer,
-                    details: updatedUsedItemsForLog,
-                    qty: -updatedUsedItemsForLog.length,
-                    ...(newLogData.date ? { usedAt: new Date(newLogData.date + 'T00:00:00').toISOString() } : {})
+                    details: finalUsedItemsForLog,
+                    qty: -finalUsedItemsForLog.length,
+                    usedAt: usedAtIso,
                 });
             });
         }
