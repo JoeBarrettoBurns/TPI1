@@ -135,6 +135,9 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
             }
             
             const group = groupedInventory[key];
+            if (item.arrivalDate && (!group.arrivalDate || new Date(item.arrivalDate) > new Date(group.arrivalDate))) {
+                group.arrivalDate = item.arrivalDate;
+            }
             const dedupeKey = item.id || `${item.materialType}|${item.length}|${item.createdAt}|${item.supplier}|${item.job}`;
             
             return { group, dedupeKey };

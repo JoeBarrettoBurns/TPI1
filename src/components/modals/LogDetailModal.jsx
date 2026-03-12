@@ -15,7 +15,7 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
 
         const groups = {};
         sourceDetails.forEach(item => {
-            const key = `${item.materialType}|${item.width}|${item.length}|${item.costPerPound}`;
+            const key = `${item.materialType}|${item.width}|${item.length}|${item.costPerPound}|${logEntry.isAddition ? (item.arrivalDate || '') : ''}`;
             if (!groups[key]) {
                 groups[key] = { ...item, count: 0 };
             }
@@ -67,6 +67,7 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
                                 <div key={index} className="bg-slate-700/50 p-3 rounded-lg">
                                     <p><strong className="text-blue-400">{item.materialType}</strong></p>
                                     <p>Size: {item.width}" x {item.length}"</p>
+                                    {logEntry.isAddition && item.arrivalDate && <p>Expected Arrival: {new Date(item.arrivalDate).toLocaleDateString()}</p>}
                                     <p>Quantity: {quantity}</p>
                                     <p>Weight: {totalWeight.toFixed(2)} lbs ({weightPerSheet.toFixed(2)} lbs/sheet)</p>
                                     <p>Cost/lb: ${item.costPerPound || 'N/A'}</p>

@@ -32,7 +32,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
         return fallbackSupplier ? [fallbackSupplier] : [];
     }, [getDefaultSupplier, suppliers]);
 
-    const createNewItem = useCallback((materialTypeOverride, itemOverride = {}) => ({
+    const createNewItem = useCallback((materialTypeOverride, itemOverride = {}, defaultArrivalDate = '') => ({
         materialType: materialTypeOverride || itemOverride.materialType || (materialTypes && materialTypes.length > 0 ? materialTypes[0] : ''),
         qty96: itemOverride.qty96 ?? '',
         qty120: itemOverride.qty120 ?? '',
@@ -40,13 +40,26 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
         customWidth: itemOverride.customWidth ?? '',
         customLength: itemOverride.customLength ?? '',
         customQty: itemOverride.customQty ?? '',
-        costPerPound: itemOverride.costPerPound ?? ''
+        costPerPound: itemOverride.costPerPound ?? '',
+        arrivalDate: toInputDate(itemOverride.arrivalDate) || defaultArrivalDate || ''
     }), [materialTypes]);
 
     const createNewJob = useCallback((jobOverride = {}) => {
+        const normalizedJobArrivalDate = toInputDate(jobOverride.arrivalDate ?? prefill?.arrivalDate);
+        const distinctItemArrivalDates = Array.from(
+            new Set(
+                (Array.isArray(jobOverride.items) ? jobOverride.items : [])
+                    .map((item) => toInputDate(item.arrivalDate))
+                    .filter(Boolean)
+            )
+        );
+        const useItemArrivalDates = jobOverride.useItemArrivalDates
+            ?? prefill?.useItemArrivalDates
+            ?? distinctItemArrivalDates.length > 1;
+        const defaultItemArrivalDate = normalizedJobArrivalDate || distinctItemArrivalDates[0] || '';
         const items = Array.isArray(jobOverride.items) && jobOverride.items.length > 0
-            ? jobOverride.items.map((item) => createNewItem(item.materialType, item))
-            : [createNewItem(prefill?.materialType || jobOverride.materialType)];
+            ? jobOverride.items.map((item) => createNewItem(item.materialType, item, defaultItemArrivalDate))
+            : [createNewItem(prefill?.materialType || jobOverride.materialType, {}, defaultItemArrivalDate)];
 
         return {
             jobName: jobOverride.jobName ?? '',
@@ -55,9 +68,11 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
             suppliers: multiSupplier
                 ? getDefaultSuppliers(jobOverride.suppliers ?? prefill?.suppliers, jobOverride.supplier ?? prefill?.supplier)
                 : [],
+            emailSubject: jobOverride.emailSubject ?? prefill?.emailSubject ?? '',
             status: jobOverride.status ?? prefill?.status ?? 'Ordered',
-            arrivalDate: jobOverride.arrivalDate ?? '',
+            arrivalDate: normalizedJobArrivalDate,
             createdAt: jobOverride.createdAt ?? '',
+            useItemArrivalDates,
             items
         };
     }, [createNewItem, getDefaultSupplier, getDefaultSuppliers, multiSupplier, prefill]);
@@ -65,24 +80,30 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
     const transformInitialData = useCallback((data) => {
         if (!data) return null;
 
-        const arrivalDateISO = data.details?.[0]?.arrivalDate || data.arrivalDate;
+        const sharedArrivalDate = toInputDate(data.arrivalDate || data.details?.[0]?.arrivalDate);
+        const distinctItemArrivalDates = Array.from(
+            new Set((data.details || []).map((item) => toInputDate(item.arrivalDate)).filter(Boolean))
+        );
         const jobData = {
             jobName: data.job || data.jobName || '',
             customer: data.customer || '',
             supplier: data.supplier || data.customer || suppliers[0] || '',
             suppliers: data.suppliers || (data.supplier ? [data.supplier] : []),
+            emailSubject: data.requestedEmailSubject || data.emailSubject || '',
             status: data.isFuture ? 'Ordered' : (data.status || 'On Hand'),
-            arrivalDate: toInputDate(arrivalDateISO),
+            arrivalDate: sharedArrivalDate,
             createdAt: toInputDate(data.date || data.createdAt),
+            useItemArrivalDates: distinctItemArrivalDates.length > 1,
             items: []
         };
 
         const itemsByKey = {};
         (data.details || []).forEach(item => {
             const isStandardLength = STANDARD_LENGTHS.includes(item.length);
+            const itemArrivalDate = toInputDate(item.arrivalDate);
             const key = isStandardLength
-                ? `${item.materialType}|standard`
-                : `${item.materialType}|custom|${item.width || 48}|${item.length}`;
+                ? `${item.materialType}|standard|${itemArrivalDate}`
+                : `${item.materialType}|custom|${item.width || 48}|${item.length}|${itemArrivalDate}`;
 
             if (!itemsByKey[key]) {
                 itemsByKey[key] = {
@@ -93,7 +114,8 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
                     qty144: '',
                     customWidth: '',
                     customLength: '',
-                    customQty: ''
+                    customQty: '',
+                    arrivalDate: itemArrivalDate
                 };
             }
 
@@ -132,9 +154,11 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
             customer: data.customer || '',
             supplier: data.supplier || '',
             suppliers: data.suppliers || (data.supplier ? [data.supplier] : []),
+            emailSubject: data.requestedEmailSubject || data.emailSubject || '',
             status: data.status === 'On Hand' ? 'On Hand' : 'Ordered',
             arrivalDate: toInputDate(data.arrivalDate),
             createdAt: toInputDate(data.createdAt),
+            useItemArrivalDates: data.useItemArrivalDates,
             items
         })];
     }, [createNewJob]);
@@ -162,7 +186,8 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
 
     const addMaterial = (jobIndex) => {
         const newJobs = [...jobs];
-        newJobs[jobIndex].items.push(createNewItem(null));
+        const defaultArrivalDate = newJobs[jobIndex].items[0]?.arrivalDate || newJobs[jobIndex].arrivalDate || '';
+        newJobs[jobIndex].items.push(createNewItem(null, {}, defaultArrivalDate));
         setJobs(newJobs);
     };
 

@@ -71,9 +71,13 @@ export function createSupplierMailtoLink({
     items = [],
     supplierInfoOverrides,
     customBody = '',
+    customSubject = '',
 }) {
     const info = getSupplierEmailInfo(supplier, supplierInfoOverrides);
-    const subject = encodeURIComponent(info.subject || 'Quote Request');
+    const resolvedSubject = customSubject && customSubject.trim().length > 0
+        ? customSubject.trim()
+        : (info.subject || 'Quote Request');
+    const subject = encodeURIComponent(resolvedSubject);
     const greetingName = info.contactName ? `Hi ${info.contactName},` : 'Hello,';
 
     let bodyContent = '';
@@ -90,7 +94,7 @@ export function createSupplierMailtoLink({
 
     return {
         mailto: `mailto:${info.email || ''}?cc=${cc}&subject=${subject}&body=${body}`,
-        subject: decodeURIComponent(subject),
+        subject: resolvedSubject,
         body: `${greetingName}\n\n${bodyContent}\n\nThank you.`,
         info,
     };

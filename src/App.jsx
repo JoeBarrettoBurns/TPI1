@@ -45,6 +45,7 @@ import { ManageCategoriesModal } from './components/modals/ManageCategoriesModal
 import { BackupModal } from './components/modals/BackupModal';
 import { ManageSuppliersModal } from './components/modals/ManageSuppliersModal';
 import { ConfirmationModal } from './components/modals/ConfirmationModal';
+import { BuyOrderDraftsModal } from './components/modals/BuyOrderDraftsModal';
 
 // AI Assistant
 import { AIAssistant } from './components/assistant/AIAssistant';
@@ -71,17 +72,49 @@ function normalizeOrderItemsForStorage(items = []) {
     }));
 }
 
-function openMailtoLinks(mailtoLinks = []) {
-    const validLinks = mailtoLinks.filter(Boolean);
-    if (validLinks.length === 0) {
-        return;
+function getBuyOrderPrimarySupplier(buyOrder) {
+    if (buyOrder?.supplier) {
+        return buyOrder.supplier;
     }
 
-    const [firstLink, ...remainingLinks] = validLinks;
-    remainingLinks.forEach((mailto) => {
-        window.open(mailto, '_blank', 'noopener,noreferrer');
+    if (Array.isArray(buyOrder?.suppliers)) {
+        return buyOrder.suppliers.find(Boolean) || '';
+    }
+
+    return '';
+}
+
+function openMailtoLinks(emailDrafts = [], runId = 'unknown') {
+    const validDrafts = emailDrafts.filter((draft) => draft?.mailto);
+    if (validDrafts.length === 0) {
+        return [];
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId,hypothesisId:'H3',location:'App.jsx:79',message:'openMailtoLinks invoked',data:{validLinkCount:validDrafts.length,userAgent:navigator.userAgent},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    const [firstDraft, ...remainingDrafts] = validDrafts;
+    const blockedDrafts = [];
+    remainingDrafts.forEach((draft, index) => {
+        const popup = window.open(draft.mailto, '_blank', 'noopener,noreferrer');
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId,hypothesisId:'H4',location:'App.jsx:86',message:'window.open mailto attempted',data:{index:index+1,popupOpened:Boolean(popup),popupClosed:popup?popup.closed:null,linkLength:draft.mailto.length,hasMailtoPrefix:draft.mailto.startsWith('mailto:')},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (!popup) {
+            blockedDrafts.push(draft);
+        }
     });
-    window.location.href = firstLink;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId,hypothesisId:'H4',location:'App.jsx:90',message:'window.location mailto attempted',data:{linkLength:firstDraft.mailto.length,hasMailtoPrefix:firstDraft.mailto.startsWith('mailto:')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (blockedDrafts.length > 0) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId,hypothesisId:'H7',location:'App.jsx:94',message:'Blocked supplier drafts detected',data:{blockedDraftCount:blockedDrafts.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+    }
+    window.location.href = firstDraft.mailto;
+    return blockedDrafts;
 }
 
 
@@ -155,7 +188,7 @@ export default function App() {
             (snapshot) => {
                 const openBuyOrders = snapshot.docs
                     .map((buyOrderDoc) => ({ id: buyOrderDoc.id, ...buyOrderDoc.data() }))
-                    .filter((buyOrder) => buyOrder.workflowStatus !== 'received');
+                    .filter((buyOrder) => !buyOrder.workflowStatus || buyOrder.workflowStatus === 'emailed');
 
                 setOpenBuyOrders(openBuyOrders);
             },
@@ -413,11 +446,37 @@ export default function App() {
         setModal({
             type: 'add',
             data: {
-                prefill: buyOrder,
+                prefill: {
+                    ...buyOrder,
+                    supplier: getBuyOrderPrimarySupplier(buyOrder),
+                },
                 linkedBuyOrderId: buyOrder.id
             }
         });
     }, []);
+
+    const handleClearAllBuyOrders = useCallback(async () => {
+        if (openBuyOrders.length === 0) {
+            return;
+        }
+
+        const confirmed = window.confirm(`Clear all ${openBuyOrders.length} open buy order${openBuyOrders.length === 1 ? '' : 's'}?`);
+        if (!confirmed) {
+            return;
+        }
+
+        const batch = writeBatch(db);
+        const clearedAt = new Date().toISOString();
+
+        openBuyOrders.forEach((buyOrder) => {
+            batch.update(doc(db, BUY_ORDERS_PATH, buyOrder.id), {
+                workflowStatus: 'cleared',
+                clearedAt,
+            });
+        });
+
+        await batch.commit();
+    }, [openBuyOrders]);
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
@@ -824,7 +883,7 @@ export default function App() {
             jobs.forEach(job => {
                 const jobName = job.jobName.trim() || 'N/A';
                 job.items.forEach(item => {
-                    const arrivalDateString = job.arrivalDate;
+                    const arrivalDateString = job.useItemArrivalDates ? item.arrivalDate : job.arrivalDate;
                     const localDate = arrivalDateString ? new Date(`${arrivalDateString}T00:00:00`) : null;
 
                     const stockData = {
@@ -872,6 +931,9 @@ export default function App() {
         if (!job) {
             throw new Error('A buy order requires at least one job.');
         }
+        const debugRunId = (typeof window !== 'undefined' && window.__buyOrderDebugRunId)
+            ? window.__buyOrderDebugRunId
+            : `buy-order-${Date.now()}-fallback`;
 
         const selectedSuppliers = Array.isArray(job.suppliers)
             ? job.suppliers.filter(Boolean)
@@ -883,35 +945,52 @@ export default function App() {
         const normalizedItems = normalizeOrderItemsForStorage(job.items);
         const customBody = buildBuyOrderEmailBody(normalizedItems);
         const createdAt = new Date().toISOString();
+        const requestedEmailSubject = (job.emailSubject || '').trim();
         const emailDrafts = selectedSuppliers.map((supplier) => ({
             supplier,
             ...createSupplierMailtoLink({
                 supplier,
                 supplierInfoOverrides: supplierInfo,
                 customBody,
+                customSubject: requestedEmailSubject,
             }),
         }));
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId:debugRunId,hypothesisId:'H2',location:'App.jsx:946',message:'Buy order drafts generated',data:{selectedSupplierCount:selectedSuppliers.length,draftCount:emailDrafts.length,drafts:emailDrafts.map(({supplier,mailto,subject,body,info})=>({supplier,hasMailtoPrefix:mailto.startsWith('mailto:'),mailtoLength:mailto.length,hasSubject:Boolean(subject),hasBody:Boolean(body),toRecipientCount:(info?.email||'').split(/[;,]/).map((value)=>value.trim()).filter(Boolean).length,hasCc:Boolean((info?.ccEmail||'').trim())}))},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const blockedEmailDrafts = openMailtoLinks(emailDrafts, debugRunId);
 
-        await Promise.all(emailDrafts.map(async ({ supplier, subject, body }) => {
-            const buyOrderRef = doc(collection(db, BUY_ORDERS_PATH));
-            await setDoc(buyOrderRef, {
-                jobName: '',
-                customer: job.customer || '',
-                supplier: supplier || '',
-                status: 'Ordered',
-                workflowStatus: 'emailed',
-                createdAt,
-                arrivalDate: null,
-                openedEmailAt: createdAt,
-                receivedAt: null,
-                items: normalizedItems,
-                emailSubject: subject,
-                emailBody: body,
-            });
-        }));
-
-        openMailtoLinks(emailDrafts.map((draft) => draft.mailto));
-    }, [supplierInfo]);
+        const buyOrderRef = doc(collection(db, BUY_ORDERS_PATH));
+        await setDoc(buyOrderRef, {
+            jobName: '',
+            customer: job.customer || '',
+            supplier: selectedSuppliers[0] || '',
+            suppliers: selectedSuppliers,
+            status: 'Ordered',
+            workflowStatus: 'emailed',
+            createdAt,
+            arrivalDate: null,
+            openedEmailAt: createdAt,
+            receivedAt: null,
+            items: normalizedItems,
+            requestedEmailSubject,
+            emailSubject: requestedEmailSubject || (emailDrafts[0]?.subject || 'Quote Request'),
+            emailBody: emailDrafts[0]?.body || customBody,
+            emailDrafts: emailDrafts.map(({ supplier, subject, body, info }) => ({
+                supplier,
+                email: info?.email || '',
+                ccEmail: info?.ccEmail || '',
+                subject,
+                body,
+            })),
+        });
+        if (blockedEmailDrafts.length > 0) {
+            setModal({ type: 'buy-order-drafts', data: { drafts: blockedEmailDrafts } });
+        } else {
+            closeModal();
+        }
+        return { closeModalOnSuccess: false };
+    }, [closeModal, supplierInfo]);
 
     const handleDeleteInventoryGroup = async (group) => {
         if (!group?.details?.length) return;
@@ -1489,6 +1568,7 @@ export default function App() {
                     onRestock={handleRestock}
                     buyOrders={openBuyOrders}
                     onAddBuyOrderToInventory={handleAddBuyOrderToInventory}
+                    onClearAllBuyOrders={handleClearAllBuyOrders}
                     searchQuery={searchQuery}
                     inventory={inventory}
                     suppliers={suppliers}
@@ -1594,6 +1674,7 @@ export default function App() {
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
             {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} refetchMaterials={refetchMaterials} materialIndicatorSettings={materialIndicatorSettings} />}
             {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} supplierInfo={supplierInfo} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} onUpdateSupplierInfo={handleUpdateSupplierInfo} />}
+            {modal.type === 'buy-order-drafts' && <BuyOrderDraftsModal onClose={closeModal} drafts={modal.data?.drafts || []} />}
             {modal.type === 'confirm-delete-categories' &&
                 <ConfirmationModal
                     isOpen={true}

@@ -61,7 +61,7 @@ export const AddOrderModal = ({
     prefill,
     mode = 'inventory'
 }) => {
-    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(
+    const { jobs, setJobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(
         initialData,
         materialTypes,
         suppliers,
@@ -87,6 +87,42 @@ export const AddOrderModal = ({
         setJobField(jobIndex, 'supplier', orderedSuppliers[0] || '');
     };
 
+    const handleStatusChange = (nextStatus) => {
+        setJobField(jobIndex, 'status', nextStatus);
+    };
+
+    const handleSharedArrivalDateChange = (value) => {
+        setJobs((currentJobs) => currentJobs.map((currentJob, index) => {
+            if (index !== jobIndex) return currentJob;
+            return {
+                ...currentJob,
+                arrivalDate: value,
+                items: currentJob.useItemArrivalDates
+                    ? currentJob.items
+                    : currentJob.items.map((item) => ({ ...item, arrivalDate: value })),
+            };
+        }));
+    };
+
+    const handleMultipleArrivalDateToggle = (enabled) => {
+        setJobs((currentJobs) => currentJobs.map((currentJob, index) => {
+            if (index !== jobIndex) return currentJob;
+
+            const firstItemArrivalDate = currentJob.items.find((item) => item.arrivalDate)?.arrivalDate || '';
+            const nextSharedArrivalDate = currentJob.arrivalDate || firstItemArrivalDate;
+
+            return {
+                ...currentJob,
+                useItemArrivalDates: enabled,
+                arrivalDate: enabled ? currentJob.arrivalDate : nextSharedArrivalDate,
+                items: currentJob.items.map((item) => ({
+                    ...item,
+                    arrivalDate: item.arrivalDate || nextSharedArrivalDate || '',
+                })),
+            };
+        }));
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -104,6 +140,11 @@ export const AddOrderModal = ({
                 }
             }
 
+            if (mode !== 'buy' && job.status === 'Ordered' && !job.useItemArrivalDates && !job.arrivalDate) {
+                setError('Expected arrival date is required for ordered stock.');
+                return;
+            }
+
             for (const item of job.items) {
                 if (mode !== 'buy') {
                     const cost = parseFloat(item.costPerPound);
@@ -111,6 +152,11 @@ export const AddOrderModal = ({
                         setError(`Cost per Pound for "${item.materialType}" must be a positive number.`);
                         return;
                     }
+                }
+
+                if (mode !== 'buy' && job.status === 'Ordered' && job.useItemArrivalDates && !item.arrivalDate) {
+                    setError(`Expected arrival date is required for "${item.materialType}".`);
+                    return;
                 }
 
                 const hasStandardQuantity = parseInt(item.qty96 || 0, 10) > 0 || parseInt(item.qty120 || 0, 10) > 0 || parseInt(item.qty144 || 0, 10) > 0;
@@ -141,8 +187,17 @@ export const AddOrderModal = ({
         setIsSubmitting(true);
         setError('');
         try {
-            await onSave(jobs, initialData);
-            onClose();
+            const debugRunId = `buy-order-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            if (typeof window !== 'undefined') {
+                window.__buyOrderDebugRunId = debugRunId;
+            }
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId:debugRunId,hypothesisId:'H1',location:'AddOrderModal.jsx:144',message:'Buy order submit requested',data:{mode,selectedSupplierCount:Array.isArray(job?.suppliers)?job.suppliers.filter(Boolean).length:0,itemCount:Array.isArray(job?.items)?job.items.length:0},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            const result = await onSave(jobs, initialData);
+            if (mode !== 'buy' || result?.closeModalOnSuccess !== false) {
+                onClose();
+            }
         } catch (err) {
             console.error("Submission error:", err);
             setError(err.message || "An error occurred during submission.");
@@ -189,16 +244,24 @@ export const AddOrderModal = ({
                                 <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
                             )}
                             {mode === 'buy' ? (
-                                <div className="flex items-center justify-center p-2 bg-zinc-800 rounded-lg text-sm font-semibold text-purple-300">
-                                    <Calendar size={16} />
-                                    <span>One email will open for each selected supplier</span>
+                                <div className="md:col-span-1">
+                                    <FormInput
+                                        label="Email Subject"
+                                        name="emailSubject"
+                                        value={job.emailSubject || ''}
+                                        onChange={(e) => setJobField(jobIndex, 'emailSubject', e.target.value)}
+                                        placeholder="Leave blank to use each supplier's default subject"
+                                    />
+                                    <p className="mt-2 text-xs text-zinc-400">
+                                        One email will open per selected supplier. Leave this blank to keep each supplier&apos;s default subject.
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="flex gap-2 p-2 bg-zinc-800 rounded-lg">
-                                    <button type="button" onClick={() => setJobField(jobIndex, 'status', 'On Hand')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'On Hand' ? 'bg-blue-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
+                                    <button type="button" onClick={() => handleStatusChange('On Hand')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'On Hand' ? 'bg-blue-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
                                         <Check size={16} /> On Hand
                                     </button>
-                                    <button type="button" onClick={() => setJobField(jobIndex, 'status', 'Ordered')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'Ordered' ? 'bg-purple-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
+                                    <button type="button" onClick={() => handleStatusChange('Ordered')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'Ordered' ? 'bg-purple-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
                                         <Calendar size={16} /> Ordered
                                     </button>
                                 </div>
@@ -207,7 +270,34 @@ export const AddOrderModal = ({
                         {mode !== 'buy' && (
                             <>
                                 <FormInput label="Date Ordered" name="createdAt" type="date" value={job.createdAt || ''} onChange={(e) => setJobField(jobIndex, 'createdAt', e.target.value)} />
-                                {job.status === 'Ordered' && <FormInput label="Expected Arrival Date" name="arrivalDate" type="date" value={job.arrivalDate} onChange={(e) => setJobField(jobIndex, 'arrivalDate', e.target.value)} />}
+                                {job.status === 'Ordered' && (
+                                    <div className="space-y-3">
+                                        <div className="flex flex-col gap-3 rounded-lg border border-zinc-700 bg-zinc-800/70 p-3 md:flex-row md:items-center md:justify-between">
+                                            <div>
+                                                <p className="text-sm font-medium text-zinc-200">Expected Arrival Dates</p>
+                                                <p className="text-xs text-zinc-400">Turn this on if different materials in the same order should arrive on different dates.</p>
+                                            </div>
+                                            <label className="flex items-center gap-2 text-sm text-zinc-200">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(job.useItemArrivalDates)}
+                                                    onChange={(e) => handleMultipleArrivalDateToggle(e.target.checked)}
+                                                    className="h-4 w-4 accent-purple-500"
+                                                />
+                                                Multiple dates by material
+                                            </label>
+                                        </div>
+                                        {!job.useItemArrivalDates && (
+                                            <FormInput
+                                                label="Expected Arrival Date"
+                                                name="arrivalDate"
+                                                type="date"
+                                                value={job.arrivalDate}
+                                                onChange={(e) => handleSharedArrivalDateChange(e.target.value)}
+                                            />
+                                        )}
+                                    </div>
+                                )}
                             </>
                         )}
 
@@ -254,6 +344,15 @@ export const AddOrderModal = ({
                                     <FormInput label="Custom Length" name={`customLength-${itemIndex}`} type="number" placeholder='96' value={item.customLength} onChange={(e) => setItemField(jobIndex, itemIndex, 'customLength', e.target.value)} />
                                     <FormInput label={mode === 'buy' ? 'Custom Quantity' : formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
                                 </div>
+                                {mode !== 'buy' && job.status === 'Ordered' && job.useItemArrivalDates && (
+                                    <FormInput
+                                        label="Expected Arrival Date"
+                                        name={`arrivalDate-${itemIndex}`}
+                                        type="date"
+                                        value={item.arrivalDate || ''}
+                                        onChange={(e) => setItemField(jobIndex, itemIndex, 'arrivalDate', e.target.value)}
+                                    />
+                                )}
                                 {mode !== 'buy' && (
                                     <FormInput label="Cost per Pound ($)" name="costPerPound" type="number" value={item.costPerPound} onChange={(e) => setItemField(jobIndex, itemIndex, 'costPerPound', e.target.value)} step="0.01" required />
                                 )}

@@ -1,7 +1,7 @@
 // src/views/ReorderView.jsx
 
 import React, { useMemo } from 'react';
-import { PlusCircle, Mail, Inbox } from 'lucide-react';
+import { PlusCircle, Mail, Inbox, Trash2 } from 'lucide-react';
 import { STANDARD_LENGTHS } from '../constants/materials';
 import { Button } from '../components/common/Button';
 import { createSupplierMailtoLink } from '../utils/buyOrderUtils';
@@ -63,21 +63,60 @@ function getLatestBuyOrderSizeBubbles(item) {
     return sizes;
 }
 
-const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory }) => (
+function getBuyOrderSuppliers(buyOrder) {
+    if (Array.isArray(buyOrder?.suppliers) && buyOrder.suppliers.length > 0) {
+        return buyOrder.suppliers.filter(Boolean);
+    }
+
+    return buyOrder?.supplier ? [buyOrder.supplier] : [];
+}
+
+function getBuyOrderSubject(buyOrder) {
+    return (buyOrder?.requestedEmailSubject || '').trim();
+}
+
+const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders }) => (
     <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
-        <h2 className="text-2xl font-bold text-white mb-4">Buy Orders</h2>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-2xl font-bold text-white">Buy Orders</h2>
+            <Button
+                variant="danger"
+                onClick={onClearAllBuyOrders}
+                disabled={buyOrders.length === 0}
+                className="px-4 py-2 text-sm"
+            >
+                <Trash2 size={16} />
+                <span>Clear All</span>
+            </Button>
+        </div>
         {buyOrders.length === 0 ? (
             <p className="text-zinc-400">No emailed buy orders are waiting to be added into inventory.</p>
         ) : (
             <div className="space-y-5">
-                {buyOrders.map((buyOrder) => (
+                {buyOrders.map((buyOrder) => {
+                    const orderSuppliers = getBuyOrderSuppliers(buyOrder);
+                    const orderSubject = getBuyOrderSubject(buyOrder);
+
+                    return (
                     <div key={buyOrder.id} className="rounded-2xl border border-zinc-700 bg-zinc-900/40 px-5 py-4 md:px-6">
                         <div className="min-w-0">
-                            <p className="text-xl font-bold tracking-tight text-blue-400">{buyOrder.supplier || 'Unknown Supplier'}</p>
+                            {orderSubject && (
+                                <>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Subject</p>
+                                    <p className="mt-1 text-lg font-semibold text-purple-300">{orderSubject}</p>
+                                </>
+                            )}
+                            <p className={`${orderSubject ? 'mt-4 ' : ''}text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500`}>Suppliers</p>
+                            <p className="text-xl font-bold tracking-tight text-blue-400">
+                                {orderSuppliers.length > 0 ? orderSuppliers.join(', ') : 'Unknown Supplier'}
+                            </p>
                             <p className="text-sm text-zinc-400">
                                 Opened email: {buyOrder.openedEmailAt ? new Date(buyOrder.openedEmailAt).toLocaleString() : 'N/A'}
                             </p>
                             <p className="text-sm text-zinc-500 mt-1">
+                                {orderSuppliers.length > 0 ? `${orderSuppliers.length} supplier${orderSuppliers.length === 1 ? '' : 's'} on this order` : 'No suppliers saved'}
+                            </p>
+                            <p className="text-sm text-zinc-500">
                                 {(buyOrder.items || []).length} material type{(buyOrder.items || []).length === 1 ? '' : 's'}
                             </p>
                         </div>
@@ -121,13 +160,13 @@ const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory }) => (
                             })}
                         </div>
                     </div>
-                ))}
+                )})}
             </div>
         )}
     </div>
 );
 
-export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders = [], onAddBuyOrderToInventory, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
+export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders = [], onAddBuyOrderToInventory, onClearAllBuyOrders, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
     const lowStockItems = useMemo(() => {
         const items = [];
         for (const materialType in inventorySummary) {
@@ -178,7 +217,7 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders 
 
     return (
         <div className="space-y-8">
-            <BuyOrdersBox buyOrders={buyOrders} onAddBuyOrderToInventory={onAddBuyOrderToInventory} />
+            <BuyOrdersBox buyOrders={buyOrders} onAddBuyOrderToInventory={onAddBuyOrderToInventory} onClearAllBuyOrders={onClearAllBuyOrders} />
             <EmailSupplierBox allSuppliers={suppliers} lowStockItemsBySupplier={lowStockItemsBySupplier} supplierInfoOverrides={supplierInfoOverrides} />
             <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
                 <h2 className="text-2xl font-bold text-white mb-4">Reorder List</h2>
