@@ -1,7 +1,7 @@
 // src/components/layout/Header.jsx
 
 import React, { forwardRef } from 'react';
-import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart, Inbox } from 'lucide-react';
+import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart } from 'lucide-react';
 import { Button } from '../common/Button';
 
 export const Header = forwardRef(({
@@ -10,8 +10,6 @@ export const Header = forwardRef(({
     onKeyDown,
     onAdd,
     onBuy,
-    onAddLatestBuyOrder,
-    canAddLatestBuyOrder,
     onUse,
     onEdit,
     isEditMode,
@@ -33,21 +31,9 @@ export const Header = forwardRef(({
                 </div>
                 <div className="flex flex-wrap justify-center md:justify-end gap-2">
                     <Button onClick={onAdd} className="px-3 py-2 md:px-5 md:py-3"><Plus size={20} /> <span className="hidden sm:inline">Add Stock</span></Button>
-                    <div className="flex">
-                        <Button onClick={onBuy} variant="secondary" className="px-3 py-2 md:px-5 md:py-3 rounded-r-none">
-                            <ShoppingCart size={20} /> <span className="hidden sm:inline">Buy</span>
-                        </Button>
-                        <Button
-                            onClick={onAddLatestBuyOrder}
-                            variant="secondary"
-                            disabled={!canAddLatestBuyOrder}
-                            className="px-2 py-2 md:px-3 md:py-3 rounded-l-none border-l border-zinc-500 min-w-0"
-                            title="Add latest buy order to inventory"
-                            aria-label="Add latest buy order to inventory"
-                        >
-                            <Inbox size={16} />
-                        </Button>
-                    </div>
+                    <Button onClick={onBuy} variant="secondary" className="px-3 py-2 md:px-5 md:py-3">
+                        <ShoppingCart size={20} /> <span className="hidden sm:inline">Buy</span>
+                    </Button>
                     <Button onClick={onUse} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Minus size={20} /> <span className="hidden sm:inline">Use Stock</span></Button>
                     <Button onClick={onManageCategories} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Box size={20} /> <span className="hidden sm:inline">Manage Categories</span></Button>
                     <Button onClick={onManageSuppliers} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Users size={20} /> <span className="hidden sm:inline">Manage Suppliers</span></Button>

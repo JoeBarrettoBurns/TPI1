@@ -17,7 +17,8 @@ export const DashboardView = ({
     activeCategory,
     onDeleteCategory,
     categoriesToDelete,
-    searchQuery
+    searchQuery,
+    materialIndicatorSettings
 }) => {
     const filteredCategories = useMemo(() => {
         if (!searchQuery) return categories;
@@ -50,6 +51,7 @@ export const DashboardView = ({
                         materials={materials}
                         onDeleteCategory={onDeleteCategory}
                         isMarkedForDeletion={categoriesToDelete.includes(category)}
+                        materialIndicatorSettings={materialIndicatorSettings}
                     />
                 ))}
             </SortableContext>
@@ -67,6 +69,7 @@ export const DashboardView = ({
                         onMaterialClick={onMaterialClick}
                         materials={materials}
                         isDragging
+                        materialIndicatorSettings={materialIndicatorSettings}
                     />
                 ) : null}
             </DragOverlay>

@@ -10,13 +10,27 @@ function toInputDate(value) {
     }
 }
 
-export function useOrderForm(initialData, materialTypes, suppliers, prefill = null) {
+export function useOrderForm(initialData, materialTypes, suppliers, prefill = null, options = {}) {
+    const { multiSupplier = false } = options;
+
     const getDefaultSupplier = useCallback((preferredSupplier) => {
         if (preferredSupplier && suppliers.includes(preferredSupplier)) {
             return preferredSupplier;
         }
         return suppliers[0] || '';
     }, [suppliers]);
+
+    const getDefaultSuppliers = useCallback((preferredSuppliers = [], preferredSupplier = '') => {
+        const normalizedPreferred = Array.isArray(preferredSuppliers)
+            ? preferredSuppliers.filter((supplier) => suppliers.includes(supplier))
+            : [];
+        if (normalizedPreferred.length > 0) {
+            return normalizedPreferred;
+        }
+
+        const fallbackSupplier = getDefaultSupplier(preferredSupplier);
+        return fallbackSupplier ? [fallbackSupplier] : [];
+    }, [getDefaultSupplier, suppliers]);
 
     const createNewItem = useCallback((materialTypeOverride, itemOverride = {}) => ({
         materialType: materialTypeOverride || itemOverride.materialType || (materialTypes && materialTypes.length > 0 ? materialTypes[0] : ''),
@@ -38,12 +52,15 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
             jobName: jobOverride.jobName ?? '',
             customer: jobOverride.customer ?? '',
             supplier: getDefaultSupplier(jobOverride.supplier ?? prefill?.supplier),
+            suppliers: multiSupplier
+                ? getDefaultSuppliers(jobOverride.suppliers ?? prefill?.suppliers, jobOverride.supplier ?? prefill?.supplier)
+                : [],
             status: jobOverride.status ?? prefill?.status ?? 'Ordered',
             arrivalDate: jobOverride.arrivalDate ?? '',
             createdAt: jobOverride.createdAt ?? '',
             items
         };
-    }, [createNewItem, getDefaultSupplier, prefill]);
+    }, [createNewItem, getDefaultSupplier, getDefaultSuppliers, multiSupplier, prefill]);
 
     const transformInitialData = useCallback((data) => {
         if (!data) return null;
@@ -53,6 +70,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
             jobName: data.job || data.jobName || '',
             customer: data.customer || '',
             supplier: data.supplier || data.customer || suppliers[0] || '',
+            suppliers: data.suppliers || (data.supplier ? [data.supplier] : []),
             status: data.isFuture ? 'Ordered' : (data.status || 'On Hand'),
             arrivalDate: toInputDate(arrivalDateISO),
             createdAt: toInputDate(data.date || data.createdAt),
@@ -113,6 +131,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
             jobName: data.jobName || data.job || '',
             customer: data.customer || '',
             supplier: data.supplier || '',
+            suppliers: data.suppliers || (data.supplier ? [data.supplier] : []),
             status: data.status === 'On Hand' ? 'On Hand' : 'Ordered',
             arrivalDate: toInputDate(data.arrivalDate),
             createdAt: toInputDate(data.createdAt),

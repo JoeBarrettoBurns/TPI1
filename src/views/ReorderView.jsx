@@ -37,13 +37,16 @@ const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoO
     </div>
 );
 
-function formatLatestBuyOrderSizes(item) {
+function getLatestBuyOrderSizeBubbles(item) {
     const sizes = [];
 
     STANDARD_LENGTHS.forEach((length) => {
         const qty = parseInt(item?.[`qty${length}`] || 0, 10);
         if (qty > 0) {
-            sizes.push(`${length}"x48" x${qty}`);
+            sizes.push({
+                size: `${length}"x48"`,
+                qty,
+            });
         }
     });
 
@@ -51,42 +54,72 @@ function formatLatestBuyOrderSizes(item) {
     const customWidth = parseFloat(item?.customWidth || 0);
     const customLength = parseFloat(item?.customLength || 0);
     if (customQty > 0 && customWidth > 0 && customLength > 0) {
-        sizes.push(`${customLength}"x${customWidth}" x${customQty}`);
+        sizes.push({
+            size: `${customLength}"x${customWidth}"`,
+            qty: customQty,
+        });
     }
 
-    return sizes.join(', ');
+    return sizes;
 }
 
-const LatestBuyOrderBox = ({ latestBuyOrder, onAddLatestBuyOrderToInventory }) => (
+const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory }) => (
     <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <h2 className="text-2xl font-bold text-white">Latest Buy Order</h2>
-                {!latestBuyOrder ? (
-                    <p className="text-zinc-400 mt-2">No emailed buy order is waiting to be added into inventory.</p>
-                ) : (
-                    <>
-                        <p className="text-zinc-300 mt-2">
-                            Supplier: <span className="font-semibold text-blue-400">{latestBuyOrder.supplier || 'Unknown'}</span>
-                        </p>
-                        <p className="text-zinc-400 text-sm">
-                            Opened email: {latestBuyOrder.openedEmailAt ? new Date(latestBuyOrder.openedEmailAt).toLocaleString() : 'N/A'}
-                        </p>
-                    </>
-                )}
-            </div>
-            <Button onClick={onAddLatestBuyOrderToInventory} disabled={!latestBuyOrder}>
-                <Inbox size={16} />
-                <span>Add to Inventory</span>
-            </Button>
-        </div>
+        <h2 className="text-2xl font-bold text-white mb-4">Buy Orders</h2>
+        {buyOrders.length === 0 ? (
+            <p className="text-zinc-400">No emailed buy orders are waiting to be added into inventory.</p>
+        ) : (
+            <div className="space-y-5">
+                {buyOrders.map((buyOrder) => (
+                    <div key={buyOrder.id} className="rounded-2xl border border-zinc-700 bg-zinc-900/40 px-5 py-4 md:px-6">
+                        <div className="min-w-0">
+                            <p className="text-xl font-bold tracking-tight text-blue-400">{buyOrder.supplier || 'Unknown Supplier'}</p>
+                            <p className="text-sm text-zinc-400">
+                                Opened email: {buyOrder.openedEmailAt ? new Date(buyOrder.openedEmailAt).toLocaleString() : 'N/A'}
+                            </p>
+                            <p className="text-sm text-zinc-500 mt-1">
+                                {(buyOrder.items || []).length} material type{(buyOrder.items || []).length === 1 ? '' : 's'}
+                            </p>
+                        </div>
+                        <div className="mt-5 grid grid-cols-1 gap-4">
+                            {(buyOrder.items || []).map((item, index) => {
+                                const sizeBubbles = getLatestBuyOrderSizeBubbles(item);
 
-        {latestBuyOrder && (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {(latestBuyOrder.items || []).map((item, index) => (
-                    <div key={`${item.materialType}-${index}`} className="rounded-lg border border-zinc-700 bg-zinc-900/40 p-3">
-                        <p className="font-semibold text-white">{item.materialType}</p>
-                        <p className="text-sm text-zinc-300 mt-1">{formatLatestBuyOrderSizes(item) || 'No sheet sizes saved'}</p>
+                                return (
+                                    <div key={`${buyOrder.id}-${item.materialType}-${index}`} className="rounded-xl border border-zinc-700/80 bg-zinc-950/60 px-4 py-4 md:px-5">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                            <Button
+                                                onClick={() => onAddBuyOrderToInventory(buyOrder)}
+                                                className="shrink-0 px-3 py-2 text-sm min-w-[92px]"
+                                            >
+                                                <Inbox size={15} />
+                                                <span>Add</span>
+                                            </Button>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-xl md:text-2xl font-bold tracking-tight text-white">{item.materialType}</p>
+                                                {sizeBubbles.length > 0 ? (
+                                                    <div className="mt-3 flex flex-wrap gap-2.5">
+                                                        {sizeBubbles.map((entry) => (
+                                                            <span
+                                                                key={`${item.materialType}-${entry.size}-${entry.qty}`}
+                                                                className="inline-flex items-center gap-2 rounded-full border border-zinc-600 bg-zinc-800/90 px-3 py-1.5 text-sm md:text-base font-semibold text-zinc-100 shadow-sm"
+                                                            >
+                                                                <span className="text-zinc-200">{entry.size}</span>
+                                                                <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-blue-300">
+                                                                    Qty {entry.qty}
+                                                                </span>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-base text-zinc-400 mt-2">No sheet sizes saved</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 ))}
             </div>
@@ -94,7 +127,7 @@ const LatestBuyOrderBox = ({ latestBuyOrder, onAddLatestBuyOrderToInventory }) =
     </div>
 );
 
-export const ReorderView = ({ inventorySummary, materials, onRestock, latestBuyOrder, onAddLatestBuyOrderToInventory, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
+export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders = [], onAddBuyOrderToInventory, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
     const lowStockItems = useMemo(() => {
         const items = [];
         for (const materialType in inventorySummary) {
@@ -145,7 +178,7 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, latestBuyO
 
     return (
         <div className="space-y-8">
-            <LatestBuyOrderBox latestBuyOrder={latestBuyOrder} onAddLatestBuyOrderToInventory={onAddLatestBuyOrderToInventory} />
+            <BuyOrdersBox buyOrders={buyOrders} onAddBuyOrderToInventory={onAddBuyOrderToInventory} />
             <EmailSupplierBox allSuppliers={suppliers} lowStockItemsBySupplier={lowStockItemsBySupplier} supplierInfoOverrides={supplierInfoOverrides} />
             <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
                 <h2 className="text-2xl font-bold text-white mb-4">Reorder List</h2>

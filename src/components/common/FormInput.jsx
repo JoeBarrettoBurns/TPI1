@@ -3,17 +3,18 @@ import React, { useRef, useCallback } from 'react';
 export const FormInput = ({ label, name, type = "text", value, onChange, required = false, as = "input", children, ...props }) => {
     const inputRef = useRef(null);
 
-    const handleContainerMouseDown = useCallback((e) => {
+    const handleDateFieldMouseDown = useCallback((e) => {
         if (as !== 'input' || type !== 'date') return;
-        // Only act on genuine user gestures and when clicking outside the input
-        if (!e.isTrusted || (e.target && e.target.tagName === 'INPUT')) return;
+        // Only act on genuine primary-button user clicks.
+        if (!e.isTrusted || e.button !== 0) return;
         const element = inputRef.current;
-        if (!element) return;
+        if (!element || element.disabled || element.readOnly) return;
         try {
             if (navigator && navigator.userActivation && !navigator.userActivation.isActive) {
                 element.focus();
                 return;
             }
+            element.focus();
             if (typeof element.showPicker === 'function') {
                 element.showPicker();
             } else {
@@ -35,7 +36,7 @@ export const FormInput = ({ label, name, type = "text", value, onChange, require
     };
 
     return (
-        <div onMouseDown={handleContainerMouseDown}>
+        <div onMouseDown={handleDateFieldMouseDown}>
             <label htmlFor={name} className="block text-sm font-medium text-zinc-300">
                 {label} {required && <span className="text-red-400">*</span>}
             </label>

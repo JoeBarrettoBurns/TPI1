@@ -8,8 +8,20 @@ import { X, PlusCircle, Wrench } from 'lucide-react';
 import { db, appId } from '../../firebase/config';
 import { repairInventoryMaterialKeys } from '../../utils/backupService';
 import { rebuildMissingMaterialsFromInventory } from '../../utils/recoveryService';
+import { DEFAULT_CATEGORY_INDICATOR_SETTINGS, normalizeCategoryIndicatorSettings } from '../../utils/categoryIndicatorSettings';
 
-export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, refetchMaterials }) => {
+function createEmptyMaterialRow() {
+	return {
+		name: '',
+		thickness: '',
+		density: '',
+		low: String(DEFAULT_CATEGORY_INDICATOR_SETTINGS.low),
+		high: String(DEFAULT_CATEGORY_INDICATOR_SETTINGS.high),
+		isNew: true,
+	};
+}
+
+export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, refetchMaterials, materialIndicatorSettings }) => {
 	const [mode, setMode] = useState('edit'); // 'edit' or 'add'
 	const [selectedCategory, setSelectedCategory] = useState(categories[0] || '');
 	const [newCategoryName, setNewCategoryName] = useState('');
@@ -22,12 +34,23 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 		if (mode === 'edit' && selectedCategory) {
 			const materialsInCategory = Object.entries(materials)
 				.filter(([, material]) => material.category === selectedCategory)
-				.map(([id, material]) => ({ ...material, name: material.name || id, id, originalName: material.name || id, isNew: false }));
+				.map(([id, material]) => {
+					const settings = normalizeCategoryIndicatorSettings(materialIndicatorSettings?.[id] || material);
+					return {
+						...material,
+						name: material.name || id,
+						id,
+						originalName: material.name || id,
+						low: String(settings.low),
+						high: String(settings.high),
+						isNew: false,
+					};
+				});
 			setCategoryMaterials(materialsInCategory);
 		} else {
-			setCategoryMaterials([{ name: '', thickness: '', density: '', isNew: true }]);
+			setCategoryMaterials([createEmptyMaterialRow()]);
 		}
-	}, [selectedCategory, materials, mode]);
+	}, [selectedCategory, materials, mode, materialIndicatorSettings]);
 
 	const handleMaterialChange = (index, field, value) => {
 		const newMaterials = [...categoryMaterials];
@@ -36,7 +59,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 	};
 
 	const addMaterialRow = () => {
-		setCategoryMaterials([...categoryMaterials, { name: '', thickness: '', density: '', isNew: true }]);
+		setCategoryMaterials([...categoryMaterials, createEmptyMaterialRow()]);
 	};
 
 	const removeMaterialRow = (index) => {
@@ -53,6 +76,15 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 		}
 		if (categoryMaterials.some(m => !m.name.trim() || !m.thickness || !m.density)) {
 			setError('All fields for all materials are required.');
+			return;
+		}
+		const hasInvalidIndicatorSettings = categoryMaterials.some((material) => {
+			const parsedLow = Number(material.low);
+			const parsedHigh = Number(material.high);
+			return !Number.isFinite(parsedLow) || parsedLow < 0 || !Number.isFinite(parsedHigh) || parsedHigh <= parsedLow;
+		});
+		if (hasInvalidIndicatorSettings) {
+			setError('Each material must have an indicator low of 0 or more, and a high greater than low.');
 			return;
 		}
 
@@ -153,10 +185,19 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 									<X size={18} />
 								</button>
 							)}
-							<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-								<FormInput label="Material Name" value={material.name} onChange={(e) => handleMaterialChange(index, 'name', e.target.value)} required placeholder="e.g., 16GA-CRS" />
-								<FormInput label="Thickness (in)" type="number" value={material.thickness} onChange={(e) => handleMaterialChange(index, 'thickness', e.target.value)} required step="0.001" />
-								<FormInput label="Density (lbs/inł)" type="number" value={material.density} onChange={(e) => handleMaterialChange(index, 'density', e.target.value)} required step="0.0001" />
+							<div className="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-4 items-start">
+								<div className="rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+									<p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">High / Low</p>
+									<div className="grid grid-cols-2 gap-2 mt-3">
+										<FormInput label="Low" type="number" value={material.low} onChange={(e) => handleMaterialChange(index, 'low', e.target.value)} required min="0" step="1" />
+										<FormInput label="High" type="number" value={material.high} onChange={(e) => handleMaterialChange(index, 'high', e.target.value)} required min="1" step="1" />
+									</div>
+								</div>
+								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+									<FormInput label="Material Name" value={material.name} onChange={(e) => handleMaterialChange(index, 'name', e.target.value)} required placeholder="e.g., 16GA-CRS" />
+									<FormInput label="Thickness (in)" type="number" value={material.thickness} onChange={(e) => handleMaterialChange(index, 'thickness', e.target.value)} required step="0.001" />
+									<FormInput label="Density (lbs/inł)" type="number" value={material.density} onChange={(e) => handleMaterialChange(index, 'density', e.target.value)} required step="0.0001" />
+								</div>
 							</div>
 						</div>
 					))}

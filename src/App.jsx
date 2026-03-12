@@ -17,7 +17,7 @@ import {
 } from './utils/dataProcessing';
 import { INITIAL_SUPPLIERS, STANDARD_LENGTHS } from './constants/materials';
 import { buildBuyOrderEmailBody, createSupplierMailtoLink } from './utils/buyOrderUtils';
-import { buildCategoryIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
+import { buildMaterialIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
 
 // Layout & Common Components
 import { Header } from './components/layout/Header';
@@ -71,6 +71,19 @@ function normalizeOrderItemsForStorage(items = []) {
     }));
 }
 
+function openMailtoLinks(mailtoLinks = []) {
+    const validLinks = mailtoLinks.filter(Boolean);
+    if (validLinks.length === 0) {
+        return;
+    }
+
+    const [firstLink, ...remainingLinks] = validLinks;
+    remainingLinks.forEach((mailto) => {
+        window.open(mailto, '_blank', 'noopener,noreferrer');
+    });
+    window.location.href = firstLink;
+}
+
 
 export default function App() {
     const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('isLoggedIn') === 'true');
@@ -91,7 +104,7 @@ export default function App() {
     const searchTimeoutRef = useRef(null);
     const [isAssistantVisible, setIsAssistantVisible] = useState(false);
     const [inventoryDetailsRequested, setInventoryDetailsRequested] = useState(false);
-    const [latestBuyOrder, setLatestBuyOrder] = useState(null);
+    const [openBuyOrders, setOpenBuyOrders] = useState([]);
     const shouldLoadInventoryDetails = useMemo(() => {
         const lightweightViews = new Set(['dashboard', 'reorder', 'sheet-calculator']);
         const inventoryDependentModals = new Set(['use', 'edit-log', 'edit-order']);
@@ -127,7 +140,7 @@ export default function App() {
 
     useEffect(() => {
         if (!isLoggedIn) {
-            setLatestBuyOrder(null);
+            setOpenBuyOrders([]);
             return undefined;
         }
 
@@ -144,11 +157,11 @@ export default function App() {
                     .map((buyOrderDoc) => ({ id: buyOrderDoc.id, ...buyOrderDoc.data() }))
                     .filter((buyOrder) => buyOrder.workflowStatus !== 'received');
 
-                setLatestBuyOrder(openBuyOrders[0] || null);
+                setOpenBuyOrders(openBuyOrders);
             },
             (err) => {
                 console.error('Failed to load buy orders:', err);
-                setLatestBuyOrder(null);
+                setOpenBuyOrders([]);
             }
         );
     }, [isLoggedIn]);
@@ -184,8 +197,8 @@ export default function App() {
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
     const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);
-    const categoryIndicatorSettings = useMemo(
-        () => buildCategoryIndicatorSettingsMap(materials),
+    const materialIndicatorSettings = useMemo(
+        () => buildMaterialIndicatorSettingsMap(materials),
         [materials]
     );
 
@@ -368,6 +381,7 @@ export default function App() {
 
         return {
             supplier,
+            suppliers: supplier ? [supplier] : [],
             status: 'Ordered',
             createdAt: getTodayDateInputValue(),
             items: [{
@@ -389,21 +403,21 @@ export default function App() {
 
     const handleRestock = useCallback((item) => {
         const prefill = typeof item === 'string'
-            ? { createdAt: getTodayDateInputValue(), items: [{ materialType: item }] }
+            ? { createdAt: getTodayDateInputValue(), items: [{ materialType: item }], suppliers: suppliers[0] ? [suppliers[0]] : [] }
             : buildBuyOrderPrefillFromReorderItem(item);
         handleOpenBuyModal(prefill);
-    }, [buildBuyOrderPrefillFromReorderItem, handleOpenBuyModal]);
+    }, [buildBuyOrderPrefillFromReorderItem, handleOpenBuyModal, suppliers]);
 
-    const handleAddLatestBuyOrderToInventory = useCallback(() => {
-        if (!latestBuyOrder) return;
+    const handleAddBuyOrderToInventory = useCallback((buyOrder) => {
+        if (!buyOrder) return;
         setModal({
             type: 'add',
             data: {
-                prefill: latestBuyOrder,
-                linkedBuyOrderId: latestBuyOrder.id
+                prefill: buyOrder,
+                linkedBuyOrderId: buyOrder.id
             }
         });
-    }, [latestBuyOrder]);
+    }, []);
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
@@ -637,8 +651,7 @@ export default function App() {
         }
     };
 
-    const handleManageCategory = async (categoryName, materialsFromModal, mode, indicatorSettings) => {
-        const normalizedIndicatorSettings = normalizeCategoryIndicatorSettings(indicatorSettings);
+    const handleManageCategory = async (categoryName, materialsFromModal, mode) => {
         const materialsCollectionRef = collection(db, `artifacts/${appId}/public/data/materials`);
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
@@ -657,6 +670,7 @@ export default function App() {
                         if (allMaterials[material.name]) {
                             throw new Error(`A material named "${material.name}" already exists.`);
                         }
+                        const normalizedIndicatorSettings = normalizeCategoryIndicatorSettings(material);
                         const materialId = material.name.replace(/\//g, '-');
                         const newMaterialRef = doc(materialsCollectionRef, materialId);
                         transaction.set(newMaterialRef, {
@@ -693,6 +707,7 @@ export default function App() {
 
                     const newThickness = parseFloat(modalMaterial.thickness);
                     const newDensity = parseFloat(modalMaterial.density);
+                    const normalizedIndicatorSettings = normalizeCategoryIndicatorSettings(modalMaterial);
 
                     if (modalMaterial.isNew) {
                         const newName = modalMaterial.name.trim();
@@ -858,30 +873,44 @@ export default function App() {
             throw new Error('A buy order requires at least one job.');
         }
 
+        const selectedSuppliers = Array.isArray(job.suppliers)
+            ? job.suppliers.filter(Boolean)
+            : (job.supplier ? [job.supplier] : []);
+        if (selectedSuppliers.length === 0) {
+            throw new Error('Select at least one supplier before opening buy-order emails.');
+        }
+
         const normalizedItems = normalizeOrderItemsForStorage(job.items);
-        const { mailto, subject, body } = createSupplierMailtoLink({
-            supplier: job.supplier,
-            supplierInfoOverrides: supplierInfo,
-            customBody: buildBuyOrderEmailBody(normalizedItems),
-        });
+        const customBody = buildBuyOrderEmailBody(normalizedItems);
+        const createdAt = new Date().toISOString();
+        const emailDrafts = selectedSuppliers.map((supplier) => ({
+            supplier,
+            ...createSupplierMailtoLink({
+                supplier,
+                supplierInfoOverrides: supplierInfo,
+                customBody,
+            }),
+        }));
 
-        const buyOrderRef = doc(collection(db, BUY_ORDERS_PATH));
-        await setDoc(buyOrderRef, {
-            jobName: '',
-            customer: job.customer || '',
-            supplier: job.supplier || '',
-            status: 'Ordered',
-            workflowStatus: 'emailed',
-            createdAt: new Date().toISOString(),
-            arrivalDate: null,
-            openedEmailAt: new Date().toISOString(),
-            receivedAt: null,
-            items: normalizedItems,
-            emailSubject: subject,
-            emailBody: body,
-        });
+        await Promise.all(emailDrafts.map(async ({ supplier, subject, body }) => {
+            const buyOrderRef = doc(collection(db, BUY_ORDERS_PATH));
+            await setDoc(buyOrderRef, {
+                jobName: '',
+                customer: job.customer || '',
+                supplier: supplier || '',
+                status: 'Ordered',
+                workflowStatus: 'emailed',
+                createdAt,
+                arrivalDate: null,
+                openedEmailAt: createdAt,
+                receivedAt: null,
+                items: normalizedItems,
+                emailSubject: subject,
+                emailBody: body,
+            });
+        }));
 
-        window.location.href = mailto;
+        openMailtoLinks(emailDrafts.map((draft) => draft.mailto));
     }, [supplierInfo]);
 
     const handleDeleteInventoryGroup = async (group) => {
@@ -1423,7 +1452,7 @@ export default function App() {
                             onDeleteCategory={handleToggleCategoryForDeletion}
                             categoriesToDelete={categoriesToDelete}
                             searchQuery={searchQuery}
-                            categoryIndicatorSettings={categoryIndicatorSettings}
+                            materialIndicatorSettings={materialIndicatorSettings}
                         />
                     </DndContext>
                 );
@@ -1458,8 +1487,8 @@ export default function App() {
                     inventorySummary={inventorySummary}
                     materials={materials}
                     onRestock={handleRestock}
-                latestBuyOrder={latestBuyOrder}
-                onAddLatestBuyOrderToInventory={handleAddLatestBuyOrderToInventory}
+                    buyOrders={openBuyOrders}
+                    onAddBuyOrderToInventory={handleAddBuyOrderToInventory}
                     searchQuery={searchQuery}
                     inventory={inventory}
                     suppliers={suppliers}
@@ -1496,8 +1525,6 @@ export default function App() {
                     ref={searchInputRef}
                     onAdd={() => setModal({ type: 'add' })}
                     onBuy={() => handleOpenBuyModal()}
-                    onAddLatestBuyOrder={handleAddLatestBuyOrderToInventory}
-                    canAddLatestBuyOrder={!!latestBuyOrder}
                     onUse={() => setModal({ type: 'use' })}
                     onEdit={() => isEditMode ? handleFinishEditing() : setIsEditMode(true)}
                     onSignOut={handleSignOut}
@@ -1565,7 +1592,7 @@ export default function App() {
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} materials={materials} suppliers={suppliers} />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} materials={materials} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
-            {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} refetchMaterials={refetchMaterials} categoryIndicatorSettings={categoryIndicatorSettings} />}
+            {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} refetchMaterials={refetchMaterials} materialIndicatorSettings={materialIndicatorSettings} />}
             {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} supplierInfo={supplierInfo} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} onUpdateSupplierInfo={handleUpdateSupplierInfo} />}
             {modal.type === 'confirm-delete-categories' &&
                 <ConfirmationModal

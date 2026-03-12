@@ -61,11 +61,31 @@ export const AddOrderModal = ({
     prefill,
     mode = 'inventory'
 }) => {
-    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes, suppliers, prefill);
+    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(
+        initialData,
+        materialTypes,
+        suppliers,
+        prefill,
+        { multiSupplier: mode === 'buy' }
+    );
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const categories = useMemo(() => [...new Set(Object.values(materials || {}).map(m => m.category))], [materials]);
-    const submitLabel = mode === 'buy' ? 'Buy / Open Email' : 'Submit Order';
+    const submitLabel = mode === 'buy' ? 'Open Email' : 'Submit Order';
+
+    // Since we are only allowing one job group, we can reference it directly.
+    const jobIndex = 0;
+    const job = jobs[0];
+
+    const toggleSupplierSelection = (supplierName) => {
+        const selectedSuppliers = Array.isArray(job.suppliers) ? job.suppliers : [];
+        const nextSuppliers = selectedSuppliers.includes(supplierName)
+            ? selectedSuppliers.filter((supplier) => supplier !== supplierName)
+            : [...selectedSuppliers, supplierName];
+        const orderedSuppliers = suppliers.filter((supplier) => nextSuppliers.includes(supplier));
+        setJobField(jobIndex, 'suppliers', orderedSuppliers);
+        setJobField(jobIndex, 'supplier', orderedSuppliers[0] || '');
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -76,11 +96,21 @@ export const AddOrderModal = ({
                 return;
             }
 
-            for (const item of job.items) {
-                const cost = parseFloat(item.costPerPound);
-                if (isNaN(cost) || cost <= 0) {
-                    setError(`Cost per Pound for "${item.materialType}" must be a positive number.`);
+            if (mode === 'buy') {
+                const selectedSuppliers = Array.isArray(job.suppliers) ? job.suppliers.filter(Boolean) : [];
+                if (selectedSuppliers.length === 0) {
+                    setError('Select at least one supplier for the buy order.');
                     return;
+                }
+            }
+
+            for (const item of job.items) {
+                if (mode !== 'buy') {
+                    const cost = parseFloat(item.costPerPound);
+                    if (isNaN(cost) || cost <= 0) {
+                        setError(`Cost per Pound for "${item.materialType}" must be a positive number.`);
+                        return;
+                    }
                 }
 
                 const hasStandardQuantity = parseInt(item.qty96 || 0, 10) > 0 || parseInt(item.qty120 || 0, 10) > 0 || parseInt(item.qty144 || 0, 10) > 0;
@@ -121,10 +151,6 @@ export const AddOrderModal = ({
         }
     };
 
-    // Since we are only allowing one job group, we can reference it directly.
-    const jobIndex = 0;
-    const job = jobs[0];
-
     return (
         <BaseModal onClose={onClose} title={title}>
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -134,11 +160,38 @@ export const AddOrderModal = ({
                             {mode !== 'buy' && (
                                 <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
                             )}
-                            <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
+                            {mode === 'buy' ? (
+                                <div className="md:col-span-1">
+                                    <label className="block text-sm font-medium text-zinc-300">Suppliers</label>
+                                    <div className="mt-1 rounded-lg border border-zinc-600 bg-zinc-700 p-3 space-y-2 max-h-44 overflow-y-auto">
+                                        {suppliers.map((supplierName) => {
+                                            const isSelected = (job.suppliers || []).includes(supplierName);
+                                            return (
+                                                <label key={supplierName} className={`flex items-center gap-3 rounded-md border px-3 py-2 cursor-pointer transition-colors ${isSelected ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-zinc-600 text-zinc-200 hover:border-zinc-500'}`}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => toggleSupplierSelection(supplierName)}
+                                                        className="h-4 w-4 accent-blue-500"
+                                                    />
+                                                    <span>{supplierName}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="mt-2 text-xs text-zinc-400">
+                                        {(job.suppliers || []).length > 0
+                                            ? `${job.suppliers.length} supplier${job.suppliers.length === 1 ? '' : 's'} selected`
+                                            : 'Select one or more suppliers to open separate emails.'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
+                            )}
                             {mode === 'buy' ? (
                                 <div className="flex items-center justify-center p-2 bg-zinc-800 rounded-lg text-sm font-semibold text-purple-300">
                                     <Calendar size={16} />
-                                    <span>Buy orders are saved as Ordered</span>
+                                    <span>One email will open for each selected supplier</span>
                                 </div>
                             ) : (
                                 <div className="flex gap-2 p-2 bg-zinc-800 rounded-lg">
@@ -191,17 +244,19 @@ export const AddOrderModal = ({
                                 </div>
                                 <p className="text-sm font-medium text-zinc-300 mt-2">Standard Quantities:</p>
                                 <div className="grid grid-cols-3 gap-2">
-                                    <FormInput label={formatSheetPriceLabel(96, item, materials)} name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty96', e.target.value)} />
-                                    <FormInput label={formatSheetPriceLabel(120, item, materials)} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty120', e.target.value)} />
-                                    <FormInput label={formatSheetPriceLabel(144, item, materials)} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty144', e.target.value)} />
+                                    <FormInput label={mode === 'buy' ? '96"x48"' : formatSheetPriceLabel(96, item, materials)} name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty96', e.target.value)} />
+                                    <FormInput label={mode === 'buy' ? '120"x48"' : formatSheetPriceLabel(120, item, materials)} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty120', e.target.value)} />
+                                    <FormInput label={mode === 'buy' ? '144"x48"' : formatSheetPriceLabel(144, item, materials)} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty144', e.target.value)} />
                                 </div>
                                 <p className="text-sm font-medium text-zinc-300 mt-4">Optional Custom Sheet:</p>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                                     <FormInput label="Custom Width" name={`customWidth-${itemIndex}`} type="number" placeholder='48' value={item.customWidth} onChange={(e) => setItemField(jobIndex, itemIndex, 'customWidth', e.target.value)} />
                                     <FormInput label="Custom Length" name={`customLength-${itemIndex}`} type="number" placeholder='96' value={item.customLength} onChange={(e) => setItemField(jobIndex, itemIndex, 'customLength', e.target.value)} />
-                                    <FormInput label={formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
+                                    <FormInput label={mode === 'buy' ? 'Custom Quantity' : formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
                                 </div>
-                                <FormInput label="Cost per Pound ($)" name="costPerPound" type="number" value={item.costPerPound} onChange={(e) => setItemField(jobIndex, itemIndex, 'costPerPound', e.target.value)} step="0.01" required />
+                                {mode !== 'buy' && (
+                                    <FormInput label="Cost per Pound ($)" name="costPerPound" type="number" value={item.costPerPound} onChange={(e) => setItemField(jobIndex, itemIndex, 'costPerPound', e.target.value)} step="0.01" required />
+                                )}
                             </div>
                         ))}
                     </div>

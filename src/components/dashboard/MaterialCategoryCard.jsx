@@ -7,8 +7,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { STANDARD_LENGTHS } from '../../constants/materials';
 import { GripVertical, Trash2, RotateCcw } from 'lucide-react';
 import { useFirestoreDnd } from '../../hooks/useFirestoreDnd';
+import { normalizeCategoryIndicatorSettings } from '../../utils/categoryIndicatorSettings';
 
-export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingSummary, scheduledOutgoingSummary, isEditMode, onSave, onMaterialClick, materials, isDragging, onDeleteCategory, isMarkedForDeletion }) => {
+export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingSummary, scheduledOutgoingSummary, isEditMode, onSave, onMaterialClick, materials, isDragging, onDeleteCategory, isMarkedForDeletion, materialIndicatorSettings }) => {
     const {
         attributes,
         listeners,
@@ -64,6 +65,15 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
 
     const [editingCell, setEditingCell] = useState(null);
     const [editValue, setEditValue] = useState('');
+    const normalizedIndicatorSettingsByMaterial = useMemo(
+        () => Object.fromEntries(
+            materialTypes.map((materialType) => [
+                materialType,
+                normalizeCategoryIndicatorSettings(materialIndicatorSettings?.[materialType] || safeMaterials[materialType]),
+            ])
+        ),
+        [materialIndicatorSettings, materialTypes, safeMaterials]
+    );
 
     const handleEditSave = () => {
         if (!editingCell) return;
@@ -76,9 +86,9 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         setEditingCell(null);
     };
 
-    const getStockStyle = (count) => {
-        const MAX_VISUAL_STOCK = 10; // Represents a "full" bar
-        const fillPercent = Math.min((count / MAX_VISUAL_STOCK) * 100, 100);
+    const getStockStyle = (count, matType) => {
+        const { low: lowThreshold, high: highThreshold } = normalizedIndicatorSettingsByMaterial[matType] || normalizeCategoryIndicatorSettings();
+        const fillPercent = Math.min((count / highThreshold) * 100, 100);
 
         const emptyColor = '#3f3f46'; // zinc-700
         let fillColor;
@@ -92,22 +102,22 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         if (count === 0) {
             fillColor = emptyColor;
             textColor = 'text-zinc-400';
-        } else if (count <= 5) {
+        } else if (count <= lowThreshold) {
             // Interpolate between red and yellow
-            const ratio = count / 5;
+            const ratio = lowThreshold === 0 ? 1 : count / lowThreshold;
             const r = Math.round(red.r + (yellow.r - red.r) * ratio);
             const g = Math.round(red.g + (yellow.g - red.g) * ratio);
             const b = Math.round(red.b + (yellow.b - red.b) * ratio);
             fillColor = `rgb(${r}, ${g}, ${b})`;
-        } else if (count < 10) {
+        } else if (count < highThreshold) {
             // Interpolate between yellow and green
-            const ratio = (count - 5) / 5;
+            const ratio = (count - lowThreshold) / (highThreshold - lowThreshold);
             const r = Math.round(yellow.r + (green.r - yellow.r) * ratio);
             const g = Math.round(yellow.g + (green.g - yellow.g) * ratio);
             const b = Math.round(yellow.b + (green.b - yellow.b) * ratio);
             fillColor = `rgb(${r}, ${g}, ${b})`;
         } else {
-            // Solid green for 10+
+            // Solid green once the category target is met
             fillColor = `rgb(${green.r}, ${green.g}, ${green.b})`;
         }
 
@@ -236,7 +246,7 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
                     ? (scheduledOutgoingSummary?.[matType]?.lengths?.custom || 0)
                     : (scheduledOutgoingSummary?.[matType]?.lengths?.[len] || 0);
 
-                const { style: stockStyle, textColor } = getStockStyle(stockCount);
+                const { style: stockStyle, textColor } = getStockStyle(stockCount, matType);
 
                 return (
                     <td key={len} className="p-2 text-center border-l border-zinc-700">
