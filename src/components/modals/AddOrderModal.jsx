@@ -1,18 +1,71 @@
 // src/components/modals/AddOrderModal.jsx
 
 import React, { useMemo, useState } from 'react';
-import { X, Check, Calendar } from 'lucide-react';
+import { X, Check, Calendar, Mail } from 'lucide-react';
 import { useOrderForm } from '../../hooks/useOrderForm';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
+import { calculateSheetCost } from '../../utils/dataProcessing';
 
-export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New Stock", materialTypes, materials, suppliers, preselectedMaterial }) => {
-    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes, suppliers, preselectedMaterial);
+function formatSheetPriceLabel(length, item, materials) {
+    const sheetPrice = calculateSheetCost(
+        {
+            materialType: item.materialType,
+            length,
+            width: 48,
+            costPerPound: parseFloat(item.costPerPound || 0),
+        },
+        materials
+    );
+
+    const baseLabel = `${length}"x48"`;
+    if (!sheetPrice || sheetPrice <= 0) return baseLabel;
+
+    return `${baseLabel} ($${sheetPrice.toFixed(2)}/sheet)`;
+}
+
+function formatCustomSheetPriceLabel(item, materials) {
+    const customWidth = parseFloat(item.customWidth || 0);
+    const customLength = parseFloat(item.customLength || 0);
+
+    if (customWidth <= 0 || customLength <= 0) {
+        return 'Optional Custom Sheet';
+    }
+
+    const sheetPrice = calculateSheetCost(
+        {
+            materialType: item.materialType,
+            length: customLength,
+            width: customWidth,
+            costPerPound: parseFloat(item.costPerPound || 0),
+        },
+        materials
+    );
+
+    const baseLabel = `${customLength}"x${customWidth}"`;
+    if (!sheetPrice || sheetPrice <= 0) return `${baseLabel} Custom`;
+
+    return `${baseLabel} Custom ($${sheetPrice.toFixed(2)}/sheet)`;
+}
+
+export const AddOrderModal = ({
+    onClose,
+    onSave,
+    initialData,
+    title = 'Add New Stock',
+    materialTypes,
+    materials,
+    suppliers,
+    prefill,
+    mode = 'inventory'
+}) => {
+    const { jobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(initialData, materialTypes, suppliers, prefill);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const categories = useMemo(() => [...new Set(Object.values(materials || {}).map(m => m.category))], [materials]);
+    const submitLabel = mode === 'buy' ? 'Buy / Open Email' : 'Submit Order';
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -30,7 +83,24 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                     return;
                 }
 
-                const hasQuantity = parseInt(item.qty96 || 0) > 0 || parseInt(item.qty120 || 0) > 0 || parseInt(item.qty144 || 0) > 0;
+                const hasStandardQuantity = parseInt(item.qty96 || 0, 10) > 0 || parseInt(item.qty120 || 0, 10) > 0 || parseInt(item.qty144 || 0, 10) > 0;
+                const customQty = parseInt(item.customQty || 0, 10);
+                const hasCustomQuantity = customQty > 0;
+                const customWidth = parseFloat(item.customWidth || 0);
+                const customLength = parseFloat(item.customLength || 0);
+                const hasPartialCustomFields = Boolean(item.customWidth || item.customLength || item.customQty);
+
+                if (hasCustomQuantity && (customWidth <= 0 || customLength <= 0)) {
+                    setError(`Custom sheet dimensions for "${item.materialType}" must be positive numbers.`);
+                    return;
+                }
+
+                if (hasPartialCustomFields && !hasCustomQuantity) {
+                    setError(`Custom sheet quantity for "${item.materialType}" must be greater than zero when custom dimensions are provided.`);
+                    return;
+                }
+
+                const hasQuantity = hasStandardQuantity || hasCustomQuantity;
                 if (!hasQuantity) {
                     setError(`At least one quantity must be entered for "${item.materialType}".`);
                     return;
@@ -60,21 +130,33 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2 border-t border-b border-zinc-700 py-4">
                     <div className="p-4 border border-zinc-700 rounded-lg bg-zinc-900/50 relative space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
+                        <div className={`grid grid-cols-1 ${mode === 'buy' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
+                            {mode !== 'buy' && (
+                                <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
+                            )}
                             <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
-                            <div className="flex gap-2 p-2 bg-zinc-800 rounded-lg">
-                                                               <button type="button" onClick={() => setJobField(jobIndex, 'status', 'On Hand')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'On Hand' ? 'bg-blue-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
-                                                                        <Check size={16} /> On Hand
-                                                                    </button>
-                                                                <button type="button" onClick={() => setJobField(jobIndex, 'status', 'Ordered')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'Ordered' ? 'bg-purple-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
-                                                                        <Calendar size={16} /> Ordered
-                                                                    </button>
-                                                            </div>
+                            {mode === 'buy' ? (
+                                <div className="flex items-center justify-center p-2 bg-zinc-800 rounded-lg text-sm font-semibold text-purple-300">
+                                    <Calendar size={16} />
+                                    <span>Buy orders are saved as Ordered</span>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2 p-2 bg-zinc-800 rounded-lg">
+                                    <button type="button" onClick={() => setJobField(jobIndex, 'status', 'On Hand')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'On Hand' ? 'bg-blue-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
+                                        <Check size={16} /> On Hand
+                                    </button>
+                                    <button type="button" onClick={() => setJobField(jobIndex, 'status', 'Ordered')} className={`flex-1 p-2 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${job.status === 'Ordered' ? 'bg-purple-800 text-white' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
+                                        <Calendar size={16} /> Ordered
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                        {/* Order placed date */}
-                        <FormInput label="Date Ordered" name="createdAt" type="date" value={job.createdAt || ''} onChange={(e) => setJobField(jobIndex, 'createdAt', e.target.value)} />
-                        {job.status === 'Ordered' && <FormInput label="Expected Arrival Date" name="arrivalDate" type="date" value={job.arrivalDate} onChange={(e) => setJobField(jobIndex, 'arrivalDate', e.target.value)} />}
+                        {mode !== 'buy' && (
+                            <>
+                                <FormInput label="Date Ordered" name="createdAt" type="date" value={job.createdAt || ''} onChange={(e) => setJobField(jobIndex, 'createdAt', e.target.value)} />
+                                {job.status === 'Ordered' && <FormInput label="Expected Arrival Date" name="arrivalDate" type="date" value={job.arrivalDate} onChange={(e) => setJobField(jobIndex, 'arrivalDate', e.target.value)} />}
+                            </>
+                        )}
 
                         {job.items.map((item, itemIndex) => (
                             <div key={itemIndex} className="border border-zinc-700 p-4 rounded-lg bg-zinc-800 relative">
@@ -109,9 +191,15 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                                 </div>
                                 <p className="text-sm font-medium text-zinc-300 mt-2">Standard Quantities:</p>
                                 <div className="grid grid-cols-3 gap-2">
-                                    <FormInput label='96"x48"' name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty96', e.target.value)} />
-                                    <FormInput label='120"x48"' name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty120', e.target.value)} />
-                                    <FormInput label='144"x48"' name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty144', e.target.value)} />
+                                    <FormInput label={formatSheetPriceLabel(96, item, materials)} name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty96', e.target.value)} />
+                                    <FormInput label={formatSheetPriceLabel(120, item, materials)} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty120', e.target.value)} />
+                                    <FormInput label={formatSheetPriceLabel(144, item, materials)} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty144', e.target.value)} />
+                                </div>
+                                <p className="text-sm font-medium text-zinc-300 mt-4">Optional Custom Sheet:</p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                    <FormInput label="Custom Width" name={`customWidth-${itemIndex}`} type="number" placeholder='48' value={item.customWidth} onChange={(e) => setItemField(jobIndex, itemIndex, 'customWidth', e.target.value)} />
+                                    <FormInput label="Custom Length" name={`customLength-${itemIndex}`} type="number" placeholder='96' value={item.customLength} onChange={(e) => setItemField(jobIndex, itemIndex, 'customLength', e.target.value)} />
+                                    <FormInput label={formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
                                 </div>
                                 <FormInput label="Cost per Pound ($)" name="costPerPound" type="number" value={item.costPerPound} onChange={(e) => setItemField(jobIndex, itemIndex, 'costPerPound', e.target.value)} step="0.01" required />
                             </div>
@@ -128,7 +216,8 @@ export const AddOrderModal = ({ onClose, onSave, initialData, title = "Add New S
                         </Button>
                     )}
                     <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Submitting...' : 'Submit Order'}
+                        {mode === 'buy' && !isSubmitting && <Mail size={16} />}
+                        {isSubmitting ? 'Submitting...' : submitLabel}
                     </Button>
                 </div>
             </form>

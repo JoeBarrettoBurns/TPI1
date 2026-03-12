@@ -1,56 +1,126 @@
 import { useState, useCallback } from 'react';
 import { STANDARD_LENGTHS } from '../constants/materials';
 
-export function useOrderForm(initialData, materialTypes, suppliers, preselectedMaterial) {
-    const createNewItem = useCallback((materialTypeOverride) => ({
-        materialType: materialTypeOverride || (materialTypes && materialTypes.length > 0 ? materialTypes[0] : ''),
-        qty96: '', qty120: '', qty144: '',
-        customWidth: '', customLength: '', customQty: '',
-        costPerPound: ''
+function toInputDate(value) {
+    if (!value) return '';
+    try {
+        return new Date(value).toISOString().split('T')[0];
+    } catch {
+        return '';
+    }
+}
+
+export function useOrderForm(initialData, materialTypes, suppliers, prefill = null) {
+    const getDefaultSupplier = useCallback((preferredSupplier) => {
+        if (preferredSupplier && suppliers.includes(preferredSupplier)) {
+            return preferredSupplier;
+        }
+        return suppliers[0] || '';
+    }, [suppliers]);
+
+    const createNewItem = useCallback((materialTypeOverride, itemOverride = {}) => ({
+        materialType: materialTypeOverride || itemOverride.materialType || (materialTypes && materialTypes.length > 0 ? materialTypes[0] : ''),
+        qty96: itemOverride.qty96 ?? '',
+        qty120: itemOverride.qty120 ?? '',
+        qty144: itemOverride.qty144 ?? '',
+        customWidth: itemOverride.customWidth ?? '',
+        customLength: itemOverride.customLength ?? '',
+        customQty: itemOverride.customQty ?? '',
+        costPerPound: itemOverride.costPerPound ?? ''
     }), [materialTypes]);
-    const createNewJob = useCallback(() => ({
-        jobName: '',
-        customer: '',
-        supplier: suppliers[0],
-        status: 'Ordered',
-        arrivalDate: '',
-        createdAt: '',
-        items: [createNewItem(preselectedMaterial)]
-    }), [suppliers, preselectedMaterial, createNewItem]);
+
+    const createNewJob = useCallback((jobOverride = {}) => {
+        const items = Array.isArray(jobOverride.items) && jobOverride.items.length > 0
+            ? jobOverride.items.map((item) => createNewItem(item.materialType, item))
+            : [createNewItem(prefill?.materialType || jobOverride.materialType)];
+
+        return {
+            jobName: jobOverride.jobName ?? '',
+            customer: jobOverride.customer ?? '',
+            supplier: getDefaultSupplier(jobOverride.supplier ?? prefill?.supplier),
+            status: jobOverride.status ?? prefill?.status ?? 'Ordered',
+            arrivalDate: jobOverride.arrivalDate ?? '',
+            createdAt: jobOverride.createdAt ?? '',
+            items
+        };
+    }, [createNewItem, getDefaultSupplier, prefill]);
 
     const transformInitialData = useCallback((data) => {
-        if (!data) return [createNewJob()];
+        if (!data) return null;
 
-        const arrivalDateISO = data.details[0]?.arrivalDate;
-        const arrivalDateForInput = arrivalDateISO ? new Date(arrivalDateISO).toISOString().split('T')[0] : '';
-
+        const arrivalDateISO = data.details?.[0]?.arrivalDate || data.arrivalDate;
         const jobData = {
-            jobName: data.job || '',
+            jobName: data.job || data.jobName || '',
             customer: data.customer || '',
-            supplier: data.customer || suppliers[0],
-            status: data.isFuture ? 'Ordered' : 'On Hand',
-            arrivalDate: arrivalDateForInput,
-            createdAt: data.date ? new Date(data.date).toISOString().split('T')[0] : '',
+            supplier: data.supplier || data.customer || suppliers[0] || '',
+            status: data.isFuture ? 'Ordered' : (data.status || 'On Hand'),
+            arrivalDate: toInputDate(arrivalDateISO),
+            createdAt: toInputDate(data.date || data.createdAt),
             items: []
         };
 
-        const itemsByMaterial = {};
-        data.details.forEach(item => {
-            if (!itemsByMaterial[item.materialType]) {
-                itemsByMaterial[item.materialType] = {
-                    materialType: item.materialType, costPerPound: item.costPerPound,
-                    qty96: 0, qty120: 0, qty144: 0,
+        const itemsByKey = {};
+        (data.details || []).forEach(item => {
+            const isStandardLength = STANDARD_LENGTHS.includes(item.length);
+            const key = isStandardLength
+                ? `${item.materialType}|standard`
+                : `${item.materialType}|custom|${item.width || 48}|${item.length}`;
+
+            if (!itemsByKey[key]) {
+                itemsByKey[key] = {
+                    materialType: item.materialType,
+                    costPerPound: item.costPerPound ?? '',
+                    qty96: '',
+                    qty120: '',
+                    qty144: '',
+                    customWidth: '',
+                    customLength: '',
+                    customQty: ''
                 };
             }
-            if (STANDARD_LENGTHS.includes(item.length)) {
-                itemsByMaterial[item.materialType][`qty${item.length}`]++;
+
+            if (isStandardLength) {
+                const field = `qty${item.length}`;
+                itemsByKey[key][field] = String((parseInt(itemsByKey[key][field] || 0, 10) + 1));
+            } else {
+                itemsByKey[key].customWidth = String(item.width || 48);
+                itemsByKey[key].customLength = String(item.length || '');
+                itemsByKey[key].customQty = String((parseInt(itemsByKey[key].customQty || 0, 10) + 1));
             }
         });
-        jobData.items = Object.values(itemsByMaterial);
-        return [jobData];
-    }, [suppliers, createNewJob]); // Dependencies for useCallback
 
-    const [jobs, setJobs] = useState(() => transformInitialData(initialData));
+        jobData.items = Object.values(itemsByKey);
+        return [createNewJob(jobData)];
+    }, [createNewJob, suppliers]);
+
+    const transformPrefill = useCallback((data) => {
+        if (!data) return null;
+
+        const items = Array.isArray(data.items) && data.items.length > 0
+            ? data.items.map((item) => ({
+                ...item,
+                qty96: item.qty96 ?? '',
+                qty120: item.qty120 ?? '',
+                qty144: item.qty144 ?? '',
+                customWidth: item.customWidth ?? '',
+                customLength: item.customLength ?? '',
+                customQty: item.customQty ?? '',
+                costPerPound: item.costPerPound ?? ''
+            }))
+            : undefined;
+
+        return [createNewJob({
+            jobName: data.jobName || data.job || '',
+            customer: data.customer || '',
+            supplier: data.supplier || '',
+            status: data.status === 'On Hand' ? 'On Hand' : 'Ordered',
+            arrivalDate: toInputDate(data.arrivalDate),
+            createdAt: toInputDate(data.createdAt),
+            items
+        })];
+    }, [createNewJob]);
+
+    const [jobs, setJobs] = useState(() => transformInitialData(initialData) || transformPrefill(prefill) || [createNewJob()]);
 
     const resetForm = useCallback(() => {
         setJobs([createNewJob()]);

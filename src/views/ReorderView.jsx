@@ -1,53 +1,10 @@
 // src/views/ReorderView.jsx
 
 import React, { useMemo } from 'react';
-import { PlusCircle, Mail } from 'lucide-react';
+import { PlusCircle, Mail, Inbox } from 'lucide-react';
 import { STANDARD_LENGTHS } from '../constants/materials';
-import { SUPPLIER_INFO, CC_EMAIL } from '../constants/suppliers';
 import { Button } from '../components/common/Button';
-
-const buildDefaultItemsBody = (info, items) => {
-    if (info.bodyMaterial) {
-        // Material header without extra blank line, followed by standard lengths
-        return (
-            `${info.bodyMaterial}\n` +
-            `144"x48" -QTY:\n` +
-            `120"x48" -QTY:\n` +
-            `96"x48" -QTY:`
-        );
-    }
-    if (items && items.length > 0) {
-        return (
-            "Please provide a quote for the following low-stock items:\n\n" +
-            items.map(item => (
-                `- Material: ${item.materialType}\n` +
-                `  Size: ${item.length}"x48"\n` +
-                `  Current Quantity: ${item.count}\n` +
-                `  Requested Quantity: [PLEASE SPECIFY]`
-            )).join('\n\n')
-        );
-    }
-    return "Please provide a quote for the following items:\n\n[PLEASE LIST ITEMS]";
-};
-
-// Generates a mailto link for a supplier. The body will include low-stock items if they exist or a custom body if provided.
-const generateMailtoLinkForSupplier = (supplier, items, supplierInfoOverrides, customBody) => {
-    const supplierKey = (supplier || '').toUpperCase().replace(/\s+/g, '_');
-    const override = supplierInfoOverrides?.[supplierKey];
-    const info = override || SUPPLIER_INFO[supplierKey] || SUPPLIER_INFO.DEFAULT;
-
-    const subject = encodeURIComponent(info.subject || `Quote Request`);
-    const itemsBody = (customBody && customBody.trim().length > 0)
-        ? customBody
-        : (info.bodyTemplate && info.bodyTemplate.trim().length > 0)
-            ? info.bodyTemplate
-            : buildDefaultItemsBody(info, items);
-
-    const greetingName = info.contactName ? `Hi ${info.contactName},` : 'Hello,';
-    const body = encodeURIComponent(`${greetingName}\n\n${itemsBody}\n\nThank you.`);
-
-    return `mailto:${info.email}?cc=${CC_EMAIL}&subject=${subject}&body=${body}`;
-};
+import { createSupplierMailtoLink } from '../utils/buyOrderUtils';
 
 const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoOverrides }) => (
     <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
@@ -64,7 +21,7 @@ const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoO
                             </p>
                         </div>
                         <a
-                            href={generateMailtoLinkForSupplier(supplier, items, supplierInfoOverrides)}
+                            href={createSupplierMailtoLink({ supplier, items, supplierInfoOverrides }).mailto}
                             target="_blank"
                             rel="noopener noreferrer"
                         >
@@ -80,7 +37,64 @@ const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoO
     </div>
 );
 
-export const ReorderView = ({ inventorySummary, materials, onRestock, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
+function formatLatestBuyOrderSizes(item) {
+    const sizes = [];
+
+    STANDARD_LENGTHS.forEach((length) => {
+        const qty = parseInt(item?.[`qty${length}`] || 0, 10);
+        if (qty > 0) {
+            sizes.push(`${length}"x48" x${qty}`);
+        }
+    });
+
+    const customQty = parseInt(item?.customQty || 0, 10);
+    const customWidth = parseFloat(item?.customWidth || 0);
+    const customLength = parseFloat(item?.customLength || 0);
+    if (customQty > 0 && customWidth > 0 && customLength > 0) {
+        sizes.push(`${customLength}"x${customWidth}" x${customQty}`);
+    }
+
+    return sizes.join(', ');
+}
+
+const LatestBuyOrderBox = ({ latestBuyOrder, onAddLatestBuyOrderToInventory }) => (
+    <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <h2 className="text-2xl font-bold text-white">Latest Buy Order</h2>
+                {!latestBuyOrder ? (
+                    <p className="text-zinc-400 mt-2">No emailed buy order is waiting to be added into inventory.</p>
+                ) : (
+                    <>
+                        <p className="text-zinc-300 mt-2">
+                            Supplier: <span className="font-semibold text-blue-400">{latestBuyOrder.supplier || 'Unknown'}</span>
+                        </p>
+                        <p className="text-zinc-400 text-sm">
+                            Opened email: {latestBuyOrder.openedEmailAt ? new Date(latestBuyOrder.openedEmailAt).toLocaleString() : 'N/A'}
+                        </p>
+                    </>
+                )}
+            </div>
+            <Button onClick={onAddLatestBuyOrderToInventory} disabled={!latestBuyOrder}>
+                <Inbox size={16} />
+                <span>Add to Inventory</span>
+            </Button>
+        </div>
+
+        {latestBuyOrder && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {(latestBuyOrder.items || []).map((item, index) => (
+                    <div key={`${item.materialType}-${index}`} className="rounded-lg border border-zinc-700 bg-zinc-900/40 p-3">
+                        <p className="font-semibold text-white">{item.materialType}</p>
+                        <p className="text-sm text-zinc-300 mt-1">{formatLatestBuyOrderSizes(item) || 'No sheet sizes saved'}</p>
+                    </div>
+                ))}
+            </div>
+        )}
+    </div>
+);
+
+export const ReorderView = ({ inventorySummary, materials, onRestock, latestBuyOrder, onAddLatestBuyOrderToInventory, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
     const lowStockItems = useMemo(() => {
         const items = [];
         for (const materialType in inventorySummary) {
@@ -131,6 +145,7 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, searchQuer
 
     return (
         <div className="space-y-8">
+            <LatestBuyOrderBox latestBuyOrder={latestBuyOrder} onAddLatestBuyOrderToInventory={onAddLatestBuyOrderToInventory} />
             <EmailSupplierBox allSuppliers={suppliers} lowStockItemsBySupplier={lowStockItemsBySupplier} supplierInfoOverrides={supplierInfoOverrides} />
             <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
                 <h2 className="text-2xl font-bold text-white mb-4">Reorder List</h2>
@@ -161,12 +176,12 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, searchQuer
                                         <td className="p-2 text-right font-mono text-yellow-400">{item.count}</td>
                                         <td className="p-2 text-center">
                                             <button
-                                                onClick={() => onRestock(item.materialType)}
+                                                onClick={() => onRestock(item)}
                                                 className="flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors mx-auto"
-                                                title={`Restock ${item.materialType}`}
+                                                title={`Buy ${item.materialType}`}
                                             >
                                                 <PlusCircle size={16} />
-                                                <span>Restock</span>
+                                                <span>Buy</span>
                                             </button>
                                         </td>
                                     </tr>

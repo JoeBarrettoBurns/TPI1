@@ -9,10 +9,10 @@ const VARIANTS = {
     ghost: 'bg-transparent hover:bg-zinc-700'
 };
 
-export const Button = ({ children, onClick, variant = 'primary', type = 'button', disabled = false, className = '' }) => {
+export const Button = ({ children, onClick, variant = 'primary', type = 'button', disabled = false, className = '', ...props }) => {
     const baseClasses = 'flex items-center justify-center gap-2 text-white font-semibold px-5 py-3 rounded-lg shadow-md transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed';
     return (
-        <button type={type} onClick={onClick} disabled={disabled} className={`${baseClasses} ${VARIANTS[variant]} ${className}`}>
+        <button type={type} onClick={onClick} disabled={disabled} className={`${baseClasses} ${VARIANTS[variant]} ${className}`} {...props}>
             {children}
         </button>
     );

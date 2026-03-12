@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where, getDoc } from './firebase/firestoreWithTracking';
+import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where, getDoc, setDoc, onSnapshot, orderBy, limit } from './firebase/firestoreWithTracking';
 import Fuse from 'fuse.js';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
@@ -13,11 +13,11 @@ import {
     calculateIncomingSummary,
     calculateScheduledOutgoingSummary,
     getGaugeFromMaterial,
-    calculateCostBySupplier,
-    calculateAnalyticsByCategory,
     groupLogsByJob
 } from './utils/dataProcessing';
 import { INITIAL_SUPPLIERS, STANDARD_LENGTHS } from './constants/materials';
+import { buildBuyOrderEmailBody, createSupplierMailtoLink } from './utils/buyOrderUtils';
+import { buildCategoryIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
 
 // Layout & Common Components
 import { Header } from './components/layout/Header';
@@ -51,6 +51,26 @@ import { AIAssistant } from './components/assistant/AIAssistant';
 import { DebugPanel } from './components/debug/DebugPanel';
 import { Bot } from 'lucide-react';
 
+const BUY_ORDERS_PATH = `artifacts/${appId}/public/data/buy_orders`;
+const LATEST_BUY_ORDER_LIMIT = 15;
+
+function getTodayDateInputValue() {
+    return new Date().toISOString().split('T')[0];
+}
+
+function normalizeOrderItemsForStorage(items = []) {
+    return items.map((item) => ({
+        materialType: item.materialType || '',
+        qty96: String(item.qty96 || ''),
+        qty120: String(item.qty120 || ''),
+        qty144: String(item.qty144 || ''),
+        customWidth: String(item.customWidth || ''),
+        customLength: String(item.customLength || ''),
+        customQty: String(item.customQty || ''),
+        costPerPound: String(item.costPerPound || ''),
+    }));
+}
+
 
 export default function App() {
     const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('isLoggedIn') === 'true');
@@ -71,6 +91,7 @@ export default function App() {
     const searchTimeoutRef = useRef(null);
     const [isAssistantVisible, setIsAssistantVisible] = useState(false);
     const [inventoryDetailsRequested, setInventoryDetailsRequested] = useState(false);
+    const [latestBuyOrder, setLatestBuyOrder] = useState(null);
     const shouldLoadInventoryDetails = useMemo(() => {
         const lightweightViews = new Set(['dashboard', 'reorder', 'sheet-calculator']);
         const inventoryDependentModals = new Set(['use', 'edit-log', 'edit-order']);
@@ -104,6 +125,34 @@ export default function App() {
 
     const closeModal = useCallback(() => setModal({ type: null, data: null, error: null }), []);
 
+    useEffect(() => {
+        if (!isLoggedIn) {
+            setLatestBuyOrder(null);
+            return undefined;
+        }
+
+        const buyOrdersQuery = query(
+            collection(db, BUY_ORDERS_PATH),
+            orderBy('openedEmailAt', 'desc'),
+            limit(LATEST_BUY_ORDER_LIMIT)
+        );
+
+        return onSnapshot(
+            buyOrdersQuery,
+            (snapshot) => {
+                const openBuyOrders = snapshot.docs
+                    .map((buyOrderDoc) => ({ id: buyOrderDoc.id, ...buyOrderDoc.data() }))
+                    .filter((buyOrder) => buyOrder.workflowStatus !== 'received');
+
+                setLatestBuyOrder(openBuyOrders[0] || null);
+            },
+            (err) => {
+                console.error('Failed to load buy orders:', err);
+                setLatestBuyOrder(null);
+            }
+        );
+    }, [isLoggedIn]);
+
     const clearSearch = useCallback(() => {
         setSearchQuery('');
         setSearchResults([]);
@@ -135,6 +184,10 @@ export default function App() {
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
     const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);
+    const categoryIndicatorSettings = useMemo(
+        () => buildCategoryIndicatorSettingsMap(materials),
+        [materials]
+    );
 
     useEffect(() => {
         if (!loading) {
@@ -161,7 +214,6 @@ export default function App() {
         return Object.keys(incomingSummaryData || {}).length > 0 ? incomingSummaryData : calculatedIncomingSummary;
     }, [inventory.length, calculatedIncomingSummary, incomingSummaryData]);
     const scheduledOutgoingSummary = useMemo(() => calculateScheduledOutgoingSummary(usageLog, materialTypes), [usageLog, materialTypes]);
-    const costBySupplier = useMemo(() => calculateCostBySupplier(inventory, materials), [inventory, materials]);
     const showLoading = loading || (shouldLoadInventoryDetails && !inventoryReady);
 
     const handleSignOut = useCallback(() => {
@@ -182,6 +234,7 @@ export default function App() {
 
         const commands = [
             { type: 'command', name: 'Add Stock', aliases: ['add', 'new', 'order'], action: () => setModal({ type: 'add' }) },
+            { type: 'command', name: 'Buy', aliases: ['purchase', 'email supplier'], action: () => setModal({ type: 'buy' }) },
             { type: 'command', name: 'Use Stock', aliases: ['use'], action: () => setModal({ type: 'use' }) },
             { type: 'command', name: 'Manage Categories', aliases: ['mc', 'manage cat'], action: () => setModal({ type: 'manage-categories' }) },
             { type: 'command', name: 'Manage Suppliers', aliases: ['ms', 'manage sup'], action: () => setModal({ type: 'manage-suppliers' }) },
@@ -297,9 +350,60 @@ export default function App() {
 
     const onScrollToComplete = useCallback(() => setScrollToMaterial(null), []);
 
-    const handleRestock = (materialType) => {
-        setModal({ type: 'add', data: { preselectedMaterial: materialType } });
-    };
+    const buildBuyOrderPrefillFromReorderItem = useCallback((item) => {
+        if (!item) return null;
+
+        const matchingPurchases = inventory
+            .filter((inventoryItem) => inventoryItem.materialType === item.materialType)
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        const recentFromSupplier = item.supplier
+            ? matchingPurchases.find((inventoryItem) => inventoryItem.supplier === item.supplier)
+            : null;
+        const latestPurchase = recentFromSupplier || matchingPurchases[0];
+        const suggestedQty = String(Math.max(5 - (item.count || 0), 1));
+        const supplier = suppliers.includes(item.supplier)
+            ? item.supplier
+            : (latestPurchase?.supplier && suppliers.includes(latestPurchase.supplier) ? latestPurchase.supplier : (suppliers[0] || ''));
+
+        return {
+            supplier,
+            status: 'Ordered',
+            createdAt: getTodayDateInputValue(),
+            items: [{
+                materialType: item.materialType,
+                qty96: item.length === 96 ? suggestedQty : '',
+                qty120: item.length === 120 ? suggestedQty : '',
+                qty144: item.length === 144 ? suggestedQty : '',
+                customWidth: '',
+                customLength: '',
+                customQty: '',
+                costPerPound: latestPurchase?.costPerPound ? String(latestPurchase.costPerPound) : '',
+            }]
+        };
+    }, [inventory, suppliers]);
+
+    const handleOpenBuyModal = useCallback((prefill = null) => {
+        setModal({ type: 'buy', data: prefill ? { prefill } : null });
+    }, []);
+
+    const handleRestock = useCallback((item) => {
+        const prefill = typeof item === 'string'
+            ? { createdAt: getTodayDateInputValue(), items: [{ materialType: item }] }
+            : buildBuyOrderPrefillFromReorderItem(item);
+        handleOpenBuyModal(prefill);
+    }, [buildBuyOrderPrefillFromReorderItem, handleOpenBuyModal]);
+
+    const handleAddLatestBuyOrderToInventory = useCallback(() => {
+        if (!latestBuyOrder) return;
+        setModal({
+            type: 'add',
+            data: {
+                prefill: latestBuyOrder,
+                linkedBuyOrderId: latestBuyOrder.id
+            }
+        });
+    }, [latestBuyOrder]);
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
@@ -533,8 +637,9 @@ export default function App() {
         }
     };
 
-    const handleManageCategory = async (categoryName, materialsFromModal, mode) => {
-            const materialsCollectionRef = collection(db, `artifacts/${appId}/public/data/materials`);
+    const handleManageCategory = async (categoryName, materialsFromModal, mode, indicatorSettings) => {
+        const normalizedIndicatorSettings = normalizeCategoryIndicatorSettings(indicatorSettings);
+        const materialsCollectionRef = collection(db, `artifacts/${appId}/public/data/materials`);
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
         try {
@@ -558,6 +663,8 @@ export default function App() {
                             category: categoryName,
                             thickness: parseFloat(material.thickness),
                             density: parseFloat(material.density),
+                            visualLowThreshold: normalizedIndicatorSettings.low,
+                            visualHighThreshold: normalizedIndicatorSettings.high,
                         });
                     }
                     return;
@@ -594,7 +701,13 @@ export default function App() {
                         }
                         const newId = newName.replace(/\//g, '-');
                         const newRef = doc(materialsCollectionRef, newId);
-                        transaction.set(newRef, { category: categoryName, thickness: newThickness, density: newDensity });
+                        transaction.set(newRef, {
+                            category: categoryName,
+                            thickness: newThickness,
+                            density: newDensity,
+                            visualLowThreshold: normalizedIndicatorSettings.low,
+                            visualHighThreshold: normalizedIndicatorSettings.high,
+                        });
                         continue;
                     }
 
@@ -614,7 +727,13 @@ export default function App() {
                         }
                         const newId = newName.replace(/\//g, '-');
                         const newRef = doc(materialsCollectionRef, newId);
-                        transaction.set(newRef, { category: categoryName, thickness: newThickness, density: newDensity });
+                        transaction.set(newRef, {
+                            category: categoryName,
+                            thickness: newThickness,
+                            density: newDensity,
+                            visualLowThreshold: normalizedIndicatorSettings.low,
+                            visualHighThreshold: normalizedIndicatorSettings.high,
+                        });
 
                         // Update inventory documents referencing the old name in any historical format
                         const oldVariants = Array.from(new Set([
@@ -631,10 +750,17 @@ export default function App() {
                         }
 
                         transaction.delete(doc(materialsCollectionRef, originalDocId));
-                    } else if (existing.thickness !== newThickness || existing.density !== newDensity) {
+                    } else if (
+                        existing.thickness !== newThickness ||
+                        existing.density !== newDensity ||
+                        existing.visualLowThreshold !== normalizedIndicatorSettings.low ||
+                        existing.visualHighThreshold !== normalizedIndicatorSettings.high
+                    ) {
                         transaction.update(doc(materialsCollectionRef, originalDocId), {
                             thickness: newThickness,
                             density: newDensity,
+                            visualLowThreshold: normalizedIndicatorSettings.low,
+                            visualHighThreshold: normalizedIndicatorSettings.high,
                         });
                     }
                 }
@@ -669,7 +795,7 @@ export default function App() {
         setSupplierInfo(prev => ({ ...prev, [key]: info }));
     };
 
-    const handleAddOrEditOrder = async (jobs, originalOrderGroup = null) => {
+    const handleAddOrEditOrder = async (jobs, originalOrderGroup = null, options = {}) => {
         const isEditing = !!originalOrderGroup;
         await runTransaction(db, async (transaction) => {
             if (isEditing) {
@@ -705,10 +831,58 @@ export default function App() {
                             transaction.set(newDocRef, { ...stockData, width: 48, length: len });
                         }
                     });
+
+                    const customQty = parseInt(item.customQty || 0, 10);
+                    const customWidth = parseFloat(item.customWidth || 0);
+                    const customLength = parseFloat(item.customLength || 0);
+                    if (customQty > 0 && customWidth > 0 && customLength > 0) {
+                        for (let i = 0; i < customQty; i++) {
+                            const newDocRef = doc(inventoryCollectionRef);
+                            transaction.set(newDocRef, { ...stockData, width: customWidth, length: customLength });
+                        }
+                    }
                 });
             });
+            if (options.linkedBuyOrderId) {
+                transaction.update(doc(db, BUY_ORDERS_PATH, options.linkedBuyOrderId), {
+                    workflowStatus: 'received',
+                    receivedAt: new Date().toISOString(),
+                });
+            }
         });
     };
+
+    const handleSubmitBuyOrder = useCallback(async (jobs) => {
+        const job = jobs?.[0];
+        if (!job) {
+            throw new Error('A buy order requires at least one job.');
+        }
+
+        const normalizedItems = normalizeOrderItemsForStorage(job.items);
+        const { mailto, subject, body } = createSupplierMailtoLink({
+            supplier: job.supplier,
+            supplierInfoOverrides: supplierInfo,
+            customBody: buildBuyOrderEmailBody(normalizedItems),
+        });
+
+        const buyOrderRef = doc(collection(db, BUY_ORDERS_PATH));
+        await setDoc(buyOrderRef, {
+            jobName: '',
+            customer: job.customer || '',
+            supplier: job.supplier || '',
+            status: 'Ordered',
+            workflowStatus: 'emailed',
+            createdAt: new Date().toISOString(),
+            arrivalDate: null,
+            openedEmailAt: new Date().toISOString(),
+            receivedAt: null,
+            items: normalizedItems,
+            emailSubject: subject,
+            emailBody: body,
+        });
+
+        window.location.href = mailto;
+    }, [supplierInfo]);
 
     const handleDeleteInventoryGroup = async (group) => {
         if (!group?.details?.length) return;
@@ -1249,6 +1423,7 @@ export default function App() {
                             onDeleteCategory={handleToggleCategoryForDeletion}
                             categoriesToDelete={categoriesToDelete}
                             searchQuery={searchQuery}
+                            categoryIndicatorSettings={categoryIndicatorSettings}
                         />
                     </DndContext>
                 );
@@ -1283,6 +1458,8 @@ export default function App() {
                     inventorySummary={inventorySummary}
                     materials={materials}
                     onRestock={handleRestock}
+                latestBuyOrder={latestBuyOrder}
+                onAddLatestBuyOrderToInventory={handleAddLatestBuyOrderToInventory}
                     searchQuery={searchQuery}
                     inventory={inventory}
                     suppliers={suppliers}
@@ -1318,6 +1495,9 @@ export default function App() {
                 <Header
                     ref={searchInputRef}
                     onAdd={() => setModal({ type: 'add' })}
+                    onBuy={() => handleOpenBuyModal()}
+                    onAddLatestBuyOrder={handleAddLatestBuyOrderToInventory}
+                    canAddLatestBuyOrder={!!latestBuyOrder}
                     onUse={() => setModal({ type: 'use' })}
                     onEdit={() => isEditMode ? handleFinishEditing() : setIsEditMode(true)}
                     onSignOut={handleSignOut}
@@ -1380,11 +1560,12 @@ export default function App() {
 
 
 
-            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={handleAddOrEditOrder} materialTypes={materialTypes} materials={materials} suppliers={suppliers} preselectedMaterial={modal.data?.preselectedMaterial} />}
+            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, null, { linkedBuyOrderId: modal.data?.linkedBuyOrderId })} materialTypes={materialTypes} materials={materials} suppliers={suppliers} prefill={modal.data?.prefill} />}
+            {modal.type === 'buy' && <AddOrderModal onClose={closeModal} onSave={handleSubmitBuyOrder} title="Buy Material" materialTypes={materialTypes} materials={materials} suppliers={suppliers} prefill={modal.data?.prefill} mode="buy" />}
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} materials={materials} suppliers={suppliers} />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} materials={materials} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
-            {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} refetchMaterials={refetchMaterials} />}
+            {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} refetchMaterials={refetchMaterials} categoryIndicatorSettings={categoryIndicatorSettings} />}
             {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} supplierInfo={supplierInfo} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} onUpdateSupplierInfo={handleUpdateSupplierInfo} />}
             {modal.type === 'confirm-delete-categories' &&
                 <ConfirmationModal
