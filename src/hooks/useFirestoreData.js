@@ -14,8 +14,13 @@ import {
     getDocs,
     getCountFromServer
 } from '../firebase/firestoreWithTracking';
-import { db, appId, auth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from '../firebase/config';
+import { db, appId, auth, onAuthStateChanged, signInWithCustomToken, signOut } from '../firebase/config';
 import { STANDARD_LENGTHS } from '../constants/materials';
+import {
+    getUnauthorizedMessage,
+    isAllowlistEnabled,
+    isGoogleEmailAllowed,
+} from '../constants/authAllowlist';
 
 const INVENTORY_CACHE_KEY = `inventory_cache_${appId}`;
 const INVENTORY_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -141,6 +146,15 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [userId, setUserId] = useState(null);
+    const [authUser, setAuthUser] = useState(null);
+    const [authReady, setAuthReady] = useState(false);
+    const [authAccessDenied, setAuthAccessDenied] = useState(false);
+    const [authDeniedDetail, setAuthDeniedDetail] = useState('');
+
+    const clearAuthAccessDenied = useCallback(() => {
+        setAuthAccessDenied(false);
+        setAuthDeniedDetail('');
+    }, []);
 
     const inventoryRef = useRef([]);
     const autoReceiveInFlightRef = useRef(false);
@@ -152,17 +166,51 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
     useEffect(() => {
         const unsubAuth = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                if (
+                    isAllowlistEnabled() &&
+                    user.email &&
+                    !isGoogleEmailAllowed(user.email)
+                ) {
+                    try {
+                        await signOut(auth);
+                    } catch (e) {
+                        console.error('signOut after allowlist deny:', e);
+                    }
+                    setAuthAccessDenied(true);
+                    setAuthDeniedDetail(getUnauthorizedMessage());
+                    setUserId(null);
+                    setAuthUser(null);
+                    setAuthReady(true);
+                    setLoading(false);
+                    return;
+                }
+
+                setAuthAccessDenied(false);
+                setAuthDeniedDetail('');
                 setUserId(user.uid);
+                setAuthUser({
+                    uid: user.uid,
+                    email: user.email || null,
+                    displayName: user.displayName || null,
+                });
+                setAuthReady(true);
             } else {
                 try {
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } else {
-                        await signInAnonymously(auth);
+                        setUserId(null);
+                        setAuthUser(null);
+                        setLoading(false);
+                        setAuthReady(true);
                     }
                 } catch (err) {
                     console.error('Authentication failed:', err);
                     setError('Authentication failed.');
+                    setUserId(null);
+                    setAuthUser(null);
+                    setLoading(false);
+                    setAuthReady(true);
                 }
             }
         });
@@ -608,6 +656,11 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         loading,
         error,
         userId,
+        authUser,
+        authReady,
+        authAccessDenied,
+        authDeniedDetail,
+        clearAuthAccessDenied,
         refetchMaterials,
     };
 }

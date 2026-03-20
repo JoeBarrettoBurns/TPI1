@@ -188,13 +188,6 @@ export const AddOrderModal = ({
         setIsSubmitting(true);
         setError('');
         try {
-            const debugRunId = `buy-order-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            if (typeof window !== 'undefined') {
-                window.__buyOrderDebugRunId = debugRunId;
-            }
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId:debugRunId,hypothesisId:'H1',location:'AddOrderModal.jsx:144',message:'Buy order submit requested',data:{mode,selectedSupplierCount:Array.isArray(job?.suppliers)?job.suppliers.filter(Boolean).length:0,itemCount:Array.isArray(job?.items)?job.items.length:0},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
             const result = await onSave(jobs, initialData);
             if (mode !== 'buy' || result?.closeModalOnSuccess !== false) {
                 onClose();

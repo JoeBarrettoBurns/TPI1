@@ -1,8 +1,13 @@
+/**
+ * @deprecated Not mounted in the app while `AI_ASSISTANT_ENABLED` is false in
+ * `constants/featureFlags.js`. Requires `REACT_APP_GEMINI_API_KEY` in `.env` when re-enabled.
+ * Do not embed API keys in source.
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, User, CornerDownLeft, Loader, X, PlusCircle } from 'lucide-react';
 import { Button } from '../common/Button';
+import { AI_ASSISTANT_ENABLED } from '../../constants/featureFlags';
 
-// This is the main component for the AI Assistant chat window.
 export const AIAssistant = ({ isVisible, onClose, inventory, materials, suppliers, usageLog, onExecuteOrder, onOpenModal }) => {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -82,6 +87,33 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
 
+        if (!AI_ASSISTANT_ENABLED) {
+            setMessages((prev) => [
+                ...prev,
+                { sender: 'user', text: input },
+                {
+                    sender: 'ai',
+                    text: 'This feature is disabled. Enable AI_ASSISTANT_ENABLED and set REACT_APP_GEMINI_API_KEY.',
+                },
+            ]);
+            setInput('');
+            return;
+        }
+
+        const apiKey = (process.env.REACT_APP_GEMINI_API_KEY || '').trim();
+        if (!apiKey) {
+            setMessages((prev) => [
+                ...prev,
+                { sender: 'user', text: input },
+                {
+                    sender: 'ai',
+                    text: 'Missing REACT_APP_GEMINI_API_KEY. Add it to .env (not committed) to use Gemini.',
+                },
+            ]);
+            setInput('');
+            return;
+        }
+
         const userMessage = { sender: 'user', text: input };
         const newMessages = [...messages, userMessage];
         setMessages(newMessages);
@@ -138,8 +170,7 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
 
         try {
             const finalPayload = { ...payload, generationConfig };
-            const apiKey = "AIzaSyBh-vdczQi_lBy51bBdOrYviQTeP3ttquM";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${encodeURIComponent(apiKey)}`;
 
             const response = await fetch(apiUrl, {
                 method: 'POST',

@@ -1,5 +1,12 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import {
+    getAuth,
+    onAuthStateChanged,
+    signInWithCustomToken,
+    signInWithPopup,
+    GoogleAuthProvider,
+    signOut,
+} from 'firebase/auth';
 import { getFirestore, setLogLevel } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -20,8 +27,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Export the auth functions that were missing. This will resolve the errors.
-export { signInAnonymously, onAuthStateChanged, signInWithCustomToken };
+export { onAuthStateChanged, signInWithCustomToken, signInWithPopup, GoogleAuthProvider, signOut };
 
 // Set the log level for debugging Firebase issues.
 setLogLevel('debug');

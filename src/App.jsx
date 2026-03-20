@@ -5,7 +5,7 @@ import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where, getDoc, setDoc, onSnapshot, orderBy, limit } from './firebase/firestoreWithTracking';
 import Fuse from 'fuse.js';
-import { db, appId } from './firebase/config';
+import { db, appId, auth, signOut } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
 import { useSuppliersSync } from './hooks/useSuppliersSync';
 import { usePersistentState } from './hooks/usePersistentState';
@@ -19,6 +19,7 @@ import {
 import { STANDARD_LENGTHS } from './constants/materials';
 import { buildBuyOrderEmailBody, createSupplierMailtoLink } from './utils/buyOrderUtils';
 import { buildMaterialIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
+import { AI_ASSISTANT_ENABLED } from './constants/featureFlags';
 
 // Layout & Common Components
 import { Header } from './components/layout/Header';
@@ -48,7 +49,6 @@ import { ManageSuppliersModal } from './components/modals/ManageSuppliersModal';
 import { ConfirmationModal } from './components/modals/ConfirmationModal';
 import { BuyOrderDraftsModal } from './components/modals/BuyOrderDraftsModal';
 
-// AI Assistant
 import { AIAssistant } from './components/assistant/AIAssistant';
 import { DebugPanel } from './components/debug/DebugPanel';
 import { Bot } from 'lucide-react';
@@ -85,42 +85,34 @@ function getBuyOrderPrimarySupplier(buyOrder) {
     return '';
 }
 
-function openMailtoLinks(emailDrafts = [], runId = 'unknown') {
+function openMailtoLinks(emailDrafts = []) {
     const validDrafts = emailDrafts.filter((draft) => draft?.mailto);
     if (validDrafts.length === 0) {
         return [];
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId,hypothesisId:'H3',location:'App.jsx:79',message:'openMailtoLinks invoked',data:{validLinkCount:validDrafts.length,userAgent:navigator.userAgent},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     const [firstDraft, ...remainingDrafts] = validDrafts;
     const blockedDrafts = [];
-    remainingDrafts.forEach((draft, index) => {
+    remainingDrafts.forEach((draft) => {
         const popup = window.open(draft.mailto, '_blank', 'noopener,noreferrer');
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId,hypothesisId:'H4',location:'App.jsx:86',message:'window.open mailto attempted',data:{index:index+1,popupOpened:Boolean(popup),popupClosed:popup?popup.closed:null,linkLength:draft.mailto.length,hasMailtoPrefix:draft.mailto.startsWith('mailto:')},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (!popup) {
             blockedDrafts.push(draft);
         }
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId,hypothesisId:'H4',location:'App.jsx:90',message:'window.location mailto attempted',data:{linkLength:firstDraft.mailto.length,hasMailtoPrefix:firstDraft.mailto.startsWith('mailto:')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    if (blockedDrafts.length > 0) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId,hypothesisId:'H7',location:'App.jsx:94',message:'Blocked supplier drafts detected',data:{blockedDraftCount:blockedDrafts.length},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-    }
     window.location.href = firstDraft.mailto;
     return blockedDrafts;
 }
 
 
 export default function App() {
-    const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('isLoggedIn') === 'true');
+    useEffect(() => {
+        try {
+            localStorage.removeItem('isLoggedIn');
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
     const [activeView, setActiveView] = useState('dashboard');
     const [modal, setModal] = useState({ type: null, data: null, error: null });
     const [isEditMode, setIsEditMode] = useState(false);
@@ -149,12 +141,6 @@ export default function App() {
         }
     }, [shouldLoadInventoryDetails]);
 
-    useEffect(() => {
-        if (!isLoggedIn) {
-            setInventoryDetailsRequested(false);
-        }
-    }, [isLoggedIn]);
-
     const {
         inventory,
         usageLog,
@@ -165,15 +151,26 @@ export default function App() {
         loading,
         error,
         userId,
+        authUser,
+        authReady,
+        authAccessDenied,
+        authDeniedDetail,
+        clearAuthAccessDenied,
         refetchMaterials
     } = useFirestoreData({ loadInventoryDetails: inventoryDetailsRequested });
+
+    useEffect(() => {
+        if (!userId) {
+            setInventoryDetailsRequested(false);
+        }
+    }, [userId]);
 
     const { suppliers, setSuppliers, supplierInfo, setSupplierInfo } = useSuppliersSync(userId);
 
     const closeModal = useCallback(() => setModal({ type: null, data: null, error: null }), []);
 
     useEffect(() => {
-        if (!isLoggedIn) {
+        if (!userId) {
             setOpenBuyOrders([]);
             return undefined;
         }
@@ -198,7 +195,7 @@ export default function App() {
                 setOpenBuyOrders([]);
             }
         );
-    }, [isLoggedIn]);
+    }, [userId]);
 
     const clearSearch = useCallback(() => {
         setSearchQuery('');
@@ -212,7 +209,7 @@ export default function App() {
     useEffect(() => {
         const handleKeyDown = (event) => {
             if (event.key === 'Escape') {
-                if (isAssistantVisible) {
+                if (AI_ASSISTANT_ENABLED && isAssistantVisible) {
                     setIsAssistantVisible(false);
                 } else if (modal.type) {
                     closeModal();
@@ -263,10 +260,14 @@ export default function App() {
     const scheduledOutgoingSummary = useMemo(() => calculateScheduledOutgoingSummary(usageLog, materialTypes), [usageLog, materialTypes]);
     const showLoading = loading || (shouldLoadInventoryDetails && !inventoryReady);
 
-    const handleSignOut = useCallback(() => {
-        localStorage.removeItem('isLoggedIn');
-        setIsLoggedIn(false);
-    }, []);
+    const handleSignOut = useCallback(async () => {
+        try {
+            clearAuthAccessDenied();
+            await signOut(auth);
+        } catch (e) {
+            console.error('Sign out failed:', e);
+        }
+    }, [clearAuthAccessDenied]);
 
     const handleFinishEditing = useCallback(() => {
         if (categoriesToDelete.length > 0) {
@@ -932,10 +933,6 @@ export default function App() {
         if (!job) {
             throw new Error('A buy order requires at least one job.');
         }
-        const debugRunId = (typeof window !== 'undefined' && window.__buyOrderDebugRunId)
-            ? window.__buyOrderDebugRunId
-            : `buy-order-${Date.now()}-fallback`;
-
         const selectedSuppliers = Array.isArray(job.suppliers)
             ? job.suppliers.filter(Boolean)
             : (job.supplier ? [job.supplier] : []);
@@ -956,10 +953,7 @@ export default function App() {
                 customSubject: requestedEmailSubject,
             }),
         }));
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/0a075336-d9fc-493f-a0d4-5d872ce7ae6e',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ae0430'},body:JSON.stringify({sessionId:'ae0430',runId:debugRunId,hypothesisId:'H2',location:'App.jsx:946',message:'Buy order drafts generated',data:{selectedSupplierCount:selectedSuppliers.length,draftCount:emailDrafts.length,drafts:emailDrafts.map(({supplier,mailto,subject,body,info})=>({supplier,hasMailtoPrefix:mailto.startsWith('mailto:'),mailtoLength:mailto.length,hasSubject:Boolean(subject),hasBody:Boolean(body),toRecipientCount:(info?.email||'').split(/[;,]/).map((value)=>value.trim()).filter(Boolean).length,hasCc:Boolean((info?.ccEmail||'').trim())}))},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        const blockedEmailDrafts = openMailtoLinks(emailDrafts, debugRunId);
+        const blockedEmailDrafts = openMailtoLinks(emailDrafts);
 
         const buyOrderRef = doc(collection(db, BUY_ORDERS_PATH));
         await setDoc(buyOrderRef, {
@@ -1625,8 +1619,17 @@ export default function App() {
         }
     };
 
-    if (!isLoggedIn) {
-        return <AuthView onLoginSuccess={() => setIsLoggedIn(true)} />;
+    if (!userId) {
+        const denied = authAccessDenied;
+        const deniedMsg = authDeniedDetail;
+        return (
+            <AuthView
+                authReady={authReady}
+                accessDenied={denied}
+                deniedDetail={deniedMsg}
+                onClearAccessDenied={clearAuthAccessDenied}
+            />
+        );
     }
 
     return (
@@ -1669,32 +1672,41 @@ export default function App() {
 
                 <footer className="text-center text-zinc-500 mt-8 text-sm">
                     <p>TecnoPan Inventory System</p>
-                    <p>User: <span className="font-mono bg-zinc-800 px-2 py-1 rounded">{userId}</span></p>
+                    <p>
+                        User:{' '}
+                        <span className="font-mono bg-zinc-800 px-2 py-1 rounded">
+                            {authUser?.email || userId}
+                        </span>
+                    </p>
                 </footer>
             </div>
 
             {/* Debug Panel - Firestore usage tracker */}
             <DebugPanel />
 
-            {/* AI Assistant Button and Window */}
-            <button
-                onClick={() => setIsAssistantVisible(true)}
-                className="fixed bottom-6 right-6 bg-blue-800 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 z-40"
-                aria-label="Open AI Assistant"
-            >
-                <Bot size={28} />
-            </button>
+            {AI_ASSISTANT_ENABLED && (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => setIsAssistantVisible(true)}
+                        className="fixed bottom-6 right-6 bg-blue-800 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-transform transform hover:scale-110 z-40"
+                        aria-label="Open AI Assistant"
+                    >
+                        <Bot size={28} />
+                    </button>
 
-            <AIAssistant
-                isVisible={isAssistantVisible}
-                onClose={() => setIsAssistantVisible(false)}
-                inventory={inventory}
-                materials={materials}
-                suppliers={suppliers}
-                usageLog={usageLog}
-                onExecuteOrder={(jobs) => handleAddOrEditOrder(jobs)}
-                onOpenModal={(type) => setModal({ type })}
-            />
+                    <AIAssistant
+                        isVisible={isAssistantVisible}
+                        onClose={() => setIsAssistantVisible(false)}
+                        inventory={inventory}
+                        materials={materials}
+                        suppliers={suppliers}
+                        usageLog={usageLog}
+                        onExecuteOrder={(jobs) => handleAddOrEditOrder(jobs)}
+                        onOpenModal={(type) => setModal({ type })}
+                    />
+                </>
+            )}
 
 
 

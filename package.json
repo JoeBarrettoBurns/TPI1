@@ -21,7 +21,8 @@
     "eject": "react-scripts eject",
     "reset:dry": "node resetFirestoreAdmin.js --dry-run",
     "reset:data": "node resetFirestoreAdmin.js",
-    "reset:data:all": "node resetFirestoreAdmin.js --include-materials"
+    "reset:data:all": "node resetFirestoreAdmin.js --include-materials",
+    "deploy:firestore": "firebase deploy --only firestore:rules"
   },
   "eslintConfig": {
     "extends": [

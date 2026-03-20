@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// Deploy: firebase deploy --only firestore:rules
+// Keep ALLOWED_STAFF_EMAILS in sync with src/constants/authAllowlist.js when you change who may sign in.
+// If you add ALLOWED_GOOGLE_EMAIL_DOMAINS (e.g. tecnopan.ca), add a matching rule in isStaffEmail().
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isExpectedAppId(appId) {
+      return appId == 'tecnopan-inventory-app';
+    }
+
+    // Lowercase — Firebase Auth uses normalized email for Google sign-in.
+    function isStaffEmail() {
+      return request.auth != null &&
+        request.auth.token.email is string &&
+        request.auth.token.email in [
+          'joe.barrettoburns@gmail.com',
+          'sahjin.ribeiro@gmail.com'
+        ];
+    }
+
+    // All app data lives under this tree (inventory, materials, usage_logs, buy_orders,
+    // supplier_settings, backups, backups_meta, nested backup snapshots, etc.).
+    match /artifacts/{appId}/public/data/{document=**} {
+      allow read, write: if isExpectedAppId(appId) && isStaffEmail();
+    }
+  }
+}
