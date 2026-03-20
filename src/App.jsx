@@ -7,6 +7,7 @@ import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query,
 import Fuse from 'fuse.js';
 import { db, appId } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
+import { useSuppliersSync } from './hooks/useSuppliersSync';
 import { usePersistentState } from './hooks/usePersistentState';
 import {
     calculateInventorySummary,
@@ -15,7 +16,7 @@ import {
     getGaugeFromMaterial,
     groupLogsByJob
 } from './utils/dataProcessing';
-import { INITIAL_SUPPLIERS, STANDARD_LENGTHS } from './constants/materials';
+import { STANDARD_LENGTHS } from './constants/materials';
 import { buildBuyOrderEmailBody, createSupplierMailtoLink } from './utils/buyOrderUtils';
 import { buildMaterialIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
 
@@ -125,9 +126,7 @@ export default function App() {
     const [isEditMode, setIsEditMode] = useState(false);
     const [scrollToMaterial, setScrollToMaterial] = useState(null);
     const [activeCategory, setActiveCategory] = useState(null);
-    const [suppliers, setSuppliers] = usePersistentState('suppliers', INITIAL_SUPPLIERS);
     const [categoriesToDelete, setCategoriesToDelete] = useState([]);
-    const [supplierInfo, setSupplierInfo] = usePersistentState('supplier-autofill', {});
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedJobFromSearch, setSelectedJobFromSearch] = useState(null);
     const searchInputRef = useRef(null);
@@ -168,6 +167,8 @@ export default function App() {
         userId,
         refetchMaterials
     } = useFirestoreData({ loadInventoryDetails: inventoryDetailsRequested });
+
+    const { suppliers, setSuppliers, supplierInfo, setSupplierInfo } = useSuppliersSync(userId);
 
     const closeModal = useCallback(() => setModal({ type: null, data: null, error: null }), []);
 
@@ -1502,6 +1503,17 @@ export default function App() {
 
 
 
+    const buyPanelInDashboard = modal.type === 'buy' && activeView === 'dashboard';
+
+    const prevActiveViewRef = useRef(activeView);
+    useEffect(() => {
+        const prev = prevActiveViewRef.current;
+        prevActiveViewRef.current = activeView;
+        if (prev === 'dashboard' && activeView !== 'dashboard' && modal.type === 'buy') {
+            closeModal();
+        }
+    }, [activeView, modal.type, closeModal]);
+
     const renderActiveView = () => {
         switch (activeView) {
             case 'dashboard':
@@ -1512,27 +1524,46 @@ export default function App() {
                         onDragEnd={isEditMode ? handleDragEnd : undefined}
                         onDragCancel={isEditMode ? handleDragCancel : undefined}
                     >
-                        <DashboardView
-                            inventorySummary={inventorySummary}
-                            incomingSummary={incomingSummary}
-                            scheduledOutgoingSummary={scheduledOutgoingSummary}
-                            isEditMode={isEditMode}
-                            materials={materials}
-                            categories={categories}
-                            onSave={handleStockEdit}
-                            onMaterialClick={(materialType) => {
-                                const category = materials[materialType]?.category;
-                                if (category) {
-                                    setActiveView(category);
-                                    setScrollToMaterial(materialType);
-                                }
-                            }}
-                            activeCategory={activeCategory}
-                            onDeleteCategory={handleToggleCategoryForDeletion}
-                            categoriesToDelete={categoriesToDelete}
-                            searchQuery={searchQuery}
-                            materialIndicatorSettings={materialIndicatorSettings}
-                        />
+                        <div className="flex flex-col xl:flex-row gap-8 items-stretch xl:items-start">
+                            <div className="min-w-0 flex-1">
+                                <DashboardView
+                                    inventorySummary={inventorySummary}
+                                    incomingSummary={incomingSummary}
+                                    scheduledOutgoingSummary={scheduledOutgoingSummary}
+                                    isEditMode={isEditMode}
+                                    materials={materials}
+                                    categories={categories}
+                                    onSave={handleStockEdit}
+                                    onMaterialClick={(materialType) => {
+                                        const category = materials[materialType]?.category;
+                                        if (category) {
+                                            setActiveView(category);
+                                            setScrollToMaterial(materialType);
+                                        }
+                                    }}
+                                    activeCategory={activeCategory}
+                                    onDeleteCategory={handleToggleCategoryForDeletion}
+                                    categoriesToDelete={categoriesToDelete}
+                                    searchQuery={searchQuery}
+                                    materialIndicatorSettings={materialIndicatorSettings}
+                                />
+                            </div>
+                            {buyPanelInDashboard && (
+                                <aside className="w-full shrink-0 xl:sticky xl:top-4 xl:self-start xl:w-[min(100%,34rem)]">
+                                    <AddOrderModal
+                                        variant="panel"
+                                        onClose={closeModal}
+                                        onSave={handleSubmitBuyOrder}
+                                        title="Buy Material"
+                                        materialTypes={materialTypes}
+                                        materials={materials}
+                                        suppliers={suppliers}
+                                        prefill={modal.data?.prefill}
+                                        mode="buy"
+                                    />
+                                </aside>
+                            )}
+                        </div>
                     </DndContext>
                 );
             case 'jobs':
@@ -1668,7 +1699,18 @@ export default function App() {
 
 
             {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, null, { linkedBuyOrderId: modal.data?.linkedBuyOrderId })} materialTypes={materialTypes} materials={materials} suppliers={suppliers} prefill={modal.data?.prefill} />}
-            {modal.type === 'buy' && <AddOrderModal onClose={closeModal} onSave={handleSubmitBuyOrder} title="Buy Material" materialTypes={materialTypes} materials={materials} suppliers={suppliers} prefill={modal.data?.prefill} mode="buy" />}
+            {modal.type === 'buy' && !buyPanelInDashboard && (
+                <AddOrderModal
+                    onClose={closeModal}
+                    onSave={handleSubmitBuyOrder}
+                    title="Buy Material"
+                    materialTypes={materialTypes}
+                    materials={materials}
+                    suppliers={suppliers}
+                    prefill={modal.data?.prefill}
+                    mode="buy"
+                />
+            )}
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} materials={materials} suppliers={suppliers} />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} materials={materials} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}

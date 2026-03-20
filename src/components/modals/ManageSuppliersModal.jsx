@@ -5,6 +5,7 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X, Save, Mail, RotateCcw } from 'lucide-react';
 import { SUPPLIER_INFO as DEFAULT_SUPPLIER_INFO, CC_EMAIL } from '../../constants/suppliers';
+import { formatSupplierEmailBody } from '../../utils/buyOrderUtils';
 
 export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSupplier, onDeleteSupplier, onUpdateSupplierInfo }) => {
     const [newSupplier, setNewSupplier] = useState('');
@@ -39,9 +40,8 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
         const data = edits[name] || {};
         const to = (data.email || '').trim();
         const subject = encodeURIComponent((data.subject || '').trim());
-        const greeting = data.contactName ? `Hi ${data.contactName.trim()},` : 'Hello,';
         const bodyTemplate = (data.bodyTemplate && data.bodyTemplate.trim()) || buildDefaultBodyTemplate(data.bodyMaterial);
-        const body = encodeURIComponent(`${greeting}\n\n${bodyTemplate}\n\nThank you.`);
+        const body = encodeURIComponent(formatSupplierEmailBody({ contactName: data.contactName }, bodyTemplate));
         const cc = encodeURIComponent((data.ccEmail || CC_EMAIL || '').trim());
         return `mailto:${to}?cc=${cc}&subject=${subject}&body=${body}`;
     };

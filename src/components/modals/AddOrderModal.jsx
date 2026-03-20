@@ -59,7 +59,8 @@ export const AddOrderModal = ({
     materials,
     suppliers,
     prefill,
-    mode = 'inventory'
+    mode = 'inventory',
+    variant = 'modal',
 }) => {
     const { jobs, setJobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(
         initialData,
@@ -206,37 +207,79 @@ export const AddOrderModal = ({
         }
     };
 
-    return (
-        <BaseModal onClose={onClose} title={title}>
+    const scrollRegionClass =
+        variant === 'panel'
+            ? 'space-y-6 border-t border-b border-zinc-700 py-4'
+            : 'space-y-6 max-h-[60vh] overflow-y-auto pr-2 border-t border-b border-zinc-700 py-4';
+
+    const formBody = (
             <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2 border-t border-b border-zinc-700 py-4">
+                <div className={scrollRegionClass}>
                     <div className="p-4 border border-zinc-700 rounded-lg bg-zinc-900/50 relative space-y-4">
-                        <div className={`grid grid-cols-1 ${mode === 'buy' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
+                        <div
+                            className={`grid grid-cols-1 ${mode === 'buy' ? 'md:grid-cols-2 md:items-start' : 'md:grid-cols-3'} gap-4`}
+                        >
                             {mode !== 'buy' && (
                                 <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
                             )}
                             {mode === 'buy' ? (
-                                <div className="md:col-span-1">
-                                    <label className="block text-sm font-medium text-zinc-300">Suppliers</label>
-                                    <div className="mt-1 rounded-lg border border-zinc-600 bg-zinc-700 p-3 space-y-2 max-h-44 overflow-y-auto">
-                                        {suppliers.map((supplierName) => {
-                                            const isSelected = (job.suppliers || []).includes(supplierName);
-                                            return (
-                                                <label key={supplierName} className={`flex items-center gap-3 rounded-md border px-3 py-2 cursor-pointer transition-colors ${isSelected ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-zinc-600 text-zinc-200 hover:border-zinc-500'}`}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={isSelected}
-                                                        onChange={() => toggleSupplierSelection(supplierName)}
-                                                        className="h-4 w-4 accent-blue-500"
-                                                    />
-                                                    <span>{supplierName}</span>
-                                                </label>
-                                            );
-                                        })}
+                                <div className="md:col-span-1 min-w-0">
+                                    <div className="flex items-baseline justify-between gap-2">
+                                        <label className="block text-sm font-medium text-zinc-300">Suppliers</label>
+                                        {(job.suppliers || []).length > 0 && (
+                                            <span className="shrink-0 rounded-full bg-blue-950/80 px-2 py-0.5 text-[11px] font-medium text-blue-300 ring-1 ring-blue-500/30">
+                                                {(job.suppliers || []).length} selected
+                                            </span>
+                                        )}
                                     </div>
-                                    <p className="mt-2 text-xs text-zinc-400">
+                                    <div
+                                        className="mt-2 h-52 overflow-y-auto overflow-x-hidden rounded-xl border border-zinc-600 bg-zinc-900/70 p-1.5 custom-scrollbar shadow-inner"
+                                        role="group"
+                                        aria-label="Supplier selection"
+                                    >
+                                        <div className="flex flex-col gap-1">
+                                            {suppliers.map((supplierName) => {
+                                                const isSelected = (job.suppliers || []).includes(supplierName);
+                                                return (
+                                                    <label
+                                                        key={supplierName}
+                                                        className={[
+                                                            'flex min-w-0 cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-zinc-900',
+                                                            isSelected
+                                                                ? 'bg-blue-950/50 text-white ring-1 ring-blue-500/40'
+                                                                : 'text-zinc-200 hover:bg-zinc-800/80',
+                                                        ].join(' ')}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            onChange={() => toggleSupplierSelection(supplierName)}
+                                                            className="sr-only"
+                                                        />
+                                                        <span
+                                                            className={[
+                                                                'flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors',
+                                                                isSelected
+                                                                    ? 'border-blue-500 bg-blue-600 shadow-sm shadow-blue-900/40'
+                                                                    : 'border-zinc-500 bg-zinc-800',
+                                                            ].join(' ')}
+                                                            aria-hidden
+                                                        >
+                                                            {isSelected ? (
+                                                                <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                                                            ) : null}
+                                                        </span>
+                                                        <span className="min-w-0 flex-1 truncate text-sm font-medium tracking-wide">
+                                                            {supplierName}
+                                                        </span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    <p className="mt-2 text-xs leading-relaxed text-zinc-400">
                                         {(job.suppliers || []).length > 0
-                                            ? `${job.suppliers.length} supplier${job.suppliers.length === 1 ? '' : 's'} selected`
+                                            ? 'Each selected supplier gets its own email draft.'
                                             : 'Select one or more suppliers to open separate emails.'}
                                     </p>
                                 </div>
@@ -244,17 +287,20 @@ export const AddOrderModal = ({
                                 <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
                             )}
                             {mode === 'buy' ? (
-                                <div className="md:col-span-1">
-                                    <FormInput
-                                        label="Email Subject"
-                                        name="emailSubject"
-                                        value={job.emailSubject || ''}
-                                        onChange={(e) => setJobField(jobIndex, 'emailSubject', e.target.value)}
-                                        placeholder="Leave blank to use each supplier's default subject"
-                                    />
-                                    <p className="mt-2 text-xs text-zinc-400">
-                                        One email will open per selected supplier. Leave this blank to keep each supplier&apos;s default subject.
-                                    </p>
+                                <div className="md:col-span-1 min-w-0 flex flex-col">
+                                    <label htmlFor="emailSubject" className="block text-sm font-medium text-zinc-300">
+                                        Email Subject
+                                    </label>
+                                    <div className="mt-2 flex h-52 min-h-0 flex-col rounded-xl border border-zinc-600 bg-zinc-900/70 p-1.5 shadow-inner">
+                                        <textarea
+                                            id="emailSubject"
+                                            name="emailSubject"
+                                            value={job.emailSubject || ''}
+                                            onChange={(e) => setJobField(jobIndex, 'emailSubject', e.target.value)}
+                                            placeholder="Leave blank to use each supplier's default subject"
+                                            className="w-full min-h-0 flex-1 resize-none rounded-lg border border-zinc-600 bg-zinc-700 px-3 py-2 text-sm leading-relaxed text-white placeholder:text-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="flex gap-2 p-2 bg-zinc-800 rounded-lg">
@@ -338,8 +384,22 @@ export const AddOrderModal = ({
                                     <FormInput label={mode === 'buy' ? '120"x48"' : formatSheetPriceLabel(120, item, materials)} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty120', e.target.value)} />
                                     <FormInput label={mode === 'buy' ? '144"x48"' : formatSheetPriceLabel(144, item, materials)} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty144', e.target.value)} />
                                 </div>
-                                <p className="text-sm font-medium text-zinc-300 mt-4">Optional Custom Sheet:</p>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                <p
+                                    className={
+                                        mode === 'buy'
+                                            ? 'mt-3 text-xs font-medium text-zinc-400'
+                                            : 'mt-4 text-sm font-medium text-zinc-300'
+                                    }
+                                >
+                                    Optional Custom Sheet:
+                                </p>
+                                <div
+                                    className={
+                                        mode === 'buy'
+                                            ? 'grid grid-cols-1 gap-2 md:grid-cols-3 [&_label]:text-xs [&_label]:font-medium [&_label]:text-zinc-400'
+                                            : 'grid grid-cols-1 gap-2 md:grid-cols-3'
+                                    }
+                                >
                                     <FormInput label="Custom Width" name={`customWidth-${itemIndex}`} type="number" placeholder='48' value={item.customWidth} onChange={(e) => setItemField(jobIndex, itemIndex, 'customWidth', e.target.value)} />
                                     <FormInput label="Custom Length" name={`customLength-${itemIndex}`} type="number" placeholder='96' value={item.customLength} onChange={(e) => setItemField(jobIndex, itemIndex, 'customLength', e.target.value)} />
                                     <FormInput label={mode === 'buy' ? 'Custom Quantity' : formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
@@ -363,7 +423,13 @@ export const AddOrderModal = ({
 
                 {error && <ErrorMessage message={error} />}
 
-                <div className="flex justify-end items-center gap-4 pt-4">
+                <div
+                    className={
+                        variant === 'panel'
+                            ? 'flex flex-wrap items-center justify-center gap-4 pt-4'
+                            : 'flex items-center justify-end gap-4 pt-4'
+                    }
+                >
                     {!initialData && (
                         <Button variant="success" onClick={() => addMaterial(jobIndex)}>
                             + Add Material
@@ -375,6 +441,28 @@ export const AddOrderModal = ({
                     </Button>
                 </div>
             </form>
-        </BaseModal>
     );
+
+    if (variant === 'panel') {
+        return (
+            <div className="flex w-full flex-col rounded-2xl border border-zinc-700 bg-zinc-800 shadow-xl">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-700 p-4 md:p-5">
+                    <h3 className="truncate pr-2 text-xl font-bold text-white md:text-2xl">{title}</h3>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-red-500/50 bg-red-500/25 text-zinc-200 transition-colors hover:border-red-400/70 hover:bg-red-500/40 hover:text-white"
+                        aria-label="Close buy panel"
+                    >
+                        <X size={22} />
+                    </button>
+                </div>
+                <div className="p-4 md:p-6">
+                    {formBody}
+                </div>
+            </div>
+        );
+    }
+
+    return <BaseModal onClose={onClose} title={title}>{formBody}</BaseModal>;
 };

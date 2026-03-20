@@ -37,10 +37,18 @@ function formatLineItemSizes(item) {
     return lines;
 }
 
+/** Full email body: greeting, standard intro, sheet block, closing. Exported for Manage Suppliers preview. */
+export function formatSupplierEmailBody(info, sheetSectionText) {
+    const name = (info?.contactName || '').trim();
+    const greeting = name ? `Hi ${name}` : 'Hi';
+    const sheet = (sheetSectionText || '').trim();
+    return `${greeting}\n\nCan I get a quote and lead time for the following:\n\n${sheet}`;
+}
+
 export function buildBuyOrderEmailBody(items) {
     const normalizedItems = Array.isArray(items) ? items : [];
     if (normalizedItems.length === 0) {
-        return 'Please provide a quote for the following items:\n\n[PLEASE LIST ITEMS]';
+        return '[PLEASE LIST ITEMS]';
     }
 
     return normalizedItems.map((item) => {
@@ -78,24 +86,24 @@ export function createSupplierMailtoLink({
         ? customSubject.trim()
         : (info.subject || 'Quote Request');
     const subject = encodeURIComponent(resolvedSubject);
-    const greetingName = info.contactName ? `Hi ${info.contactName},` : 'Hello,';
 
-    let bodyContent = '';
+    let sheetSection = '';
     if (customBody && customBody.trim().length > 0) {
-        bodyContent = customBody.trim();
+        sheetSection = customBody.trim();
     } else if (info.bodyTemplate && info.bodyTemplate.trim().length > 0) {
-        bodyContent = info.bodyTemplate.trim();
+        sheetSection = info.bodyTemplate.trim();
     } else {
-        bodyContent = buildDefaultItemsBody(info, items);
+        sheetSection = buildDefaultItemsBody(info, items);
     }
 
-    const body = encodeURIComponent(`${greetingName}\n\n${bodyContent}\n\nThank you.`);
+    const fullBody = formatSupplierEmailBody(info, sheetSection);
+    const body = encodeURIComponent(fullBody);
     const cc = encodeURIComponent((info.ccEmail || CC_EMAIL || '').trim());
 
     return {
         mailto: `mailto:${info.email || ''}?cc=${cc}&subject=${subject}&body=${body}`,
         subject: resolvedSubject,
-        body: `${greetingName}\n\n${bodyContent}\n\nThank you.`,
+        body: fullBody,
         info,
     };
 }
