@@ -1,7 +1,7 @@
 // src/components/layout/Header.jsx
 
 import React, { forwardRef } from 'react';
-import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart } from 'lucide-react';
+import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart, Shield } from 'lucide-react';
 import { Button } from '../common/Button';
 
 export const Header = forwardRef(({
@@ -16,6 +16,7 @@ export const Header = forwardRef(({
     onManageCategories,
     onManageSuppliers,
     onOpenBackup,
+    onOpenAuthentication,
     activeView,
     onSignOut,
     onLogoClick
@@ -37,6 +38,7 @@ export const Header = forwardRef(({
                     <Button onClick={onUse} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Minus size={20} /> <span className="hidden sm:inline">Use Stock</span></Button>
                     <Button onClick={onManageCategories} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Box size={20} /> <span className="hidden sm:inline">Manage Categories</span></Button>
                     <Button onClick={onManageSuppliers} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Users size={20} /> <span className="hidden sm:inline">Manage Suppliers</span></Button>
+                    <Button onClick={onOpenAuthentication} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Shield size={20} /> <span className="hidden sm:inline">Authentication</span></Button>
                     <Button onClick={onOpenBackup} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Database size={20} /> <span className="hidden sm:inline">Backups</span></Button>
                     <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className="px-3 py-2 md:px-5 md:py-3">
                         <Edit size={20} /> <span className="hidden sm:inline">{isEditMode ? 'Finish Editing' : 'Edit'}</span>

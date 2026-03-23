@@ -1,9 +1,12 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import {
     getAuth,
     onAuthStateChanged,
     signInWithCustomToken,
     signInWithPopup,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    fetchSignInMethodsForEmail,
     GoogleAuthProvider,
     signOut,
 } from 'firebase/auth';
@@ -25,9 +28,29 @@ export const appId = typeof __app_id !== 'undefined' ? __app_id : 'tecnopan-inve
 // Initialize Firebase services
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+const SECONDARY_APP_NAME = 'AuthProvisioning';
+function getSecondaryApp() {
+    return getApps().some((a) => a.name === SECONDARY_APP_NAME)
+        ? getApp(SECONDARY_APP_NAME)
+        : initializeApp(firebaseConfig, SECONDARY_APP_NAME);
+}
+
+/** Separate Auth instance so creating an email/password user does not replace the signed-in admin session. */
+export const secondaryAuth = getAuth(getSecondaryApp());
+
 export const db = getFirestore(app);
 
-export { onAuthStateChanged, signInWithCustomToken, signInWithPopup, GoogleAuthProvider, signOut };
+export {
+    onAuthStateChanged,
+    signInWithCustomToken,
+    signInWithPopup,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    fetchSignInMethodsForEmail,
+    GoogleAuthProvider,
+    signOut,
+};
 
 // Set the log level for debugging Firebase issues.
 setLogLevel('debug');

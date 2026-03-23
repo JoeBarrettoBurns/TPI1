@@ -9,6 +9,8 @@ import {
     limit,
     onSnapshot,
     doc,
+    getDoc,
+    setDoc,
     writeBatch,
     runTransaction,
     getDocs,
@@ -18,9 +20,92 @@ import { db, appId, auth, onAuthStateChanged, signInWithCustomToken, signOut } f
 import { STANDARD_LENGTHS } from '../constants/materials';
 import {
     getUnauthorizedMessage,
-    isAllowlistEnabled,
-    isGoogleEmailAllowed,
+    isFirebaseUserAllowed,
+    FALLBACK_ALLOWED_EMAILS,
+    normalizeEmail,
 } from '../constants/authAllowlist';
+
+const ACCESS_ALLOWLIST_DOC = () => doc(db, `artifacts/${appId}/config/access_allowlist`);
+
+async function fetchAllowedEmailsLowercased() {
+    const fallback = FALLBACK_ALLOWED_EMAILS.map((e) => normalizeEmail(e));
+    try {
+        const snap = await getDoc(ACCESS_ALLOWLIST_DOC());
+        if (snap.exists()) {
+            const raw = snap.data()?.emails;
+            if (Array.isArray(raw) && raw.length > 0) {
+                const fromFs = [...new Set(raw.map((e) => normalizeEmail(String(e))).filter(Boolean))];
+                const merged = [...new Set([...fallback, ...fromFs])];
+                const casingMismatch = raw.some(
+                    (e) => normalizeEmail(String(e)) !== String(e).trim()
+                );
+                if (casingMismatch && fromFs.length > 0) {
+                    try {
+                        await setDoc(
+                            ACCESS_ALLOWLIST_DOC(),
+                            { emails: fromFs, updatedAt: new Date().toISOString() },
+                            { merge: true }
+                        );
+                    } catch (e) {
+                        console.warn('Could not normalize allowlist emails in Firestore (needs staff write):', e);
+                    }
+                }
+                // #region agent log
+                fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H2',location:'src/hooks/useFirestoreData.js:60',message:'allowlist resolved from firestore',data:{appId,fallbackCount:fallback.length,firestoreCount:fromFs.length,mergedCount:merged.length,casingMismatch},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+                return merged;
+            }
+        }
+    } catch (e) {
+        console.warn('Could not load access allowlist:', e);
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H2',location:'src/hooks/useFirestoreData.js:67',message:'allowlist fallback used',data:{appId,fallbackCount:fallback.length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return fallback;
+}
+
+/** Sort usage log docs by createdAt (Firestore Timestamp, Date, or string). */
+function parseCreatedAtMs(log) {
+    const c = log?.createdAt;
+    if (c && typeof c.toDate === 'function') return c.toDate().getTime();
+    if (c && typeof c.seconds === 'number') return c.seconds * 1000;
+    if (c) {
+        const t = new Date(c).getTime();
+        return Number.isNaN(t) ? 0 : t;
+    }
+    return 0;
+}
+
+function debugEmailMeta(email) {
+    const normalized = normalizeEmail(email || '');
+    if (!normalized || !normalized.includes('@')) return { present: false };
+    const [local, domain] = normalized.split('@');
+    return {
+        present: true,
+        domain,
+        localLength: local.length,
+        isGmailFamily: domain === 'gmail.com' || domain === 'googlemail.com',
+    };
+}
+
+function debugProviderMetas(user) {
+    return (user?.providerData || []).map((p) => ({
+        providerId: p?.providerId || 'unknown',
+        ...debugEmailMeta(p?.email || ''),
+    }));
+}
+
+function gmailAlternateEmail(email) {
+    const normalized = normalizeEmail(email || '');
+    if (normalized.endsWith('@gmail.com')) {
+        return `${normalized.slice(0, -'@gmail.com'.length)}@googlemail.com`;
+    }
+    if (normalized.endsWith('@googlemail.com')) {
+        return `${normalized.slice(0, -'@googlemail.com'.length)}@gmail.com`;
+    }
+    return normalized;
+}
 
 const INVENTORY_CACHE_KEY = `inventory_cache_${appId}`;
 const INVENTORY_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -164,36 +249,77 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
     const materialsSnapshotRef = useRef({});
 
     useEffect(() => {
+        // #region agent log
+        fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H6',location:'src/hooks/useFirestoreData.js:246',message:'hook startup',data:{appId,loadInventoryDetails},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+    }, [loadInventoryDetails]);
+
+    useEffect(() => {
         const unsubAuth = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                if (
-                    isAllowlistEnabled() &&
-                    user.email &&
-                    !isGoogleEmailAllowed(user.email)
-                ) {
+                try {
+                    const allowed = await fetchAllowedEmailsLowercased();
+                    const clientAllowed = isFirebaseUserAllowed(user, allowed);
+                    const tokenResult = await user.getIdTokenResult(false).catch(() => null);
+                    const tokenIdentityEmails = Array.isArray(tokenResult?.claims?.firebase?.identities?.email)
+                        ? tokenResult.claims.firebase.identities.email
+                        : [];
+                    const primaryEmail = normalizeEmail(user.email || '');
+                    const tokenEmail = normalizeEmail(tokenResult?.claims?.email || '');
+                    const primaryAlt = gmailAlternateEmail(primaryEmail);
+                    const tokenAlt = gmailAlternateEmail(tokenEmail);
+                    // #region agent log
+                    fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H1',location:'src/hooks/useFirestoreData.js:248',message:'auth allowlist evaluation',data:{appId,userIdPresent:!!user.uid,clientAllowed,allowedCount:allowed.length,primary:debugEmailMeta(user.email||''),providers:debugProviderMetas(user),tokenEmail:debugEmailMeta(tokenResult?.claims?.email||''),tokenIdentityDomains:tokenIdentityEmails.map((email)=>debugEmailMeta(email).domain).filter(Boolean),primaryAllowlistExact:primaryEmail ? allowed.includes(primaryEmail) : false,primaryAllowlistAlt:primaryAlt && primaryAlt !== primaryEmail ? allowed.includes(primaryAlt) : false,tokenAllowlistExact:tokenEmail ? allowed.includes(tokenEmail) : false,tokenAllowlistAlt:tokenAlt && tokenAlt !== tokenEmail ? allowed.includes(tokenAlt) : false},timestamp:Date.now()})}).catch(()=>{});
+                    // #endregion
+                    if (!clientAllowed) {
                     try {
                         await signOut(auth);
                     } catch (e) {
                         console.error('signOut after allowlist deny:', e);
                     }
-                    setAuthAccessDenied(true);
-                    setAuthDeniedDetail(getUnauthorizedMessage());
+                    // #region agent log
+                    fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H4',location:'src/hooks/useFirestoreData.js:242',message:'client auth deny branch',data:{appId,primary:debugEmailMeta(user.email||''),providers:debugProviderMetas(user),tokenEmail:debugEmailMeta(tokenResult?.claims?.email||'')},timestamp:Date.now()})}).catch(()=>{});
+                    // #endregion
+                        setAuthAccessDenied(true);
+                        const primary = user.email || '(no email on account)';
+                        const fromProviders = (user.providerData || [])
+                            .map((p) => p?.email)
+                            .filter(Boolean)
+                            .filter((e) => normalizeEmail(e) !== normalizeEmail(user.email || ''));
+                        const extra =
+                            fromProviders.length > 0
+                                ? ` Provider emails: ${fromProviders.join(', ')}.`
+                                : '';
+                        setAuthDeniedDetail(
+                            `${getUnauthorizedMessage()} You signed in as ${primary}.${extra} The allowlist must include that exact mailbox (Gmail vs googlemail.com both work if either form is listed). Ask an admin to add it under Authentication.`
+                        );
+                        setUserId(null);
+                        setAuthUser(null);
+                        setAuthReady(true);
+                        setLoading(false);
+                        return;
+                    }
+
+                    setAuthAccessDenied(false);
+                    setAuthDeniedDetail('');
+                    setUserId(user.uid);
+                    setAuthUser({
+                        uid: user.uid,
+                        email: user.email || null,
+                        displayName: user.displayName || null,
+                    });
+                    setAuthReady(true);
+                } catch (error) {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H5',location:'src/hooks/useFirestoreData.js:286',message:'auth callback unexpected error',data:{appId,errorMessage:error?.message||String(error),errorName:error?.name||'',currentUserPrimary:debugEmailMeta(user.email||''),providers:debugProviderMetas(user)},timestamp:Date.now()})}).catch(()=>{});
+                    // #endregion
+                    console.error('Auth evaluation failed:', error);
+                    setError(error?.message || 'Authentication failed.');
                     setUserId(null);
                     setAuthUser(null);
-                    setAuthReady(true);
                     setLoading(false);
-                    return;
+                    setAuthReady(true);
                 }
-
-                setAuthAccessDenied(false);
-                setAuthDeniedDetail('');
-                setUserId(user.uid);
-                setAuthUser({
-                    uid: user.uid,
-                    email: user.email || null,
-                    displayName: user.displayName || null,
-                });
-                setAuthReady(true);
             } else {
                 try {
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -333,6 +459,9 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         const usageLogRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
         const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
         const qUsageLog = query(usageLogRef, orderBy('createdAt', 'desc'), limit(100));
+        // #region agent log
+        fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H3',location:'src/hooks/useFirestoreData.js:404',message:'usage logs subscription start',data:{appId,userIdPresent:!!userId,path:`artifacts/${appId}/public/data/usage_logs`,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||''),currentUserProviders:debugProviderMetas(auth.currentUser)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
 
         let hasUsage = false;
         let hasMaterials = false;
@@ -483,6 +612,19 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             writeSummaryCache(inventorySummary, incomingSummary);
         };
 
+        const loadUsageLogsViaFullRead = async () => {
+            const snap = await getDocs(usageLogRef);
+            if (snap.size > 8000) {
+                throw new Error(
+                    `usage_logs has ${snap.size} documents; deploy firestore indexes and use the ordered query instead of loading all.`
+                );
+            }
+            return snap.docs
+                .map((d) => ({ id: d.id, ...d.data() }))
+                .sort((a, b) => parseCreatedAtMs(b) - parseCreatedAtMs(a))
+                .slice(0, 100);
+        };
+
         const unsubUsageLog = onSnapshot(
             qUsageLog,
             (snap) => {
@@ -496,10 +638,46 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                 hasUsage = true;
                 markReady();
             },
-            () => {
-                setError('Failed to load usage logs.');
+            (err) => {
+                console.error('usage_logs snapshot error:', err);
+                auth.currentUser?.getIdTokenResult?.(false)
+                    .then((tokenResult) => {
+                        const tokenIdentityEmails = Array.isArray(tokenResult?.claims?.firebase?.identities?.email)
+                            ? tokenResult.claims.firebase.identities.email
+                            : [];
+                        // #region agent log
+                        fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H4',location:'src/hooks/useFirestoreData.js:577',message:'usage logs snapshot error',data:{appId,errorCode:err?.code||'',errorMessage:err?.message||'',userIdPresent:!!userId,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||''),currentUserProviders:debugProviderMetas(auth.currentUser),tokenEmail:debugEmailMeta(tokenResult?.claims?.email||''),tokenIdentityDomains:tokenIdentityEmails.map((email)=>debugEmailMeta(email).domain).filter(Boolean)},timestamp:Date.now()})}).catch(()=>{});
+                        // #endregion
+                    })
+                    .catch(() => {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H4',location:'src/hooks/useFirestoreData.js:581',message:'usage logs snapshot error token lookup failed',data:{appId,errorCode:err?.code||'',errorMessage:err?.message||'',userIdPresent:!!userId,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||''),currentUserProviders:debugProviderMetas(auth.currentUser)},timestamp:Date.now()})}).catch(()=>{});
+                        // #endregion
+                    });
                 hasUsage = true;
                 markReady();
+                (async () => {
+                    try {
+                        const usageData = await loadUsageLogsViaFullRead();
+                        if (!isActive) return;
+                        setUsageLog(usageData);
+                        if (inventoryDetailsEnabledRef.current) {
+                            handleAutoFulfillScheduledUsage(usageData, inventoryRef.current);
+                        }
+                        if (err?.code === 'failed-precondition') {
+                            setError('');
+                        } else {
+                            setError(
+                                `Usage logs: real-time listener failed (${err?.code || 'error'}). Loaded latest ${usageData.length} entries (fallback). If this persists, check the browser console and Firebase → Firestore → Indexes.`
+                            );
+                        }
+                    } catch (fallbackErr) {
+                        console.error('usage_logs fallback failed:', fallbackErr);
+                        if (!isActive) return;
+                        const detail = [err?.code, err?.message, fallbackErr?.message].filter(Boolean).join(' — ');
+                        setError(detail ? `Failed to load usage logs. ${detail}` : 'Failed to load usage logs.');
+                    }
+                })();
             }
         );
 
@@ -513,10 +691,16 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                     materialsData[name] = { id: d.id, name, ...d.data() };
                 });
                 materialIds = Object.keys(materialsData);
+                // #region agent log
+                fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H7',location:'src/hooks/useFirestoreData.js:606',message:'materials fetch success',data:{appId,materialCount:snap.size,userIdPresent:!!userId,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||'')},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
                 setMaterials(materialsData);
                 hasMaterials = true;
             } catch (err) {
                 console.error('Failed to load materials:', err);
+                // #region agent log
+                fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H7',location:'src/hooks/useFirestoreData.js:611',message:'materials fetch error',data:{appId,errorCode:err?.code||'',errorMessage:err?.message||'',userIdPresent:!!userId,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||'')},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
                 setError('Failed to load materials.');
                 hasMaterials = true;
                 hasSummaries = true;
@@ -562,63 +746,111 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         }
 
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
-        const qInventory = query(inventoryCollectionRef, where('status', 'in', ['On Hand', 'Ordered']));
+        const qOnHand = query(inventoryCollectionRef, where('status', '==', 'On Hand'));
+        const qOrdered = query(inventoryCollectionRef, where('status', '==', 'Ordered'));
+        // #region agent log
+        fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H8',location:'src/hooks/useFirestoreData.js:743',message:'inventory subscriptions start',data:{appId,userIdPresent:!!userId,onHandPath:`artifacts/${appId}/public/data/inventory`,orderedPath:`artifacts/${appId}/public/data/inventory`,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||'')},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         let isActive = true;
 
-            const loadInventoryFallback = async () => {
+        const onHandRef = { current: [] };
+        const orderedRef = { current: [] };
+
+        const loadInventoryFallback = async () => {
             const [onHandSnap, orderedSnap] = await Promise.all([
                 getDocs(query(inventoryCollectionRef, where('status', '==', 'On Hand'))),
-                getDocs(query(inventoryCollectionRef, where('status', '==', 'Ordered')))
+                getDocs(query(inventoryCollectionRef, where('status', '==', 'Ordered'))),
             ]);
 
             const merged = [
                 ...onHandSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-                ...orderedSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+                ...orderedSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
             ];
-            const deduped = Array.from(new Map(merged.map((item) => [item.id, item])).values())
-                .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+            const deduped = Array.from(new Map(merged.map((item) => [item.id, item])).values()).sort(
+                (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+            );
 
             if (!isActive) return;
             setInventory(deduped);
             inventoryRef.current = deduped;
             writeInventoryCache(deduped);
-                const materialIds = getMaterialIdsForSummary(deduped, materialsSnapshotRef.current);
-                const summaries = buildSummariesFromInventory(deduped, materialIds);
-                setInventorySummaryData(summaries.inventorySummary);
-                setIncomingSummaryData(summaries.incomingSummary);
-                writeSummaryCache(summaries.inventorySummary, summaries.incomingSummary);
+            const materialIds = getMaterialIdsForSummary(deduped, materialsSnapshotRef.current);
+            const summaries = buildSummariesFromInventory(deduped, materialIds);
+            setInventorySummaryData(summaries.inventorySummary);
+            setIncomingSummaryData(summaries.incomingSummary);
+            writeSummaryCache(summaries.inventorySummary, summaries.incomingSummary);
+            handleAutoReceive(deduped);
             setInventoryReady(true);
         };
 
-        const unsubInventory = onSnapshot(
-            qInventory,
-            (snap) => {
-                const data = snap.docs
-                    .map((d) => ({ id: d.id, ...d.data() }))
-                    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-                setInventory(data);
-                inventoryRef.current = data;
-                writeInventoryCache(data);
-                const materialIds = getMaterialIdsForSummary(data, materialsSnapshotRef.current);
-                const summaries = buildSummariesFromInventory(data, materialIds);
-                setInventorySummaryData(summaries.inventorySummary);
-                setIncomingSummaryData(summaries.incomingSummary);
-                writeSummaryCache(summaries.inventorySummary, summaries.incomingSummary);
-                handleAutoReceive(data);
+        const mergeSnapshotsAndApply = () => {
+            const merged = [...onHandRef.current, ...orderedRef.current];
+            const deduped = Array.from(new Map(merged.map((item) => [item.id, item])).values()).sort(
+                (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+            );
+            if (!isActive) return;
+            setInventory(deduped);
+            inventoryRef.current = deduped;
+            writeInventoryCache(deduped);
+            const materialIds = getMaterialIdsForSummary(deduped, materialsSnapshotRef.current);
+            const summaries = buildSummariesFromInventory(deduped, materialIds);
+            setInventorySummaryData(summaries.inventorySummary);
+            setIncomingSummaryData(summaries.incomingSummary);
+            writeSummaryCache(summaries.inventorySummary, summaries.incomingSummary);
+            handleAutoReceive(deduped);
+            setInventoryReady(true);
+        };
+
+        let snapshotErrorHandled = false;
+        let unsubOnHand = () => {};
+        let unsubOrdered = () => {};
+
+        const handleInventorySnapshotError = async (err) => {
+            if (snapshotErrorHandled || !isActive) return;
+            snapshotErrorHandled = true;
+            console.error('Inventory snapshot error:', err);
+            // #region agent log
+            fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H8',location:'src/hooks/useFirestoreData.js:718',message:'inventory snapshot error',data:{appId,errorCode:err?.code||'',errorMessage:err?.message||'',userIdPresent:!!userId,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||'')},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            unsubOnHand();
+            unsubOrdered();
+            try {
+                await loadInventoryFallback();
+            } catch (fallbackErr) {
+                console.error('Inventory load fallback failed:', fallbackErr);
+                // #region agent log
+                fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H8',location:'src/hooks/useFirestoreData.js:724',message:'inventory fallback error',data:{appId,errorCode:err?.code||'',errorMessage:err?.message||'',fallbackCode:fallbackErr?.code||'',fallbackMessage:fallbackErr?.message||'',userIdPresent:!!userId,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||'')},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+                const primary = [err?.code, err?.message].filter(Boolean).join(': ');
+                const fb = [fallbackErr?.code, fallbackErr?.message].filter(Boolean).join(': ');
+                const detail = primary || fb;
+                setError(detail ? `Failed to load inventory. ${detail}` : 'Failed to load inventory.');
                 setInventoryReady(true);
-            },
-            async () => {
-                try {
-                    await loadInventoryFallback();
-                } catch (fallbackErr) {
-                    console.error('Inventory load fallback failed:', fallbackErr);
-                    setError('Failed to load inventory.');
-                    setInventoryReady(true);
-                }
             }
+        };
+
+        unsubOnHand = onSnapshot(
+            qOnHand,
+            (snap) => {
+                onHandRef.current = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+                mergeSnapshotsAndApply();
+            },
+            handleInventorySnapshotError
         );
 
-        inventoryUnsubRef.current = unsubInventory;
+        unsubOrdered = onSnapshot(
+            qOrdered,
+            (snap) => {
+                orderedRef.current = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+                mergeSnapshotsAndApply();
+            },
+            handleInventorySnapshotError
+        );
+
+        inventoryUnsubRef.current = () => {
+            unsubOnHand();
+            unsubOrdered();
+        };
 
         return () => {
             isActive = false;

@@ -1,30 +1,72 @@
 rules_version = '2';
 
-// Deploy: firebase deploy --only firestore:rules
-// Keep ALLOWED_STAFF_EMAILS in sync with src/constants/authAllowlist.js when you change who may sign in.
-// If you add ALLOWED_GOOGLE_EMAIL_DOMAINS (e.g. tecnopan.ca), add a matching rule in isStaffEmail().
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
+    
     function isExpectedAppId(appId) {
       return appId == 'tecnopan-inventory-app';
     }
 
-    // Lowercase — Firebase Auth uses normalized email for Google sign-in.
-    function isStaffEmail() {
-      return request.auth != null &&
-        request.auth.token.email is string &&
-        request.auth.token.email in [
-          'joe.barrettoburns@gmail.com',
-          'sahjin.ribeiro@gmail.com'
-        ];
+    function fallbackStaffEmails() {
+      return [
+        'joe.barrettoburns@gmail.com',
+        'sahjin.ribeiro@gmail.com'
+      ];
     }
 
-    // All app data lives under this tree (inventory, materials, usage_logs, buy_orders,
-    // supplier_settings, backups, backups_meta, nested backup snapshots, etc.).
+    // Safely extract the email from the auth token
+    function getEmail() {
+      let token = request.auth.token;
+      let hasEmail = token != null && 'email' in token && token.email is string && token.email != '';
+      let hasIdentityEmail = token != null && 'firebase' in token && 
+                             'identities' in token.firebase && 
+                             'email' in token.firebase.identities && 
+                             token.firebase.identities.email is list && 
+                             token.firebase.identities.email.size() > 0 && 
+                             token.firebase.identities.email[0] is string;
+                             
+      return hasEmail ? token.email.lower() : (hasIdentityEmail ? token.firebase.identities.email[0].lower() : '');
+    }
+
+    // Check if the email is in the provided list, accounting for gmail/googlemail aliases
+    function isEmailAllowed(email, allowedList) {
+      return email in allowedList || 
+             (email.matches('.*@gmail\\.com') && email.replace('@gmail\\.com', '@googlemail.com') in allowedList) || 
+             (email.matches('.*@googlemail\\.com') && email.replace('@googlemail\\.com', '@gmail.com') in allowedList);
+    }
+
+    function isFallbackStaff() {
+      let email = getEmail();
+      return email != '' && isEmailAllowed(email, fallbackStaffEmails());
+    }
+
+    function isAllowlisted() {
+      let email = getEmail();
+      let docPath = /databases/$(database)/documents/artifacts/tecnopan-inventory-app/config/access_allowlist;
+      let allowlistDoc = get(docPath);
+      
+      return email != '' &&
+             allowlistDoc != null &&
+             'emails' in allowlistDoc.data && 
+             allowlistDoc.data.emails is list &&
+             isEmailAllowed(email, allowlistDoc.data.emails);
+    }
+
+    // Main access check: user must be signed in, have an email, and be in either list
+    function hasAccess(appId) {
+      return request.auth != null && 
+             isExpectedAppId(appId) && 
+             (isFallbackStaff() || isAllowlisted());
+    }
+
+    // Allow any authenticated user to read/write the allowlist so the client can self-heal casing mismatches
+    match /artifacts/{appId}/config/access_allowlist {
+      allow read, write: if request.auth != null && isExpectedAppId(appId);
+    }
+
+    // Protect all actual app data
     match /artifacts/{appId}/public/data/{document=**} {
-      allow read, write: if isExpectedAppId(appId) && isStaffEmail();
+      allow read, write: if hasAccess(appId);
     }
   }
 }

@@ -45,6 +45,7 @@ import { UseStockModal } from './components/modals/UseStockModal';
 import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
 import { ManageCategoriesModal } from './components/modals/ManageCategoriesModal';
 import { BackupModal } from './components/modals/BackupModal';
+import { AuthenticationModal } from './components/modals/AuthenticationModal';
 import { ManageSuppliersModal } from './components/modals/ManageSuppliersModal';
 import { ConfirmationModal } from './components/modals/ConfirmationModal';
 import { BuyOrderDraftsModal } from './components/modals/BuyOrderDraftsModal';
@@ -127,19 +128,12 @@ export default function App() {
     const [fuse, setFuse] = useState(null);
     const searchTimeoutRef = useRef(null);
     const [isAssistantVisible, setIsAssistantVisible] = useState(false);
-    const [inventoryDetailsRequested, setInventoryDetailsRequested] = useState(false);
     const [openBuyOrders, setOpenBuyOrders] = useState([]);
     const shouldLoadInventoryDetails = useMemo(() => {
         const lightweightViews = new Set(['dashboard', 'reorder', 'sheet-calculator']);
         const inventoryDependentModals = new Set(['use', 'edit-log', 'edit-order']);
         return !lightweightViews.has(activeView) || isEditMode || inventoryDependentModals.has(modal.type);
     }, [activeView, isEditMode, modal.type]);
-
-    useEffect(() => {
-        if (shouldLoadInventoryDetails) {
-            setInventoryDetailsRequested(true);
-        }
-    }, [shouldLoadInventoryDetails]);
 
     const {
         inventory,
@@ -157,13 +151,7 @@ export default function App() {
         authDeniedDetail,
         clearAuthAccessDenied,
         refetchMaterials
-    } = useFirestoreData({ loadInventoryDetails: inventoryDetailsRequested });
-
-    useEffect(() => {
-        if (!userId) {
-            setInventoryDetailsRequested(false);
-        }
-    }, [userId]);
+    } = useFirestoreData({ loadInventoryDetails: true });
 
     const { suppliers, setSuppliers, supplierInfo, setSupplierInfo } = useSuppliersSync(userId);
 
@@ -288,6 +276,7 @@ export default function App() {
             { type: 'command', name: 'Manage Suppliers', aliases: ['ms', 'manage sup'], action: () => setModal({ type: 'manage-suppliers' }) },
             { type: 'command', name: 'Edit/Finish', aliases: ['edit', 'finish'], action: () => isEditMode ? handleFinishEditing() : setIsEditMode(true), view: 'dashboard' },
             { type: 'command', name: 'Sign Out', aliases: ['sign out', 'logout', 'log off'], action: () => handleSignOut() },
+            { type: 'command', name: 'Authentication', aliases: ['auth', 'allowlist', 'whitelist'], action: () => setModal({ type: 'authentication' }) },
         ];
 
         const views = [
@@ -1650,6 +1639,7 @@ export default function App() {
                     onSearchChange={handleSearchChange}
                     onKeyDown={handleSearchKeyDown}
                     onOpenBackup={() => setModal({ type: 'backup' })}
+                    onOpenAuthentication={() => setModal({ type: 'authentication' })}
                     onLogoClick={() => setActiveView('dashboard')}
                 />
 
@@ -1739,6 +1729,7 @@ export default function App() {
                 />
             }
             {modal.type === 'backup' && <BackupModal onClose={closeModal} />}
+            {modal.type === 'authentication' && <AuthenticationModal onClose={closeModal} />}
         </div>
     );
 }
