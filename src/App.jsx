@@ -469,6 +469,22 @@ export default function App() {
         await batch.commit();
     }, [openBuyOrders]);
 
+    const handleDeleteBuyOrder = useCallback(async (buyOrder) => {
+        if (!buyOrder?.id) {
+            return;
+        }
+
+        const confirmed = window.confirm('Remove this buy order from the queue?');
+        if (!confirmed) {
+            return;
+        }
+
+        await updateDoc(doc(db, BUY_ORDERS_PATH, buyOrder.id), {
+            workflowStatus: 'cleared',
+            clearedAt: new Date().toISOString(),
+        });
+    }, []);
+
     const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
         const { active, over } = event;
@@ -1583,6 +1599,7 @@ export default function App() {
                     buyOrders={openBuyOrders}
                     onAddBuyOrderToInventory={handleAddBuyOrderToInventory}
                     onClearAllBuyOrders={handleClearAllBuyOrders}
+                    onDeleteBuyOrder={handleDeleteBuyOrder}
                     searchQuery={searchQuery}
                     inventory={inventory}
                     suppliers={suppliers}

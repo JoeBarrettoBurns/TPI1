@@ -75,7 +75,7 @@ function getBuyOrderSubject(buyOrder) {
     return (buyOrder?.requestedEmailSubject || '').trim();
 }
 
-const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders }) => (
+const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders, onDeleteBuyOrder }) => (
     <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-2xl font-bold text-white">Buy Orders</h2>
@@ -99,26 +99,38 @@ const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders
 
                     return (
                     <div key={buyOrder.id} className="rounded-2xl border border-zinc-700 bg-zinc-900/40 px-5 py-4 md:px-6">
-                        <div className="min-w-0">
-                            {orderSubject && (
-                                <>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Subject</p>
-                                    <p className="mt-1 text-lg font-semibold text-purple-300">{orderSubject}</p>
-                                </>
-                            )}
-                            <p className={`${orderSubject ? 'mt-4 ' : ''}text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500`}>Suppliers</p>
-                            <p className="text-xl font-bold tracking-tight text-blue-400">
-                                {orderSuppliers.length > 0 ? orderSuppliers.join(', ') : 'Unknown Supplier'}
-                            </p>
-                            <p className="text-sm text-zinc-400">
-                                Opened email: {buyOrder.openedEmailAt ? new Date(buyOrder.openedEmailAt).toLocaleString() : 'N/A'}
-                            </p>
-                            <p className="text-sm text-zinc-500 mt-1">
-                                {orderSuppliers.length > 0 ? `${orderSuppliers.length} supplier${orderSuppliers.length === 1 ? '' : 's'} on this order` : 'No suppliers saved'}
-                            </p>
-                            <p className="text-sm text-zinc-500">
-                                {(buyOrder.items || []).length} material type{(buyOrder.items || []).length === 1 ? '' : 's'}
-                            </p>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0 flex-1">
+                                {orderSubject && (
+                                    <>
+                                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Subject</p>
+                                        <p className="mt-1 text-lg font-semibold text-purple-300">{orderSubject}</p>
+                                    </>
+                                )}
+                                <p className={`${orderSubject ? 'mt-4 ' : ''}text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500`}>Suppliers</p>
+                                <p className="text-xl font-bold tracking-tight text-blue-400">
+                                    {orderSuppliers.length > 0 ? orderSuppliers.join(', ') : 'Unknown Supplier'}
+                                </p>
+                                <p className="text-sm text-zinc-400">
+                                    Opened email: {buyOrder.openedEmailAt ? new Date(buyOrder.openedEmailAt).toLocaleString() : 'N/A'}
+                                </p>
+                                <p className="text-sm text-zinc-500 mt-1">
+                                    {orderSuppliers.length > 0 ? `${orderSuppliers.length} supplier${orderSuppliers.length === 1 ? '' : 's'} on this order` : 'No suppliers saved'}
+                                </p>
+                                <p className="text-sm text-zinc-500">
+                                    {(buyOrder.items || []).length} material type{(buyOrder.items || []).length === 1 ? '' : 's'}
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="danger"
+                                onClick={() => onDeleteBuyOrder(buyOrder)}
+                                className="shrink-0 self-start px-3 py-2 text-sm"
+                                title="Remove this buy order from the queue"
+                            >
+                                <Trash2 size={16} />
+                                <span>Delete</span>
+                            </Button>
                         </div>
                         <div className="mt-5 grid grid-cols-1 gap-4">
                             {(buyOrder.items || []).map((item, index) => {
@@ -166,7 +178,7 @@ const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders
     </div>
 );
 
-export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders = [], onAddBuyOrderToInventory, onClearAllBuyOrders, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
+export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders = [], onAddBuyOrderToInventory, onClearAllBuyOrders, onDeleteBuyOrder, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
     const lowStockItems = useMemo(() => {
         const items = [];
         for (const materialType in inventorySummary) {
@@ -217,7 +229,7 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders 
 
     return (
         <div className="space-y-8">
-            <BuyOrdersBox buyOrders={buyOrders} onAddBuyOrderToInventory={onAddBuyOrderToInventory} onClearAllBuyOrders={onClearAllBuyOrders} />
+            <BuyOrdersBox buyOrders={buyOrders} onAddBuyOrderToInventory={onAddBuyOrderToInventory} onClearAllBuyOrders={onClearAllBuyOrders} onDeleteBuyOrder={onDeleteBuyOrder} />
             <EmailSupplierBox allSuppliers={suppliers} lowStockItemsBySupplier={lowStockItemsBySupplier} supplierInfoOverrides={supplierInfoOverrides} />
             <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
                 <h2 className="text-2xl font-bold text-white mb-4">Reorder List</h2>
