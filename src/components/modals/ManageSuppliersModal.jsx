@@ -1,29 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X, Save, Mail, RotateCcw } from 'lucide-react';
 import { SUPPLIER_INFO as DEFAULT_SUPPLIER_INFO, CC_EMAIL } from '../../constants/suppliers';
-import { formatSupplierEmailBody } from '../../utils/buyOrderUtils';
+import { getDefaultSupplierEmailBody } from '../../utils/buyOrderUtils';
+
+function buildEditsMap(suppliersList, supplierInfoMap) {
+    const next = {};
+    suppliersList.forEach((name) => {
+        const key = (name || '').toUpperCase().replace(/\s+/g, '_');
+        const effective = supplierInfoMap?.[key] || DEFAULT_SUPPLIER_INFO[key] || DEFAULT_SUPPLIER_INFO.DEFAULT;
+        const saved = effective.emailBody;
+        const emailBody = (typeof saved === 'string' && saved.trim().length > 0)
+            ? saved
+            : getDefaultSupplierEmailBody(effective);
+        next[name] = { ...effective, emailBody };
+    });
+    return next;
+}
 
 export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSupplier, onDeleteSupplier, onUpdateSupplierInfo }) => {
     const [newSupplier, setNewSupplier] = useState('');
-    const [newInfo, setNewInfo] = useState({ email: '', subject: '', contactName: '', bodyMaterial: '', bodyTemplate: '', ccEmail: CC_EMAIL });
+    const [newInfo, setNewInfo] = useState({ email: '', subject: '', contactName: '', bodyMaterial: '', emailBody: '', ccEmail: CC_EMAIL });
     const [error, setError] = useState('');
     const [filter, setFilter] = useState('');
     const [selected, setSelected] = useState(suppliers[0] || '');
-    const [edits, setEdits] = useState(() => {
-        const initial = {};
-        suppliers.forEach(name => {
-            const key = (name || '').toUpperCase().replace(/\s+/g, '_');
-            const effective = supplierInfo?.[key] || DEFAULT_SUPPLIER_INFO[key] || DEFAULT_SUPPLIER_INFO.DEFAULT;
-            initial[name] = { ...effective };
-        });
-        return initial;
-    });
+    const [edits, setEdits] = useState(() => buildEditsMap(suppliers, supplierInfo));
 
-    // no-op
+    useEffect(() => {
+        setEdits(buildEditsMap(suppliers, supplierInfo));
+    }, [suppliers, supplierInfo]);
 
     const buildDefaultBodyTemplate = (material) => {
         const mat = (material || '').trim();
@@ -40,8 +48,10 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
         const data = edits[name] || {};
         const to = (data.email || '').trim();
         const subject = encodeURIComponent((data.subject || '').trim());
-        const bodyTemplate = (data.bodyTemplate && data.bodyTemplate.trim()) || buildDefaultBodyTemplate(data.bodyMaterial);
-        const body = encodeURIComponent(formatSupplierEmailBody({ contactName: data.contactName }, bodyTemplate));
+        const bodyText = (data.emailBody && data.emailBody.trim())
+            ? data.emailBody.trim()
+            : getDefaultSupplierEmailBody(data);
+        const body = encodeURIComponent(bodyText);
         const cc = encodeURIComponent((data.ccEmail || CC_EMAIL || '').trim());
         return `mailto:${to}?cc=${cc}&subject=${subject}&body=${body}`;
     };
@@ -49,19 +59,26 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
     const handleAdd = () => {
         setError('');
         const trimmedName = newSupplier.trim();
-        const { email, subject, contactName, bodyMaterial, ccEmail } = newInfo;
-        const allProvided = [trimmedName, email, subject, contactName, bodyMaterial].every(v => (v || '').trim() !== '');
+        const { email, subject, contactName, bodyMaterial, ccEmail, emailBody } = newInfo;
+        const allProvided = [trimmedName, email, subject, contactName, bodyMaterial, emailBody].every(v => (v || '').trim() !== '');
         if (!allProvided) {
-            setError('Please provide supplier name, email, subject, contact name, and default material.');
+            setError('Please provide supplier name, email, subject, contact name, default material, and full email body.');
             return;
         }
         if (suppliers.includes(trimmedName)) {
             setError('A supplier with this name already exists.');
             return;
         }
-        onAddSupplier(trimmedName, { email: email.trim(), subject: subject.trim(), contactName: contactName.trim(), bodyMaterial: bodyMaterial.trim(), ccEmail: (ccEmail || CC_EMAIL).trim(), ...(newInfo.bodyTemplate ? { bodyTemplate: newInfo.bodyTemplate.trim() } : {}) });
+        onAddSupplier(trimmedName, {
+            email: email.trim(),
+            subject: subject.trim(),
+            contactName: contactName.trim(),
+            bodyMaterial: bodyMaterial.trim(),
+            ccEmail: (ccEmail || CC_EMAIL).trim(),
+            emailBody: emailBody.trim(),
+        });
         setNewSupplier('');
-        setNewInfo({ email: '', subject: '', contactName: '', bodyMaterial: '', bodyTemplate: '', ccEmail: CC_EMAIL });
+        setNewInfo({ email: '', subject: '', contactName: '', bodyMaterial: '', emailBody: '', ccEmail: CC_EMAIL });
     };
 
     const handleEditChange = (supplierName, field, value) => {
@@ -77,10 +94,10 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
     const handleSaveEdit = (supplierName) => {
         setError('');
         const data = edits[supplierName] || {};
-        const { email, subject, contactName, bodyMaterial, bodyTemplate, ccEmail } = data;
-        const allProvided = [email, subject, contactName, bodyMaterial].every(v => (v || '').trim() !== '');
+        const { email, subject, contactName, bodyMaterial, bodyTemplate, ccEmail, emailBody } = data;
+        const allProvided = [email, subject, contactName, bodyMaterial, emailBody].every(v => (v || '').trim() !== '');
         if (!allProvided) {
-            setError(`All autofill fields are required for ${supplierName}.`);
+            setError(`Email, subject, contact name, default material, and full email body are required for ${supplierName}.`);
             return;
         }
         onUpdateSupplierInfo(supplierName, {
@@ -89,7 +106,8 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
             contactName: contactName.trim(),
             bodyMaterial: bodyMaterial.trim(),
             ccEmail: (ccEmail || CC_EMAIL).trim(),
-            ...(bodyTemplate ? { bodyTemplate: bodyTemplate.trim() } : {})
+            emailBody: emailBody.trim(),
+            ...(bodyTemplate ? { bodyTemplate: bodyTemplate.trim() } : {}),
         });
     };
 
@@ -106,13 +124,14 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
                                 <FormInput name="newEmail" value={newInfo.email} onChange={(e) => setNewInfo({ ...newInfo, email: e.target.value })} placeholder="email@example.com" label="Email" />
                                 <FormInput name="newSubject" value={newInfo.subject} onChange={(e) => setNewInfo({ ...newInfo, subject: e.target.value })} placeholder="Email subject" label="Subject" />
                                 <FormInput name="newContactName" value={newInfo.contactName} onChange={(e) => setNewInfo({ ...newInfo, contactName: e.target.value })} placeholder="Contact name" label="Contact Name" />
-                                <FormInput name="newBodyMaterial" value={newInfo.bodyMaterial} onChange={(e) => setNewInfo({ ...newInfo, bodyMaterial: e.target.value })} placeholder="Default material line" label="Default Material" />
+                                    <FormInput name="newBodyMaterial" value={newInfo.bodyMaterial} onChange={(e) => setNewInfo({ ...newInfo, bodyMaterial: e.target.value })} placeholder="Default material line" label="Default Material" />
                                     <FormInput name="newCc" value={newInfo.ccEmail} onChange={(e) => setNewInfo({ ...newInfo, ccEmail: e.target.value })} placeholder={CC_EMAIL} label="Cc" />
                                     <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-zinc-300">Email Body Template (optional)</label>
-                                    <textarea className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows={4} placeholder={buildDefaultBodyTemplate(newInfo.bodyMaterial)} value={newInfo.bodyTemplate} onChange={(e) => setNewInfo({ ...newInfo, bodyTemplate: e.target.value })} />
+                                    <label className="block text-sm font-medium text-zinc-300">Email body (full message)</label>
+                                    <p className="text-xs text-zinc-500 mt-0.5">Edit the entire message; it is saved to your account and syncs across devices when signed in.</p>
+                                    <textarea className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows={10} placeholder="Hi …" value={newInfo.emailBody} onChange={(e) => setNewInfo({ ...newInfo, emailBody: e.target.value })} />
                                     <div className="mt-2 flex gap-2">
-                                        <Button variant="secondary" onClick={() => setNewInfo({ ...newInfo, bodyTemplate: buildDefaultBodyTemplate(newInfo.bodyMaterial) })}><RotateCcw size={16} /><span>Use Default</span></Button>
+                                        <Button variant="secondary" onClick={() => setNewInfo({ ...newInfo, emailBody: getDefaultSupplierEmailBody(newInfo) })}><RotateCcw size={16} /><span>Fill default from fields</span></Button>
                                         <Button onClick={handleAdd}><Save size={16} /><span>Add</span></Button>
                                     </div>
                                 </div>
@@ -154,10 +173,14 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
                                     <FormInput label="Default Material" name={`mat_${selected}`} value={edits[selected]?.bodyMaterial || ''} onChange={(e) => handleEditChange(selected, 'bodyMaterial', e.target.value)} placeholder="Default material line for email body" />
                                     <FormInput label="Cc" name={`cc_${selected}`} value={edits[selected]?.ccEmail ?? CC_EMAIL} onChange={(e) => handleEditChange(selected, 'ccEmail', e.target.value)} placeholder={CC_EMAIL} />
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-zinc-300">Email Body Template</label>
-                                        <textarea className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows={8} value={(edits[selected]?.bodyTemplate ?? '') || buildDefaultBodyTemplate(edits[selected]?.bodyMaterial)} onChange={(e) => handleEditChange(selected, 'bodyTemplate', e.target.value)} />
+                                        <label className="block text-sm font-medium text-zinc-300">Email body (full message)</label>
+                                        <p className="text-xs text-zinc-500 mt-0.5">Edit greeting, intro, and material lines in one place. Saved to your account and syncs across devices when signed in.</p>
+                                        <textarea className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows={12} value={edits[selected]?.emailBody ?? ''} onChange={(e) => handleEditChange(selected, 'emailBody', e.target.value)} />
                                         <div className="mt-2 flex flex-wrap gap-2">
-                                            <Button variant="secondary" onClick={() => handleEditChange(selected, 'bodyTemplate', buildDefaultBodyTemplate(edits[selected]?.bodyMaterial))}><RotateCcw size={16} /><span>Reset Template</span></Button>
+                                            <Button variant="secondary" onClick={() => handleEditChange(selected, 'emailBody', getDefaultSupplierEmailBody({
+                                                ...edits[selected],
+                                                bodyTemplate: buildDefaultBodyTemplate(edits[selected]?.bodyMaterial),
+                                            }))}><RotateCcw size={16} /><span>Reset to default from material</span></Button>
                                             <a href={buildMailtoLink(selected)} target="_blank" rel="noopener noreferrer">
                                                 <Button variant="ghost"><Mail size={16} /><span>Open Email</span></Button>
                                             </a>

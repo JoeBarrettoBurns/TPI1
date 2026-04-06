@@ -1,6 +1,6 @@
 // src/components/dashboard/MaterialCategoryCard.jsx
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -65,6 +65,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
 
     const [editingCell, setEditingCell] = useState(null);
     const [editValue, setEditValue] = useState('');
+    const saveInFlightRef = useRef(false);
     const normalizedIndicatorSettingsByMaterial = useMemo(
         () => Object.fromEntries(
             materialTypes.map((materialType) => [
@@ -75,13 +76,24 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         [materialIndicatorSettings, materialTypes, safeMaterials]
     );
 
-    const handleEditSave = () => {
-        if (!editingCell) return;
+    const handleEditSave = async () => {
+        if (!editingCell || saveInFlightRef.current) return;
         const { matType, len } = editingCell;
         const newQuantity = parseInt(editValue, 10);
 
-        if (!isNaN(newQuantity) && newQuantity >= 0) {
-            onSave(matType, len, newQuantity, "Manual Edit");
+        if (isNaN(newQuantity) || newQuantity < 0) {
+            setEditingCell(null);
+            return;
+        }
+
+        saveInFlightRef.current = true;
+        try {
+            await onSave(matType, len, newQuantity, "Manual Edit");
+        } catch (err) {
+            console.error('Manual stock edit failed:', err);
+            return;
+        } finally {
+            saveInFlightRef.current = false;
         }
         setEditingCell(null);
     };

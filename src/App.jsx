@@ -873,7 +873,7 @@ export default function App() {
 
     const handleUpdateSupplierInfo = (supplierName, info) => {
         const key = (supplierName || '').toUpperCase().replace(/\s+/g, '_');
-        setSupplierInfo(prev => ({ ...prev, [key]: info }));
+        setSupplierInfo((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), ...info } }));
     };
 
     const handleAddOrEditOrder = async (jobs, originalOrderGroup = null, options = {}) => {

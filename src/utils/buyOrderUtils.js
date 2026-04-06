@@ -74,6 +74,17 @@ function buildDefaultItemsBody(info, items) {
     return buildBuyOrderEmailBody(items);
 }
 
+/** Full default email body (greeting + intro + sheet block) when no saved `emailBody` exists. */
+export function getDefaultSupplierEmailBody(info, items = []) {
+    let sheetSection = '';
+    if (info.bodyTemplate && info.bodyTemplate.trim().length > 0) {
+        sheetSection = info.bodyTemplate.trim();
+    } else {
+        sheetSection = buildDefaultItemsBody(info, items);
+    }
+    return formatSupplierEmailBody(info, sheetSection);
+}
+
 export function createSupplierMailtoLink({
     supplier,
     items = [],
@@ -87,16 +98,21 @@ export function createSupplierMailtoLink({
         : (info.subject || 'Quote Request');
     const subject = encodeURIComponent(resolvedSubject);
 
-    let sheetSection = '';
+    let fullBody;
     if (customBody && customBody.trim().length > 0) {
-        sheetSection = customBody.trim();
-    } else if (info.bodyTemplate && info.bodyTemplate.trim().length > 0) {
-        sheetSection = info.bodyTemplate.trim();
+        const sheetSection = customBody.trim();
+        fullBody = formatSupplierEmailBody(info, sheetSection);
+    } else if (info.emailBody && info.emailBody.trim().length > 0) {
+        fullBody = info.emailBody.trim();
     } else {
-        sheetSection = buildDefaultItemsBody(info, items);
+        let sheetSection = '';
+        if (info.bodyTemplate && info.bodyTemplate.trim().length > 0) {
+            sheetSection = info.bodyTemplate.trim();
+        } else {
+            sheetSection = buildDefaultItemsBody(info, items);
+        }
+        fullBody = formatSupplierEmailBody(info, sheetSection);
     }
-
-    const fullBody = formatSupplierEmailBody(info, sheetSection);
     const body = encodeURIComponent(fullBody);
     const cc = encodeURIComponent((info.ccEmail || CC_EMAIL || '').trim());
 
