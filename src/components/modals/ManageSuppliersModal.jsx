@@ -5,7 +5,10 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X, Save, Mail, RotateCcw } from 'lucide-react';
 import { SUPPLIER_INFO as DEFAULT_SUPPLIER_INFO, CC_EMAIL } from '../../constants/suppliers';
-import { getDefaultSupplierEmailBody } from '../../utils/buyOrderUtils';
+import { getDefaultSupplierEmailBody, normalizeEmailPlainText } from '../../utils/buyOrderUtils';
+
+const EMAIL_BODY_TEXTAREA_CLASS =
+    'w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-sans text-sm leading-relaxed';
 
 function buildEditsMap(suppliersList, supplierInfoMap) {
     const next = {};
@@ -14,7 +17,7 @@ function buildEditsMap(suppliersList, supplierInfoMap) {
         const effective = supplierInfoMap?.[key] || DEFAULT_SUPPLIER_INFO[key] || DEFAULT_SUPPLIER_INFO.DEFAULT;
         const saved = effective.emailBody;
         const emailBody = (typeof saved === 'string' && saved.trim().length > 0)
-            ? saved
+            ? normalizeEmailPlainText(saved)
             : getDefaultSupplierEmailBody(effective);
         next[name] = { ...effective, emailBody };
     });
@@ -49,7 +52,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
         const to = (data.email || '').trim();
         const subject = encodeURIComponent((data.subject || '').trim());
         const bodyText = (data.emailBody && data.emailBody.trim())
-            ? data.emailBody.trim()
+            ? normalizeEmailPlainText(data.emailBody)
             : getDefaultSupplierEmailBody(data);
         const body = encodeURIComponent(bodyText);
         const cc = encodeURIComponent((data.ccEmail || CC_EMAIL || '').trim());
@@ -75,7 +78,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
             contactName: contactName.trim(),
             bodyMaterial: bodyMaterial.trim(),
             ccEmail: (ccEmail || CC_EMAIL).trim(),
-            emailBody: emailBody.trim(),
+            emailBody: normalizeEmailPlainText(emailBody),
         });
         setNewSupplier('');
         setNewInfo({ email: '', subject: '', contactName: '', bodyMaterial: '', emailBody: '', ccEmail: CC_EMAIL });
@@ -106,7 +109,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
             contactName: contactName.trim(),
             bodyMaterial: bodyMaterial.trim(),
             ccEmail: (ccEmail || CC_EMAIL).trim(),
-            emailBody: emailBody.trim(),
+            emailBody: normalizeEmailPlainText(emailBody),
             ...(bodyTemplate ? { bodyTemplate: bodyTemplate.trim() } : {}),
         });
     };
@@ -129,7 +132,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
                                     <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-zinc-300">Email body (full message)</label>
                                     <p className="text-xs text-zinc-500 mt-0.5">Edit the entire message; it is saved to your account and syncs across devices when signed in.</p>
-                                    <textarea className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows={10} placeholder="Hi …" value={newInfo.emailBody} onChange={(e) => setNewInfo({ ...newInfo, emailBody: e.target.value })} />
+                                    <textarea className={EMAIL_BODY_TEXTAREA_CLASS} rows={10} placeholder="Hi..." value={newInfo.emailBody} onChange={(e) => setNewInfo({ ...newInfo, emailBody: e.target.value })} />
                                     <div className="mt-2 flex gap-2">
                                         <Button variant="secondary" onClick={() => setNewInfo({ ...newInfo, emailBody: getDefaultSupplierEmailBody(newInfo) })}><RotateCcw size={16} /><span>Fill default from fields</span></Button>
                                         <Button onClick={handleAdd}><Save size={16} /><span>Add</span></Button>
@@ -175,7 +178,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
                                     <div className="md:col-span-2">
                                         <label className="block text-sm font-medium text-zinc-300">Email body (full message)</label>
                                         <p className="text-xs text-zinc-500 mt-0.5">Edit greeting, intro, and material lines in one place. Saved to your account and syncs across devices when signed in.</p>
-                                        <textarea className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows={12} value={edits[selected]?.emailBody ?? ''} onChange={(e) => handleEditChange(selected, 'emailBody', e.target.value)} />
+                                        <textarea className={EMAIL_BODY_TEXTAREA_CLASS} rows={12} value={edits[selected]?.emailBody ?? ''} onChange={(e) => handleEditChange(selected, 'emailBody', e.target.value)} />
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             <Button variant="secondary" onClick={() => handleEditChange(selected, 'emailBody', getDefaultSupplierEmailBody({
                                                 ...edits[selected],

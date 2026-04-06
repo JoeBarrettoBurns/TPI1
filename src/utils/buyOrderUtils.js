@@ -1,6 +1,26 @@
 import { CC_EMAIL, SUPPLIER_INFO } from '../constants/suppliers';
 import { STANDARD_LENGTHS } from '../constants/materials';
 
+/**
+ * Normalizes line breaks, strips invisible characters, and maps Unicode spaces to ASCII U+0020
+ * so plain-text email bodies render with one consistent font (no odd fallback glyphs at line ends).
+ */
+export function normalizeEmailPlainText(input) {
+    if (input == null || typeof input !== 'string') return '';
+    let s = input.replace(/\uFEFF/g, '');
+    s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    s = s.replace(/[\u200B-\u200D\u2060]/g, '');
+    s = s.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
+    try {
+        s = s.normalize('NFC');
+    } catch {
+        /* ignore */
+    }
+    s = s.replace(/[ \t]+$/gm, '');
+    s = s.trimEnd();
+    return s;
+}
+
 function normalizeSupplierKey(supplier) {
     return (supplier || '').toUpperCase().replace(/\s+/g, '_');
 }
@@ -42,13 +62,18 @@ export function formatSupplierEmailBody(info, sheetSectionText) {
     const name = (info?.contactName || '').trim();
     const greeting = name ? `Hi ${name}` : 'Hi';
     const sheet = (sheetSectionText || '').trim();
-    return `${greeting}\n\nCan I get a quote and lead time for the following:\n\n${sheet}`;
+    return normalizeEmailPlainText(
+        `${greeting}\n\nCan I get a quote and lead time for the following:\n\n${sheet}`
+    );
 }
+
+/** Returned when a buy order has no line items; must not override a saved supplier `emailBody`. */
+export const BUY_ORDER_EMPTY_ITEMS_PLACEHOLDER = '[PLEASE LIST ITEMS]';
 
 export function buildBuyOrderEmailBody(items) {
     const normalizedItems = Array.isArray(items) ? items : [];
     if (normalizedItems.length === 0) {
-        return '[PLEASE LIST ITEMS]';
+        return BUY_ORDER_EMPTY_ITEMS_PLACEHOLDER;
     }
 
     return normalizedItems.map((item) => {
@@ -98,12 +123,20 @@ export function createSupplierMailtoLink({
         : (info.subject || 'Quote Request');
     const subject = encodeURIComponent(resolvedSubject);
 
+    const trimmedCustom = (customBody || '').trim();
+    const savedBody = (info.emailBody || '').trim();
+    const hasSavedBody = savedBody.length > 0;
+    /** True when `customBody` carries real order lines (buy order flow), not the empty-items placeholder. */
+    const hasOrderLines =
+        trimmedCustom.length > 0 && trimmedCustom !== BUY_ORDER_EMPTY_ITEMS_PLACEHOLDER;
+
     let fullBody;
-    if (customBody && customBody.trim().length > 0) {
-        const sheetSection = customBody.trim();
-        fullBody = formatSupplierEmailBody(info, sheetSection);
-    } else if (info.emailBody && info.emailBody.trim().length > 0) {
-        fullBody = info.emailBody.trim();
+    if (hasSavedBody && hasOrderLines) {
+        fullBody = `${savedBody}\n\n${trimmedCustom}`;
+    } else if (hasSavedBody) {
+        fullBody = savedBody;
+    } else if (hasOrderLines) {
+        fullBody = formatSupplierEmailBody(info, trimmedCustom);
     } else {
         let sheetSection = '';
         if (info.bodyTemplate && info.bodyTemplate.trim().length > 0) {
@@ -113,6 +146,7 @@ export function createSupplierMailtoLink({
         }
         fullBody = formatSupplierEmailBody(info, sheetSection);
     }
+    fullBody = normalizeEmailPlainText(fullBody);
     const body = encodeURIComponent(fullBody);
     const cc = encodeURIComponent((info.ccEmail || CC_EMAIL || '').trim());
 
