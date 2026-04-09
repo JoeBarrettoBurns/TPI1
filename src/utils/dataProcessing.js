@@ -161,26 +161,8 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
             }
         });
 
-        (usageLog || [])
-            .filter(log => (log.status || 'Completed') === 'Completed')
-            .forEach(log => {
-                (log.details || []).forEach(item => {
-                    const processed = processInventoryItem(item);
-                    if (!processed) return;
-                    const { group, dedupeKey } = processed;
-                    
-                    if (!group._displayDetailIds.has(dedupeKey)) {
-                        group._displayDetailIds.add(dedupeKey);
-                        if (STANDARD_LENGTHS.includes(item.length)) {
-                            group[item.length]++;
-                        }
-                        group.displayDetails.push(item);
-                    }
-                });
-            });
-
         const groupedUsage = {};
-        usageLog.filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
+        (usageLog || []).filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
             const isModification = (log.job || '').startsWith('MODIFICATION');
             if (isModification && log.qty >= 0) return;
 
@@ -288,16 +270,6 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
         }
         pushUniqueDetail(group.displayDetails, group._displayDetailIds, item);
     });
-
-    (usageLog || [])
-        .filter(log => (log.status || 'Completed') === 'Completed')
-        .forEach(log => {
-            (log.details || []).forEach(item => {
-                if (!item?.job || !item?.createdAt) return;
-                const group = ensureGroup(item);
-                pushUniqueDetail(group.displayDetails, group._displayDetailIds, item);
-            });
-        });
 
     return Object.values(grouped)
         .map(({ _detailIds, _displayDetailIds, ...group }) => group)
