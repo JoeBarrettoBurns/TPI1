@@ -12,7 +12,6 @@ import {
     getDoc,
     setDoc,
     writeBatch,
-    runTransaction,
     getDocs,
     getCountFromServer
 } from '../firebase/firestoreWithTracking';
@@ -383,68 +382,61 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
         for (const log of logsToFulfill) {
             scheduledFulfillInFlightRef.current.add(log.id);
-            runTransaction(db, async (transaction) => {
-                const itemsNeeded = log.details.reduce((acc, item) => {
-                    const key = `${item.materialType}|${item.length}`;
-                    acc[key] = (acc[key] || 0) + 1;
-                    return acc;
-                }, {});
+            (async () => {
+                try {
+                    const batch = writeBatch(db);
+                    const itemsNeeded = log.details.reduce((acc, item) => {
+                        const key = `${item.materialType}|${item.length}`;
+                        acc[key] = (acc[key] || 0) + 1;
+                        return acc;
+                    }, {});
 
-                let canFulfill = true;
-                const selectedSheets = [];
+                    let canFulfill = true;
+                    const selectedSheets = [];
 
-                for (const [key, qty] of Object.entries(itemsNeeded)) {
-                    const [materialType, lengthStr] = key.split('|');
-                    const length = parseInt(lengthStr, 10);
+                    for (const [key, qty] of Object.entries(itemsNeeded)) {
+                        const [materialType, lengthStr] = key.split('|');
+                        const length = parseInt(lengthStr, 10);
 
-                    const availableSheets = currentInventory
-                        .filter((i) => i.materialType === materialType && i.length === length && i.status === 'On Hand')
-                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                        const availableSheets = currentInventory
+                            .filter((i) => i.materialType === materialType && i.length === length && i.status === 'On Hand')
+                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-                    if (availableSheets.length < qty) {
-                        canFulfill = false;
-                        console.warn(
-                            `Cannot fulfill scheduled log ${log.id}: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`
-                        );
-                        break;
+                        if (availableSheets.length < qty) {
+                            canFulfill = false;
+                            console.warn(
+                                `Cannot fulfill scheduled log ${log.id}: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`
+                            );
+                            break;
+                        }
+                        selectedSheets.push(...availableSheets.slice(0, qty));
                     }
-                    selectedSheets.push(...availableSheets.slice(0, qty));
-                }
 
-                if (!canFulfill) return;
+                    if (!canFulfill) return;
 
-                // READS: validate all docs first
-                const refs = selectedSheets.map((s) => doc(db, `artifacts/${appId}/public/data/inventory`, s.id));
-                const usedAtIso = now.toISOString();
-                const updatedDetails = [];
-                for (const r of refs) {
-                    const snap = await transaction.get(r);
-                    if (!snap.exists()) {
-                        throw new Error('Selected stock no longer exists during scheduled fulfillment.');
+                    const usedAtIso = now.toISOString();
+                    const updatedDetails = [];
+
+                    for (const s of selectedSheets) {
+                        const r = doc(db, `artifacts/${appId}/public/data/inventory`, s.id);
+                        batch.delete(r);
+                        updatedDetails.push({ id: s.id, ...s });
                     }
-                    const current = snap.data();
-                    if (current.status !== 'On Hand') {
-                        throw new Error('Selected stock is no longer available during scheduled fulfillment.');
-                    }
-                    updatedDetails.push({ id: r.id, ...current });
-                }
 
-                // WRITES: delete inventory sheets to fully consume
-                for (const r of refs) {
-                    transaction.delete(r);
-                }
+                    const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
+                    batch.update(logDocRef, {
+                        status: 'Completed',
+                        details: updatedDetails,
+                        fulfilledAt: usedAtIso,
+                    });
 
-                const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
-                transaction.update(logDocRef, {
-                    status: 'Completed',
-                    details: updatedDetails,
-                    fulfilledAt: usedAtIso,
-                });
-            })
-                .catch((err) => console.error(`Failed transaction for scheduled log ${log.id}:`, err))
-                .finally(() => {
+                    await batch.commit();
+                } catch (error) {
+                    console.error(`Auto-fulfill failed for log ${log.id}:`, error);
+                } finally {
                     scheduledFulfillInFlightRef.current.delete(log.id);
-                });
+                }
+            })();
         }
     }, []);
 
