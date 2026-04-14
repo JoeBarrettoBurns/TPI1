@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, runTransaction, doc, collection, updateDoc, getDocs, query, where, getDoc, setDoc, onSnapshot, orderBy, limit } from './firebase/firestoreWithTracking';
+import { writeBatch, doc, collection, updateDoc, getDocs, query, where, getDoc, setDoc, onSnapshot, orderBy, limit } from './firebase/firestoreWithTracking';
 import Fuse from 'fuse.js';
 import { db, appId, auth, signOut } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
@@ -534,183 +534,149 @@ export default function App() {
 
     const handleUseStock = async (jobs, options) => {
         const { isScheduled, scheduledDate } = options;
+        const batch = writeBatch(db);
+        const usageLogCollectionRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
+        const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
-        await runTransaction(db, async (transaction) => {
-            const usageLogCollectionRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
-            const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
-
-            // If scheduling, we only write the log entries
-            if (isScheduled) {
-                for (const job of jobs) {
-                    const itemsForLog = [];
-                    let totalItems = 0;
-
-                    for (const item of job.items) {
-                        for (const len of STANDARD_LENGTHS) {
-                            const qty = parseInt(item[`qty${len}`] || 0);
-                            if (qty > 0) {
-                                totalItems += qty;
-                                const materialInfo = materials[item.materialType];
-                                for (let i = 0; i < qty; i++) {
-                                    itemsForLog.push({
-                                        materialType: item.materialType,
-                                        length: len,
-                                        width: 48,
-                                        gauge: getGaugeFromMaterial(item.materialType),
-                                        density: materialInfo?.density || 0,
-                                        thickness: materialInfo?.thickness || 0,
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    if (itemsForLog.length > 0) {
-                        const logDocRef = doc(usageLogCollectionRef);
-                        // Schedule at end-of-day to prevent immediate auto-fulfill for "today"
-                        const scheduledUsedAtIso = new Date(scheduledDate + 'T23:59:59').toISOString();
-                        const logEntry = {
-                            job: job.jobName.trim() || 'N/A',
-                            customer: job.customer,
-                            createdAt: new Date().toISOString(),
-                            usedAt: scheduledUsedAtIso,
-                            status: 'Scheduled',
-                            details: itemsForLog,
-                            qty: -totalItems,
-                        };
-                        transaction.set(logDocRef, logEntry);
-                    }
-                }
-                return;
-            }
-
-            // Use Now: plan reads and writes so that ALL reads happen before ANY writes
-            const plans = [];
-
+        // If scheduling, we only write the log entries
+        if (isScheduled) {
             for (const job of jobs) {
-                const logDocRef = doc(usageLogCollectionRef);
-                const updates = [];
+                const itemsForLog = [];
+                let totalItems = 0;
 
                 for (const item of job.items) {
                     for (const len of STANDARD_LENGTHS) {
                         const qty = parseInt(item[`qty${len}`] || 0);
-                        if (qty <= 0) continue;
-
-                        const matchingSheets = inventory
-                            .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand')
-                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-
-                        if (matchingSheets.length < qty) {
-                            throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
+                        if (qty > 0) {
+                            totalItems += qty;
+                            const materialInfo = materials[item.materialType];
+                            for (let i = 0; i < qty; i++) {
+                                itemsForLog.push({
+                                    materialType: item.materialType,
+                                    length: len,
+                                    width: 48,
+                                    gauge: getGaugeFromMaterial(item.materialType),
+                                    density: materialInfo?.density || 0,
+                                    thickness: materialInfo?.thickness || 0,
+                                });
+                            }
                         }
-
-                        const sheetsToUse = matchingSheets.slice(0, qty);
-                        for (const sheet of sheetsToUse) {
-                            updates.push({ ref: doc(inventoryCollectionRef, sheet.id), job });
-                        }
                     }
                 }
 
-                plans.push({ job, logDocRef, updates, usedItems: [] });
-            }
-
-            // READS: validate all inventory docs before ANY write occurs
-            for (const plan of plans) {
-                for (const target of plan.updates) {
-                    const snap = await transaction.get(target.ref);
-                    if (!snap.exists()) {
-                        throw new Error('Selected stock no longer exists. Please retry.');
-                    }
-                    const current = snap.data();
-                    if (current.status !== 'On Hand') {
-                        throw new Error('Selected stock is no longer available. Please retry.');
-                    }
-                    plan.usedItems.push({ id: target.ref.id, ...current });
-                }
-            }
-
-            // WRITES: update inventory then create logs
-            const nowIso = new Date().toISOString();
-            for (const plan of plans) {
-                for (const target of plan.updates) {
-                    transaction.update(target.ref, {
-                        status: 'Used',
-                        usageLogId: plan.logDocRef.id,
-                        jobNameUsed: plan.job.jobName.trim() || 'N/A',
-                        customerUsed: plan.job.customer,
-                        usedAt: nowIso,
-                    });
-                }
-            }
-
-            for (const plan of plans) {
-                if (plan.usedItems.length > 0) {
+                if (itemsForLog.length > 0) {
+                    const logDocRef = doc(usageLogCollectionRef);
+                    // Schedule at end-of-day to prevent immediate auto-fulfill for "today"
+                    const scheduledUsedAtIso = new Date(scheduledDate + 'T23:59:59').toISOString();
                     const logEntry = {
-                        job: plan.job.jobName.trim() || 'N/A',
-                        customer: plan.job.customer,
-                        usedAt: nowIso,
-                        createdAt: nowIso,
-                        status: 'Completed',
-                        details: plan.usedItems,
-                        qty: -plan.usedItems.length,
+                        job: job.jobName.trim() || 'N/A',
+                        customer: job.customer,
+                        createdAt: new Date().toISOString(),
+                        usedAt: scheduledUsedAtIso,
+                        status: 'Scheduled',
+                        details: itemsForLog,
+                        qty: -totalItems,
                     };
-                    transaction.set(plan.logDocRef, logEntry);
+                    batch.set(logDocRef, logEntry);
                 }
             }
-        });
+            await batch.commit();
+            return;
+        }
+
+        // Use Now: skip individual transaction reads for speed
+        for (const job of jobs) {
+            const logDocRef = doc(usageLogCollectionRef);
+            const usedItems = [];
+
+            for (const item of job.items) {
+                for (const len of STANDARD_LENGTHS) {
+                    const qty = parseInt(item[`qty${len}`] || 0);
+                    if (qty <= 0) continue;
+
+                    const matchingSheets = inventory
+                        .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand')
+                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+                    if (matchingSheets.length < qty) {
+                        throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
+                    }
+
+                    const sheetsToUse = matchingSheets.slice(0, qty);
+                    for (const sheet of sheetsToUse) {
+                        const ref = doc(inventoryCollectionRef, sheet.id);
+                        usedItems.push({ id: sheet.id, ...sheet });
+                        batch.update(ref, {
+                            status: 'Used',
+                            usageLogId: logDocRef.id,
+                            jobNameUsed: job.jobName.trim() || 'N/A',
+                            customerUsed: job.customer,
+                            usedAt: new Date().toISOString(),
+                        });
+                    }
+                }
+            }
+
+            if (usedItems.length > 0) {
+                const nowIso = new Date().toISOString();
+                const logEntry = {
+                    job: job.jobName.trim() || 'N/A',
+                    customer: job.customer,
+                    usedAt: nowIso,
+                    createdAt: nowIso,
+                    status: 'Completed',
+                    details: usedItems,
+                    qty: -usedItems.length,
+                };
+                batch.set(logDocRef, logEntry);
+            }
+        }
+
+        await batch.commit();
     };
 
     const handleFulfillScheduledLog = async (logToFulfill) => {
         try {
-            await runTransaction(db, async (transaction) => {
-                const itemsNeeded = logToFulfill.details.reduce((acc, item) => {
-                    const key = `${item.materialType}|${item.length}`;
-                    acc[key] = (acc[key] || 0) + 1;
-                    return acc;
-                }, {});
+            const batch = writeBatch(db);
+            const itemsNeeded = logToFulfill.details.reduce((acc, item) => {
+                const key = `${item.materialType}|${item.length}`;
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+            }, {});
 
-                // Prepare selection based on current in-memory inventory
-                const selectedSheets = [];
-                for (const [key, qty] of Object.entries(itemsNeeded)) {
-                    const [materialType, lengthStr] = key.split('|');
-                    const length = parseInt(lengthStr, 10);
+            // Prepare selection based on current in-memory inventory
+            const selectedSheets = [];
+            for (const [key, qty] of Object.entries(itemsNeeded)) {
+                const [materialType, lengthStr] = key.split('|');
+                const length = parseInt(lengthStr, 10);
 
-                    const availableSheets = inventory
-                        .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
-                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                const availableSheets = inventory
+                    .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
+                    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-                    if (availableSheets.length < qty) {
-                        throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
-                    }
-                    selectedSheets.push(...availableSheets.slice(0, qty));
+                if (availableSheets.length < qty) {
+                    throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                 }
+                selectedSheets.push(...availableSheets.slice(0, qty));
+            }
 
-                // READS first: validate availability inside transaction
-                const refs = selectedSheets.map(s => doc(db, `artifacts/${appId}/public/data/inventory`, s.id));
-                const validatedDetails = [];
-                for (const r of refs) {
-                    const snap = await transaction.get(r);
-                    if (!snap.exists()) continue;
-                    const current = snap.data();
-                    if (current.status !== 'On Hand') {
-                        throw new Error('Selected stock is no longer available for fulfillment.');
-                    }
-                    validatedDetails.push({ id: r.id, ...current });
-                }
+            // WRITES: delete selected sheets to fully consume them
+            const nowIso = new Date().toISOString();
+            const validatedDetails = [];
+            for (const s of selectedSheets) {
+                const r = doc(db, `artifacts/${appId}/public/data/inventory`, s.id);
+                batch.delete(r);
+                validatedDetails.push({ id: s.id, ...s });
+            }
 
-                // WRITES: delete selected sheets to fully consume them
-                const nowIso = new Date().toISOString();
-                for (const r of refs) {
-                    transaction.delete(r);
-                }
-
-                const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
-                transaction.update(logDocRef, {
-                    status: 'Completed',
-                    details: validatedDetails,
-                    fulfilledAt: nowIso,
-                });
+            const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
+            batch.update(logDocRef, {
+                status: 'Completed',
+                details: validatedDetails,
+                fulfilledAt: nowIso,
             });
+
+            await batch.commit();
         } catch (error) {
             console.error("Fulfillment Error:", error);
             alert(`Failed to fulfill order: ${error.message}`);
@@ -722,130 +688,132 @@ export default function App() {
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
         try {
-            await runTransaction(db, async (transaction) => {
-                const allMaterialsSnapshot = await getDocs(materialsCollectionRef);
-                const allMaterials = {};
-                allMaterialsSnapshot.forEach(docSnap => {
-                    // Use canonical Firestore IDs as names to avoid mismatches
-                    allMaterials[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
-                });
-
-                if (mode === 'add') {
-                    for (const material of materialsFromModal) {
-                        if (!material.name || !material.thickness || !material.density) continue;
-                        if (allMaterials[material.name]) {
-                            throw new Error(`A material named "${material.name}" already exists.`);
-                        }
-                        const normalizedIndicatorSettings = normalizeCategoryIndicatorSettings(material);
-                        const materialId = material.name.replace(/\//g, '-');
-                        const newMaterialRef = doc(materialsCollectionRef, materialId);
-                        transaction.set(newMaterialRef, {
-                            category: categoryName,
-                            thickness: parseFloat(material.thickness),
-                            density: parseFloat(material.density),
-                            visualLowThreshold: normalizedIndicatorSettings.low,
-                            visualHighThreshold: normalizedIndicatorSettings.high,
-                        });
-                    }
-                    return;
-                }
-
-                // Edit existing category materials
-                const originalById = Object.fromEntries(
-                    Object.entries(allMaterials)
-                        .filter(([id, m]) => m.category === categoryName)
-                        .map(([id, m]) => [id, { ...m, name: id }])
-                );
-
-                // Determine deletions (materials removed entirely)
-                const keepOriginalIds = new Set(
-                    materialsFromModal.filter(m => !m.isNew && m.id).map(m => m.id)
-                );
-                for (const origId of Object.keys(originalById)) {
-                    if (!keepOriginalIds.has(origId)) {
-                        transaction.delete(doc(materialsCollectionRef, origId));
-                    }
-                }
-
-                for (const modalMaterial of materialsFromModal) {
-                    const hasAllFields = modalMaterial.name && modalMaterial.thickness && modalMaterial.density;
-                    if (!hasAllFields) continue;
-
-                    const newThickness = parseFloat(modalMaterial.thickness);
-                    const newDensity = parseFloat(modalMaterial.density);
-                    const normalizedIndicatorSettings = normalizeCategoryIndicatorSettings(modalMaterial);
-
-                    if (modalMaterial.isNew) {
-                        const newName = modalMaterial.name.trim();
-                        if (allMaterials[newName]) {
-                            throw new Error(`A material named "${newName}" already exists.`);
-                        }
-                        const newId = newName.replace(/\//g, '-');
-                        const newRef = doc(materialsCollectionRef, newId);
-                        transaction.set(newRef, {
-                            category: categoryName,
-                            thickness: newThickness,
-                            density: newDensity,
-                            visualLowThreshold: normalizedIndicatorSettings.low,
-                            visualHighThreshold: normalizedIndicatorSettings.high,
-                        });
-                        continue;
-                    }
-
-                    const resolvedOriginalName = modalMaterial.id ?? modalMaterial.originalName ?? (originalById[modalMaterial.id]?.name);
-                    if (!resolvedOriginalName) {
-                        // If we cannot resolve the original name, skip safely
-                        continue;
-                    }
-                    const existing = allMaterials[resolvedOriginalName];
-                    if (!existing) continue;
-                    const originalDocId = existing.id;
-
-                    const newName = modalMaterial.name.trim();
-                    if (newName !== resolvedOriginalName) {
-                        if (allMaterials[newName]) {
-                            throw new Error(`A material named "${newName}" already exists. Please choose a different name.`);
-                        }
-                        const newId = newName.replace(/\//g, '-');
-                        const newRef = doc(materialsCollectionRef, newId);
-                        transaction.set(newRef, {
-                            category: categoryName,
-                            thickness: newThickness,
-                            density: newDensity,
-                            visualLowThreshold: normalizedIndicatorSettings.low,
-                            visualHighThreshold: normalizedIndicatorSettings.high,
-                        });
-
-                        // Update inventory documents referencing the old name in any historical format
-                        const oldVariants = Array.from(new Set([
-                            resolvedOriginalName,
-                            resolvedOriginalName.replace(/-/g, '/'),
-                            resolvedOriginalName.replace(/\//g, '-')
-                        ]));
-                        for (const oldName of oldVariants) {
-                            const invQuery = query(inventoryCollectionRef, where("materialType", "==", oldName));
-                            const invSnapshot = await getDocs(invQuery);
-                            invSnapshot.forEach(itemDoc => {
-                                transaction.update(doc(inventoryCollectionRef, itemDoc.id), { materialType: newId });
-                            });
-                        }
-
-                        transaction.delete(doc(materialsCollectionRef, originalDocId));
-                    } else if (
-                        existing.thickness !== newThickness ||
-                        existing.density !== newDensity ||
-                        existing.visualLowThreshold !== normalizedIndicatorSettings.low ||
-                        existing.visualHighThreshold !== normalizedIndicatorSettings.high
-                    ) {
-                        transaction.update(doc(materialsCollectionRef, originalDocId), {
-                            thickness: newThickness,
-                            density: newDensity,
-                            visualLowThreshold: normalizedIndicatorSettings.low,
-                            visualHighThreshold: normalizedIndicatorSettings.high,
-                        });
-                    }
-                }
+            const allMaterialsSnapshot = await getDocs(materialsCollectionRef);
+            const allMaterials = {};
+            allMaterialsSnapshot.forEach(docSnap => {
+                // Use canonical Firestore IDs as names to avoid mismatches
+                allMaterials[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
             });
+
+            const batch = writeBatch(db);
+
+            if (mode === 'add') {
+                for (const material of materialsFromModal) {
+                    if (!material.name || !material.thickness || !material.density) continue;
+                    if (allMaterials[material.name]) {
+                        throw new Error(`A material named "${material.name}" already exists.`);
+                    }
+                    const normalizedIndicatorSettings = normalizeCategoryIndicatorSettings(material);
+                    const materialId = material.name.replace(/\//g, '-');
+                    const newMaterialRef = doc(materialsCollectionRef, materialId);
+                    batch.set(newMaterialRef, {
+                        category: categoryName,
+                        thickness: parseFloat(material.thickness),
+                        density: parseFloat(material.density),
+                        visualLowThreshold: normalizedIndicatorSettings.low,
+                        visualHighThreshold: normalizedIndicatorSettings.high,
+                    });
+                }
+                await batch.commit();
+                return;
+            }
+
+            // Edit existing category materials
+            const originalById = Object.fromEntries(
+                Object.entries(allMaterials)
+                    .filter(([id, m]) => m.category === categoryName)
+                    .map(([id, m]) => [id, { ...m, name: id }])
+            );
+
+            // Determine deletions (materials removed entirely)
+            const keepOriginalIds = new Set(
+                materialsFromModal.filter(m => !m.isNew && m.id).map(m => m.id)
+            );
+            for (const origId of Object.keys(originalById)) {
+                if (!keepOriginalIds.has(origId)) {
+                    batch.delete(doc(materialsCollectionRef, origId));
+                }
+            }
+
+            for (const modalMaterial of materialsFromModal) {
+                const hasAllFields = modalMaterial.name && modalMaterial.thickness && modalMaterial.density;
+                if (!hasAllFields) continue;
+
+                const newThickness = parseFloat(modalMaterial.thickness);
+                const newDensity = parseFloat(modalMaterial.density);
+                const normalizedIndicatorSettings = normalizeCategoryIndicatorSettings(modalMaterial);
+
+                if (modalMaterial.isNew) {
+                    const newName = modalMaterial.name.trim();
+                    if (allMaterials[newName]) {
+                        throw new Error(`A material named "${newName}" already exists.`);
+                    }
+                    const newId = newName.replace(/\//g, '-');
+                    const newRef = doc(materialsCollectionRef, newId);
+                    batch.set(newRef, {
+                        category: categoryName,
+                        thickness: newThickness,
+                        density: newDensity,
+                        visualLowThreshold: normalizedIndicatorSettings.low,
+                        visualHighThreshold: normalizedIndicatorSettings.high,
+                    });
+                    continue;
+                }
+
+                const resolvedOriginalName = modalMaterial.id ?? modalMaterial.originalName ?? (originalById[modalMaterial.id]?.name);
+                if (!resolvedOriginalName) {
+                    // If we cannot resolve the original name, skip safely
+                    continue;
+                }
+                const existing = allMaterials[resolvedOriginalName];
+                if (!existing) continue;
+                const originalDocId = existing.id;
+
+                const newName = modalMaterial.name.trim();
+                if (newName !== resolvedOriginalName) {
+                    if (allMaterials[newName]) {
+                        throw new Error(`A material named "${newName}" already exists. Please choose a different name.`);
+                    }
+                    const newId = newName.replace(/\//g, '-');
+                    const newRef = doc(materialsCollectionRef, newId);
+                    batch.set(newRef, {
+                        category: categoryName,
+                        thickness: newThickness,
+                        density: newDensity,
+                        visualLowThreshold: normalizedIndicatorSettings.low,
+                        visualHighThreshold: normalizedIndicatorSettings.high,
+                    });
+
+                    // Update inventory documents referencing the old name in any historical format
+                    const oldVariants = Array.from(new Set([
+                        resolvedOriginalName,
+                        resolvedOriginalName.replace(/-/g, '/'),
+                        resolvedOriginalName.replace(/\//g, '-')
+                    ]));
+                    for (const oldName of oldVariants) {
+                        const invQuery = query(inventoryCollectionRef, where("materialType", "==", oldName));
+                        const invSnapshot = await getDocs(invQuery);
+                        invSnapshot.forEach(itemDoc => {
+                            batch.update(doc(inventoryCollectionRef, itemDoc.id), { materialType: newId });
+                        });
+                    }
+
+                    batch.delete(doc(materialsCollectionRef, originalDocId));
+                } else if (
+                    existing.thickness !== newThickness ||
+                    existing.density !== newDensity ||
+                    existing.visualLowThreshold !== normalizedIndicatorSettings.low ||
+                    existing.visualHighThreshold !== normalizedIndicatorSettings.high
+                ) {
+                    batch.update(doc(materialsCollectionRef, originalDocId), {
+                        thickness: newThickness,
+                        density: newDensity,
+                        visualLowThreshold: normalizedIndicatorSettings.low,
+                        visualHighThreshold: normalizedIndicatorSettings.high,
+                    });
+                }
+            }
+            await batch.commit();
         } catch (error) {
             console.error("Transaction failed: ", error);
             throw error;
@@ -878,59 +846,61 @@ export default function App() {
 
     const handleAddOrEditOrder = async (jobs, originalOrderGroup = null, options = {}) => {
         const isEditing = !!originalOrderGroup;
-        await runTransaction(db, async (transaction) => {
-            if (isEditing) {
-                originalOrderGroup.details.forEach(item => {
-                    const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
-                    transaction.delete(docRef);
-                });
-            }
+        const batch = writeBatch(db);
 
-            const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
-            jobs.forEach(job => {
-                const jobName = job.jobName.trim() || 'N/A';
-                job.items.forEach(item => {
-                    const arrivalDateString = job.useItemArrivalDates ? item.arrivalDate : job.arrivalDate;
-                    const localDate = arrivalDateString ? new Date(`${arrivalDateString}T00:00:00`) : null;
+        if (isEditing) {
+            originalOrderGroup.details.forEach(item => {
+                const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
+                batch.delete(docRef);
+            });
+        }
 
-                    const stockData = {
-                        materialType: item.materialType,
-                        gauge: getGaugeFromMaterial(item.materialType),
-                        supplier: job.supplier,
-                        costPerPound: parseFloat(item.costPerPound || 0),
-                        createdAt: (job.createdAt ? new Date(job.createdAt + 'T00:00:00').toISOString() : (isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : new Date().toISOString())),
-                        job: jobName,
-                        status: job.status,
-                        arrivalDate: job.status === 'Ordered' && localDate ? localDate.toISOString() : null,
-                        dateReceived: null,
-                    };
+        const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+        jobs.forEach(job => {
+            const jobName = job.jobName.trim() || 'N/A';
+            job.items.forEach(item => {
+                const arrivalDateString = job.useItemArrivalDates ? item.arrivalDate : job.arrivalDate;
+                const localDate = arrivalDateString ? new Date(`${arrivalDateString}T00:00:00`) : null;
 
-                    STANDARD_LENGTHS.forEach(len => {
-                        const qty = parseInt(item[`qty${len}`] || 0);
-                        for (let i = 0; i < qty; i++) {
-                            const newDocRef = doc(inventoryCollectionRef);
-                            transaction.set(newDocRef, { ...stockData, width: 48, length: len });
-                        }
-                    });
+                const stockData = {
+                    materialType: item.materialType,
+                    gauge: getGaugeFromMaterial(item.materialType),
+                    supplier: job.supplier,
+                    costPerPound: parseFloat(item.costPerPound || 0),
+                    createdAt: (job.createdAt ? new Date(job.createdAt + 'T00:00:00').toISOString() : (isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : new Date().toISOString())),
+                    job: jobName,
+                    status: job.status,
+                    arrivalDate: job.status === 'Ordered' && localDate ? localDate.toISOString() : null,
+                    dateReceived: null,
+                };
 
-                    const customQty = parseInt(item.customQty || 0, 10);
-                    const customWidth = parseFloat(item.customWidth || 0);
-                    const customLength = parseFloat(item.customLength || 0);
-                    if (customQty > 0 && customWidth > 0 && customLength > 0) {
-                        for (let i = 0; i < customQty; i++) {
-                            const newDocRef = doc(inventoryCollectionRef);
-                            transaction.set(newDocRef, { ...stockData, width: customWidth, length: customLength });
-                        }
+                STANDARD_LENGTHS.forEach(len => {
+                    const qty = parseInt(item[`qty${len}`] || 0);
+                    for (let i = 0; i < qty; i++) {
+                        const newDocRef = doc(inventoryCollectionRef);
+                        batch.set(newDocRef, { ...stockData, width: 48, length: len });
                     }
                 });
+
+                const customQty = parseInt(item.customQty || 0, 10);
+                const customWidth = parseFloat(item.customWidth || 0);
+                const customLength = parseFloat(item.customLength || 0);
+                if (customQty > 0 && customWidth > 0 && customLength > 0) {
+                    for (let i = 0; i < customQty; i++) {
+                        const newDocRef = doc(inventoryCollectionRef);
+                        batch.set(newDocRef, { ...stockData, width: customWidth, length: customLength });
+                    }
+                }
             });
-            if (options.linkedBuyOrderId) {
-                transaction.update(doc(db, BUY_ORDERS_PATH, options.linkedBuyOrderId), {
-                    workflowStatus: 'received',
-                    receivedAt: new Date().toISOString(),
-                });
-            }
         });
+        if (options.linkedBuyOrderId) {
+            batch.update(doc(db, BUY_ORDERS_PATH, options.linkedBuyOrderId), {
+                workflowStatus: 'received',
+                receivedAt: new Date().toISOString(),
+            });
+        }
+
+        await batch.commit();
     };
 
     const handleSubmitBuyOrder = useCallback(async (jobs) => {
@@ -1004,49 +974,38 @@ export default function App() {
 
     const handleDeleteLog = async (logId) => {
         const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logId);
-        await runTransaction(db, async (transaction) => {
-            const logSnap = await transaction.get(logDocRef);
-            if (!logSnap.exists()) {
-                return;
+        const logSnap = await getDoc(logDocRef);
+        if (!logSnap.exists()) {
+            return;
+        }
+
+        const logData = logSnap.data();
+        const isCompleted = (logData.status || 'Completed') === 'Completed';
+        const details = Array.isArray(logData.details) ? logData.details : [];
+
+        const batch = writeBatch(db);
+        
+        // Return used items to On Hand
+        const candidateRefs = [];
+        if (isCompleted && details.length > 0) {
+            for (const d of details) {
+                if (!d?.id) continue;
+                candidateRefs.push(doc(db, `artifacts/${appId}/public/data/inventory`, d.id));
             }
+        }
 
-            const logData = logSnap.data();
-            const isCompleted = (logData.status || 'Completed') === 'Completed';
-            const details = Array.isArray(logData.details) ? logData.details : [];
+        for (const r of candidateRefs) {
+            batch.update(r, {
+                status: 'On Hand',
+                usageLogId: null,
+                jobNameUsed: null,
+                customerUsed: null,
+                usedAt: null
+            });
+        }
 
-            // Plan reads first: gather all candidate inventory refs to revert
-            const candidateRefs = [];
-            if (isCompleted && details.length > 0) {
-                for (const d of details) {
-                    if (!d?.id) continue;
-                    candidateRefs.push(doc(db, `artifacts/${appId}/public/data/inventory`, d.id));
-                }
-            }
-
-            // READS: validate inventory docs that should be reverted
-            const validReturnRefs = [];
-            for (const r of candidateRefs) {
-                const snap = await transaction.get(r);
-                if (!snap.exists()) continue;
-                const current = snap.data();
-                if (current.status === 'Used' && current.usageLogId === logId) {
-                    validReturnRefs.push(r);
-                }
-            }
-
-            // WRITES: revert inventory first, then delete the log
-            for (const r of validReturnRefs) {
-                transaction.update(r, {
-                    status: 'On Hand',
-                    usageLogId: null,
-                    jobNameUsed: null,
-                    customerUsed: null,
-                    usedAt: null
-                });
-            }
-
-            transaction.delete(logDocRef);
-        });
+        batch.delete(logDocRef);
+        await batch.commit();
     };
 
     const handleReceiveOrder = async (orderGroup) => {
@@ -1066,62 +1025,53 @@ export default function App() {
 
         if (diff === 0) return;
 
-        await runTransaction(db, async (transaction) => {
-            const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+        const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+        const batch = writeBatch(db);
 
-            if (diff > 0) {
-                const materialInfo = materials[materialType];
-                const stockData = {
-                    materialType: materialType,
-                    gauge: getGaugeFromMaterial(materialType),
-                    supplier: 'Manual Edit',
-                    costPerPound: 0,
-                    createdAt: new Date().toISOString(),
-                    job: `MODIFICATION: ADD`,
-                    status: 'On Hand',
-                    dateReceived: new Date().toISOString().split('T')[0],
-                    width: 48,
-                    length: length,
-                    density: materialInfo?.density || 0,
-                    thickness: materialInfo?.thickness || 0,
-                };
-                for (let i = 0; i < diff; i++) {
-                    const newDocRef = doc(inventoryCollectionRef);
-                    transaction.set(newDocRef, stockData);
-                }
-            } else {
-                const sheetsToRemove = Math.abs(diff);
-                const availableSheets = inventory
-                    .filter(
-                        item => item.materialType === materialType &&
-                            item.length === length &&
-                            item.status === 'On Hand'
-                    )
-                    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-
-                if (availableSheets.length < sheetsToRemove) {
-                    throw new Error(`Cannot remove ${sheetsToRemove} sheets. Only ${availableSheets.length} available.`);
-                }
-
-                const sheetsToDelete = availableSheets.slice(0, sheetsToRemove);
-                const refs = sheetsToDelete.map(s => doc(db, `artifacts/${appId}/public/data/inventory`, s.id));
-
-                // READS first
-                for (const r of refs) {
-                    const snap = await transaction.get(r);
-                    if (!snap.exists()) continue;
-                    const current = snap.data();
-                    if (current.status !== 'On Hand') {
-                        throw new Error('Some selected sheets are no longer On Hand. Please refresh and try again.');
-                    }
-                }
-
-                // WRITES
-                for (const r of refs) {
-                    transaction.delete(r);
-                }
+        if (diff > 0) {
+            const materialInfo = materials[materialType];
+            const stockData = {
+                materialType: materialType,
+                gauge: getGaugeFromMaterial(materialType),
+                supplier: 'Manual Edit',
+                costPerPound: 0,
+                createdAt: new Date().toISOString(),
+                job: `MODIFICATION: ADD`,
+                status: 'On Hand',
+                dateReceived: new Date().toISOString().split('T')[0],
+                width: 48,
+                length: length,
+                density: materialInfo?.density || 0,
+                thickness: materialInfo?.thickness || 0,
+            };
+            for (let i = 0; i < diff; i++) {
+                const newDocRef = doc(inventoryCollectionRef);
+                batch.set(newDocRef, stockData);
             }
-        });
+        } else {
+            const sheetsToRemove = Math.abs(diff);
+            const availableSheets = inventory
+                .filter(
+                    item => item.materialType === materialType &&
+                        item.length === length &&
+                        item.status === 'On Hand'
+                )
+                .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+            if (availableSheets.length < sheetsToRemove) {
+                throw new Error(`Cannot remove ${sheetsToRemove} sheets. Only ${availableSheets.length} available.`);
+            }
+
+            const sheetsToDelete = availableSheets.slice(0, sheetsToRemove);
+            const refs = sheetsToDelete.map(s => doc(db, `artifacts/${appId}/public/data/inventory`, s.id));
+
+            // WRITES
+            for (const r of refs) {
+                batch.delete(r);
+            }
+        }
+
+        await batch.commit();
     };
 
     const handleEditOutgoingLog = async (originalLog, newLogData) => {
@@ -1159,59 +1109,50 @@ export default function App() {
 
             // If the scheduled date is today or earlier, fulfill immediately
             if (targetDate <= now) {
-                await runTransaction(db, async (transaction) => {
-                    const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+                const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+                const batch = writeBatch(db);
 
-                    // Determine items needed by type/length
-                    const itemsNeeded = newDetails.reduce((acc, d) => {
-                        const key = `${d.materialType}|${d.length}`;
-                        acc[key] = (acc[key] || 0) + 1;
-                        return acc;
-                    }, {});
+                // Determine items needed by type/length
+                const itemsNeeded = newDetails.reduce((acc, d) => {
+                    const key = `${d.materialType}|${d.length}`;
+                    acc[key] = (acc[key] || 0) + 1;
+                    return acc;
+                }, {});
 
-                    const selectedRefs = [];
-                    for (const [key, qty] of Object.entries(itemsNeeded)) {
-                        const [materialType, lengthStr] = key.split('|');
-                        const length = parseInt(lengthStr, 10);
-                        const availableSheets = inventory
-                            .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
-                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-                        if (availableSheets.length < qty) {
-                            throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
-                        }
-                        availableSheets.slice(0, qty).forEach(s => selectedRefs.push(doc(inventoryCollectionRef, s.id)));
+                const selectedRefs = [];
+                const validatedDetails = [];
+                for (const [key, qty] of Object.entries(itemsNeeded)) {
+                    const [materialType, lengthStr] = key.split('|');
+                    const length = parseInt(lengthStr, 10);
+                    const availableSheets = inventory
+                        .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
+                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    if (availableSheets.length < qty) {
+                        throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                     }
-
-                    // Validate all selected docs
-                    const validatedDetails = [];
-                    for (const r of selectedRefs) {
-                        const snap = await transaction.get(r);
-                        if (!snap.exists()) {
-                            throw new Error('Selected stock no longer exists during fulfillment.');
-                        }
-                        const current = snap.data();
-                        if (current.status !== 'On Hand') {
-                            throw new Error('Selected stock is no longer available during fulfillment.');
-                        }
-                        validatedDetails.push({ id: r.id, ...current });
-                    }
-
-                    // Update inventory (delete) and usage log
-                    const usedAtIso = new Date().toISOString();
-                    for (const r of selectedRefs) {
-                        transaction.delete(r);
-                    }
-
-                    transaction.update(logDocRef, {
-                        job: newLogData.jobName.trim() || 'N/A',
-                        customer: newLogData.customer,
-                        status: 'Completed',
-                        details: validatedDetails,
-                        qty: -validatedDetails.length,
-                        usedAt: usedAtIso,
-                        fulfilledAt: usedAtIso,
+                    availableSheets.slice(0, qty).forEach(s => {
+                        selectedRefs.push(doc(inventoryCollectionRef, s.id));
+                        validatedDetails.push({ id: s.id, ...s });
                     });
+                }
+
+                // Update inventory (delete) and usage log
+                const usedAtIso = new Date().toISOString();
+                for (const r of selectedRefs) {
+                    batch.delete(r);
+                }
+
+                batch.update(logDocRef, {
+                    job: newLogData.jobName.trim() || 'N/A',
+                    customer: newLogData.customer,
+                    status: 'Completed',
+                    details: validatedDetails,
+                    qty: -validatedDetails.length,
+                    usedAt: usedAtIso,
+                    fulfilledAt: usedAtIso,
                 });
+
+                await batch.commit();
             } else {
                 // Save as scheduled at end-of-day to avoid immediate auto-fulfill
                 const scheduledUsedAtIso = new Date(`${newLogData.date}T23:59:59`).toISOString();
@@ -1233,100 +1174,89 @@ export default function App() {
             const shouldRevertToScheduled = targetDate && targetDate > now;
 
             if (shouldRevertToScheduled) {
-                await runTransaction(db, async (transaction) => {
-                    const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+                const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+                const batch = writeBatch(db);
 
-                    // Return currently used items for this log (that still exist) back to On Hand
-                    const originalItemIds = (latestLog.details || []).map(d => d.id).filter(Boolean);
-                    const returnRefs = originalItemIds.map((id) => doc(inventoryCollectionRef, id));
+                // Return currently used items for this log (that still exist) back to On Hand
+                const originalItemIds = (latestLog.details || []).map(d => d.id).filter(Boolean);
+                const returnRefs = originalItemIds.map((id) => doc(inventoryCollectionRef, id));
 
-                    // READS
-                    const validReturnRefs = [];
-                    for (const r of returnRefs) {
-                        const snap = await transaction.get(r);
-                        if (!snap.exists()) continue;
-                        const current = snap.data();
-                        if (current.status === 'Used' && current.usageLogId === latestLog.id) {
-                            validReturnRefs.push(r);
-                        }
-                    }
+                // WRITES: make them On Hand
+                for (const r of returnRefs) {
+                    batch.update(r, {
+                        status: 'On Hand',
+                        usageLogId: null,
+                        jobNameUsed: null,
+                        customerUsed: null,
+                        usedAt: null,
+                    });
+                }
 
-                    // WRITES: make them On Hand
-                    for (const r of validReturnRefs) {
-                        transaction.update(r, {
-                            status: 'On Hand',
-                            usageLogId: null,
-                            jobNameUsed: null,
-                            customerUsed: null,
-                            usedAt: null,
-                        });
-                    }
+                // For any items that no longer exist or are not revertable, recreate a matching sheet back to On Hand
+                const validReturnIds = new Set(returnRefs.map(ref => ref.id));
+                const missingDetails = (latestLog.details || []).filter(d => d.id && !validReturnIds.has(d.id));
+                const nowIso = new Date().toISOString();
+                for (const d of missingDetails) {
+                    const recreated = {
+                        materialType: d.materialType,
+                        gauge: d.gauge ?? getGaugeFromMaterial(d.materialType),
+                        supplier: d.supplier || 'Rescheduled Return',
+                        costPerPound: d.costPerPound || 0,
+                        createdAt: nowIso,
+                        job: d.job || 'N/A',
+                        status: 'On Hand',
+                        arrivalDate: null,
+                        dateReceived: nowIso.slice(0, 10),
+                        width: d.width || 48,
+                        length: d.length,
+                        density: d.density ?? materials[d.materialType]?.density ?? 0,
+                        thickness: d.thickness ?? materials[d.materialType]?.thickness ?? 0,
+                    };
+                    const newRef = doc(inventoryCollectionRef);
+                    batch.set(newRef, recreated);
+                }
 
-                    // For any items that no longer exist or are not revertable, recreate a matching sheet back to On Hand
-                    const validReturnIds = new Set(validReturnRefs.map(ref => ref.id));
-                    const missingDetails = (latestLog.details || []).filter(d => d.id && !validReturnIds.has(d.id));
-                    const nowIso = new Date().toISOString();
-                    for (const d of missingDetails) {
-                        const recreated = {
-                            materialType: d.materialType,
-                            gauge: d.gauge ?? getGaugeFromMaterial(d.materialType),
-                            supplier: d.supplier || 'Rescheduled Return',
-                            costPerPound: d.costPerPound || 0,
-                            createdAt: nowIso,
-                            job: d.job || 'N/A',
-                            status: 'On Hand',
-                            arrivalDate: null,
-                            dateReceived: nowIso.slice(0, 10),
-                            width: d.width || 48,
-                            length: d.length,
-                            density: d.density ?? materials[d.materialType]?.density ?? 0,
-                            thickness: d.thickness ?? materials[d.materialType]?.thickness ?? 0,
-                        };
-                        const newRef = doc(inventoryCollectionRef);
-                        transaction.set(newRef, recreated);
-                    }
-
-                    // Build new scheduled details (no concrete sheet IDs)
-                    const newDetails = [];
-                    let totalItems = 0;
-                    for (const item of newLogData.items) {
-                        for (const len of STANDARD_LENGTHS) {
-                            const qty = parseInt(item[`qty${len}`] || 0);
-                            if (qty > 0) {
-                                totalItems += qty;
-                                const materialInfo = materials[item.materialType];
-                                for (let i = 0; i < qty; i++) {
-                                    newDetails.push({
-                                        materialType: item.materialType,
-                                        length: len,
-                                        width: 48,
-                                        gauge: getGaugeFromMaterial(item.materialType),
-                                        density: materialInfo?.density || 0,
-                                        thickness: materialInfo?.thickness || 0,
-                                    });
-                                }
+                // Build new scheduled details (no concrete sheet IDs)
+                const newDetails = [];
+                let totalItems = 0;
+                for (const item of newLogData.items) {
+                    for (const len of STANDARD_LENGTHS) {
+                        const qty = parseInt(item[`qty${len}`] || 0);
+                        if (qty > 0) {
+                            totalItems += qty;
+                            const materialInfo = materials[item.materialType];
+                            for (let i = 0; i < qty; i++) {
+                                newDetails.push({
+                                    materialType: item.materialType,
+                                    length: len,
+                                    width: 48,
+                                    gauge: getGaugeFromMaterial(item.materialType),
+                                    density: materialInfo?.density || 0,
+                                    thickness: materialInfo?.thickness || 0,
+                                });
                             }
                         }
                     }
+                }
 
-                    // Schedule at end-of-day to avoid immediate auto-fulfill
-                    const localYmd = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
-                    const scheduledUsedAtIso = new Date(`${localYmd}T23:59:59`).toISOString();
-                    transaction.update(logDocRef, {
-                        job: newLogData.jobName.trim() || 'N/A',
-                        customer: newLogData.customer,
-                        usedAt: scheduledUsedAtIso,
-                        details: newDetails,
-                        qty: -totalItems,
-                        status: 'Scheduled',
-                        fulfilledAt: null,
-                    });
+                // Schedule at end-of-day to avoid immediate auto-fulfill
+                const localYmd = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+                const scheduledUsedAtIso = new Date(`${localYmd}T23:59:59`).toISOString();
+                batch.update(logDocRef, {
+                    job: newLogData.jobName.trim() || 'N/A',
+                    customer: newLogData.customer,
+                    usedAt: scheduledUsedAtIso,
+                    details: newDetails,
+                    qty: -totalItems,
+                    status: 'Scheduled',
+                    fulfilledAt: null,
                 });
+                
+                await batch.commit();
                 return;
             }
 
-            await runTransaction(db, async (transaction) => {
-                const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+            const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
                 const netChange = {};
                 (latestLog.details || []).forEach(item => {
@@ -1415,42 +1345,17 @@ export default function App() {
                     sheetsToUse.forEach(sheet => plannedNewRefs.push(doc(inventoryCollectionRef, sheet.id)));
                 });
 
-                // READS first: validate kept items, returns, and new selections
-                const keptItemsForLog = [];
+                const batch = writeBatch(db);
+                
+                const keptItemsForLog = keptOriginalDetails;
                 const updatedUsedItemsForLog = [];
-                const validReturnRefs = [];
-
-                for (const r of keptOriginalRefs) {
-                    const snap = await transaction.get(r);
-                    if (!snap.exists()) {
-                        throw new Error('A sheet already assigned to this log no longer exists during edit.');
-                    }
-                    const current = snap.data();
-                    if (current.status !== 'Used' || current.usageLogId !== latestLog.id) {
-                        throw new Error('A sheet already assigned to this log changed unexpectedly during edit.');
-                    }
-                    keptItemsForLog.push({ id: r.id, ...current });
-                }
-
-                for (const r of returnRefs) {
-                    const snap = await transaction.get(r);
-                    if (!snap.exists()) continue;
-                    const current = snap.data();
-                    if (current.status === 'Used' && current.usageLogId === latestLog.id) {
-                        validReturnRefs.push(r);
-                    }
-                }
+                const validReturnRefs = returnRefs;
 
                 for (const r of plannedNewRefs) {
-                    const snap = await transaction.get(r);
-                    if (!snap.exists()) {
-                        throw new Error('Selected stock no longer exists during edit.');
+                    const sheet = inventory.find(i => i.id === r.id);
+                    if (sheet) {
+                        updatedUsedItemsForLog.push({ id: r.id, ...sheet });
                     }
-                    const current = snap.data();
-                    if (current.status !== 'On Hand') {
-                        throw new Error('Selected stock became unavailable during edit.');
-                    }
-                    updatedUsedItemsForLog.push({ id: r.id, ...current });
                 }
 
                 const usedAtIso = newLogData.date
@@ -1466,7 +1371,7 @@ export default function App() {
 
                 // WRITES: return extras, refresh kept items, then use newly allocated sheets
                 for (const r of validReturnRefs) {
-                    transaction.update(r, {
+                    batch.update(r, {
                         status: 'On Hand',
                         usageLogId: null,
                         jobNameUsed: null,
@@ -1476,22 +1381,23 @@ export default function App() {
                 }
 
                 for (const r of keptOriginalRefs) {
-                    transaction.update(r, usageUpdate);
+                    batch.update(r, usageUpdate);
                 }
 
                 for (const r of plannedNewRefs) {
-                    transaction.update(r, usageUpdate);
+                    batch.update(r, usageUpdate);
                 }
 
                 const finalUsedItemsForLog = [...keptItemsForLog, ...updatedUsedItemsForLog];
-                transaction.update(logDocRef, {
+                batch.update(logDocRef, {
                     job: newLogData.jobName,
                     customer: newLogData.customer,
                     details: finalUsedItemsForLog,
                     qty: -finalUsedItemsForLog.length,
                     usedAt: usedAtIso,
                 });
-            });
+                
+                await batch.commit();
         }
     };
 
