@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Edit, Trash2, CalendarClock, Truck } from 'lucide-react';
+import { LogItemSummary } from './LogItemSummary';
 
 // Helper function to generate a detailed description with shortened names
 const generateDescription = (details) => {
@@ -21,7 +22,7 @@ const generateDescription = (details) => {
     }).join(', ');
 };
 
-export const OutgoingLogDisplay = ({ usageLog, onRowClick, onDelete, onEdit, onFulfillLog, ordersToShow }) => {
+export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, onEdit, onFulfillLog, ordersToShow }) => {
     const outgoingItems = useMemo(() => {
         return usageLog
             .filter(item => {
@@ -53,12 +54,12 @@ export const OutgoingLogDisplay = ({ usageLog, onRowClick, onDelete, onEdit, onF
             <table className="w-full text-left table-auto">
                 <thead>
                     <tr className="bg-zinc-900/60 border-b border-zinc-700">
-                        <th className="p-4 font-semibold text-zinc-400">DATE</th>
-                        <th className="p-4 font-semibold text-zinc-400">JOB #</th>
-                        <th className="p-4 font-semibold text-zinc-400">CUSTOMER</th>
-                        <th className="p-4 font-semibold text-zinc-400">DESCRIPTION</th>
-                        <th className="p-4 font-semibold text-zinc-400 text-right">QTY</th>
-                        <th className="p-4 font-semibold text-zinc-400 text-center">ACTIONS</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 whitespace-nowrap">DATE</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400">JOB #</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400">CUSTOMER</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 w-full">DESCRIPTION</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 text-right">QTY</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 text-center whitespace-nowrap w-24">ACTIONS</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -69,24 +70,26 @@ export const OutgoingLogDisplay = ({ usageLog, onRowClick, onDelete, onEdit, onF
                             className={`border-b border-zinc-700 hover:bg-zinc-700/50 cursor-pointer ${item.status === 'Scheduled' ? 'bg-purple-900/30' : ''
                                 }`}
                         >
-                            <td className="p-4 truncate text-zinc-300">
+                            <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">
                                 <div className="flex items-center gap-2">
                                     {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" title="Scheduled" />}
-                                    <span>{new Date(item.usedAt || item.createdAt).toLocaleString()}</span>
+                                    <span>{new Date(item.usedAt || item.createdAt).toLocaleDateString()}</span>
                                 </div>
                             </td>
-                            <td className="p-4 truncate text-zinc-300">{item.job}</td>
-                            <td className="p-4 truncate text-zinc-300">{item.customer}</td>
-                            <td className="p-4 text-zinc-300 whitespace-normal break-words">{item.description}</td>
-                            <td className="p-4 text-red-400 font-mono text-right">{item.displayQty}</td>
-                            <td className="p-4 text-center">
+                            <td className="px-3 py-2 truncate text-zinc-300">{item.job}</td>
+                            <td className="px-3 py-2 truncate text-zinc-300">{item.customer}</td>
+                            <td className="px-3 py-2 text-zinc-300 w-full">
+                                <LogItemSummary details={item.details} materials={materials} tone="outgoing" />
+                            </td>
+                            <td className="px-3 py-2 text-red-400 font-mono text-right">{item.displayQty}</td>
+                            <td className="px-3 py-2 text-center whitespace-nowrap w-24">
                                 {item.status === 'Scheduled' && (
-                                    <button title="Fulfill Scheduled Usage" onClick={(e) => { e.stopPropagation(); onFulfillLog(item); }} className="text-purple-400 hover:text-purple-300 mr-2"><Truck size={16} /></button>
+                                    <button title="Fulfill Scheduled Usage" onClick={(e) => { e.stopPropagation(); onFulfillLog(item); }} className="inline-flex align-middle text-purple-400 hover:text-purple-300 mr-2"><Truck size={16} /></button>
                                 )}
                                 {item.isDeletable && (
                                     <>
-                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
-                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
+                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="inline-flex align-middle text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
+                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="inline-flex align-middle text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
                                     </>
                                 )}
                             </td>

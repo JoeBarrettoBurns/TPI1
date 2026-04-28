@@ -144,6 +144,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                 </div>
                 <IncomingLogDisplay
                     incomingItems={incomingItems}
+                    materials={materials}
                     onRowClick={setDetailLog}
                     onDelete={setLogToDelete}
                     onEdit={onEditOrder}
@@ -174,6 +175,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                 </div>
                 <OutgoingLogDisplay
                     usageLog={filteredUsageLog}
+                    materials={materials}
                     onRowClick={setDetailLog}
                     onDelete={setLogToDelete}
                     onEdit={onEditOrder}

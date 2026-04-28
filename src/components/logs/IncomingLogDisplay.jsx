@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Edit, Trash2, Truck } from 'lucide-react';
+import { LogItemSummary } from './LogItemSummary';
 
 // Helper function to generate a detailed description with shortened names
 const generateDescription = (details) => {
@@ -23,7 +24,7 @@ const generateDescription = (details) => {
     }).join(', ');
 };
 
-export const IncomingLogDisplay = ({ incomingItems, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }) => {
+export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }) => {
     const processedItems = useMemo(() => {
         return incomingItems.map(item => {
             const displayDetails = item.displayDetails || item.details || [];
@@ -61,34 +62,36 @@ export const IncomingLogDisplay = ({ incomingItems, onRowClick, onDelete, onEdit
             <table className="w-full text-left table-auto">
                 <thead>
                     <tr className="bg-zinc-900/60 border-b border-zinc-700">
-                        <th className="p-4 font-semibold text-zinc-400">ORDER</th>
-                        <th className="p-4 font-semibold text-zinc-400">SUPPLIER</th>
-                        <th className="p-4 font-semibold text-zinc-400">DESCRIPTION</th>
-                        <th className="p-4 font-semibold text-zinc-400">DATE ORDERED</th>
-                        <th className="p-4 font-semibold text-zinc-400">DATE INCOMING</th>
-                        <th className="p-4 font-semibold text-zinc-400 text-right">QTY</th>
-                        <th className="p-4 font-semibold text-zinc-400 text-center">Actions</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400">ORDER</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400">SUPPLIER</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 w-full">DESCRIPTION</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 whitespace-nowrap">DATE ORDERED</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 whitespace-nowrap">DATE INCOMING</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 text-right">QTY</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 text-center whitespace-nowrap w-24">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {visibleItems.map(item => (
                         <tr key={item.id} onClick={() => onRowClick(item)} className={`border-b border-zinc-700 hover:bg-zinc-700/50 cursor-pointer ${item.isFuture ? 'bg-yellow-900/20' : ''}`}>
-                            <td className="p-4 truncate text-zinc-300">{item.job}</td>
-                            <td className="p-4 truncate text-zinc-300">{item.customer}</td>
-                            <td className="p-4 text-zinc-300 whitespace-normal break-words">{item.description}</td>
-                            <td className="p-4 truncate text-zinc-300">{new Date(item.dateOrdered).toLocaleString()}</td>
-                            <td className="p-4 truncate text-zinc-300">
+                            <td className="px-3 py-2 truncate text-zinc-300">{item.job}</td>
+                            <td className="px-3 py-2 truncate text-zinc-300">{item.customer}</td>
+                            <td className="px-3 py-2 text-zinc-300 w-full">
+                                <LogItemSummary details={item.displayDetails} materials={materials} tone="incoming" />
+                            </td>
+                            <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">{new Date(item.dateOrdered).toLocaleDateString()}</td>
+                            <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">
                                 {item.dateIncoming ? new Date(item.dateIncoming).toLocaleDateString() : 'N/A'}
                             </td>
-                            <td className="p-4 text-green-400 font-mono text-right">+{item.qty}</td>
-                            <td className="p-4 text-center">
+                            <td className="px-3 py-2 text-green-400 font-mono text-right">+{item.qty}</td>
+                            <td className="px-3 py-2 text-center whitespace-nowrap w-24">
                                 {item.isFuture && (item.details || []).length > 0 && (
-                                    <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(item); }} className="text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>
+                                    <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(item); }} className="inline-flex align-middle text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>
                                 )}
                                 {item.isDeletable && (
                                     <>
-                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
-                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
+                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="inline-flex align-middle text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
+                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="inline-flex align-middle text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
                                     </>
                                 )}
                             </td>
