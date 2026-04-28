@@ -73,6 +73,9 @@ export const AddOrderModal = ({
     const [error, setError] = useState('');
     const categories = useMemo(() => [...new Set(Object.values(materials || {}).map(m => m.category))], [materials]);
     const submitLabel = mode === 'buy' ? 'Open Email' : 'Submit Order';
+    const shouldShowCustomSheets = mode === 'buy' || jobs.some((currentJob) =>
+        currentJob.items.some((item) => item.customWidth || item.customLength || item.customQty)
+    );
 
     // Since we are only allowing one job group, we can reference it directly.
     const jobIndex = 0;
@@ -162,10 +165,10 @@ export const AddOrderModal = ({
 
                 const hasStandardQuantity = parseInt(item.qty96 || 0, 10) > 0 || parseInt(item.qty120 || 0, 10) > 0 || parseInt(item.qty144 || 0, 10) > 0;
                 const customQty = parseInt(item.customQty || 0, 10);
-                const hasCustomQuantity = customQty > 0;
+                const hasCustomQuantity = shouldShowCustomSheets && customQty > 0;
                 const customWidth = parseFloat(item.customWidth || 0);
                 const customLength = parseFloat(item.customLength || 0);
-                const hasPartialCustomFields = Boolean(item.customWidth || item.customLength || item.customQty);
+                const hasPartialCustomFields = shouldShowCustomSheets && Boolean(item.customWidth || item.customLength || item.customQty);
 
                 if (hasCustomQuantity && (customWidth <= 0 || customLength <= 0)) {
                     setError(`Custom sheet dimensions for "${item.materialType}" must be positive numbers.`);
@@ -377,26 +380,30 @@ export const AddOrderModal = ({
                                     <FormInput label={mode === 'buy' ? '120"x48"' : formatSheetPriceLabel(120, item, materials)} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty120', e.target.value)} />
                                     <FormInput label={mode === 'buy' ? '144"x48"' : formatSheetPriceLabel(144, item, materials)} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty144', e.target.value)} />
                                 </div>
-                                <p
-                                    className={
-                                        mode === 'buy'
-                                            ? 'mt-3 text-xs font-medium text-zinc-400'
-                                            : 'mt-4 text-sm font-medium text-zinc-300'
-                                    }
-                                >
-                                    Optional Custom Sheet:
-                                </p>
-                                <div
-                                    className={
-                                        mode === 'buy'
-                                            ? 'grid grid-cols-1 gap-2 md:grid-cols-3 [&_label]:text-xs [&_label]:font-medium [&_label]:text-zinc-400'
-                                            : 'grid grid-cols-1 gap-2 md:grid-cols-3'
-                                    }
-                                >
-                                    <FormInput label="Custom Width" name={`customWidth-${itemIndex}`} type="number" placeholder='48' value={item.customWidth} onChange={(e) => setItemField(jobIndex, itemIndex, 'customWidth', e.target.value)} />
-                                    <FormInput label="Custom Length" name={`customLength-${itemIndex}`} type="number" placeholder='96' value={item.customLength} onChange={(e) => setItemField(jobIndex, itemIndex, 'customLength', e.target.value)} />
-                                    <FormInput label={mode === 'buy' ? 'Custom Quantity' : formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
-                                </div>
+                                {shouldShowCustomSheets && (
+                                    <>
+                                        <p
+                                            className={
+                                                mode === 'buy'
+                                                    ? 'mt-3 text-xs font-medium text-zinc-400'
+                                                    : 'mt-4 text-sm font-medium text-zinc-300'
+                                            }
+                                        >
+                                            Optional Custom Sheet:
+                                        </p>
+                                        <div
+                                            className={
+                                                mode === 'buy'
+                                                    ? 'grid grid-cols-1 gap-2 md:grid-cols-3 [&_label]:text-xs [&_label]:font-medium [&_label]:text-zinc-400'
+                                                    : 'grid grid-cols-1 gap-2 md:grid-cols-3'
+                                            }
+                                        >
+                                            <FormInput label="Custom Width" name={`customWidth-${itemIndex}`} type="number" placeholder='48' value={item.customWidth} onChange={(e) => setItemField(jobIndex, itemIndex, 'customWidth', e.target.value)} />
+                                            <FormInput label="Custom Length" name={`customLength-${itemIndex}`} type="number" placeholder='96' value={item.customLength} onChange={(e) => setItemField(jobIndex, itemIndex, 'customLength', e.target.value)} />
+                                            <FormInput label={mode === 'buy' ? 'Custom Quantity' : formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
+                                        </div>
+                                    </>
+                                )}
                                 {mode !== 'buy' && job.status === 'Ordered' && job.useItemArrivalDates && (
                                     <FormInput
                                         label="Expected Arrival Date"

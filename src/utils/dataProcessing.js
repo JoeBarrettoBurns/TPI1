@@ -107,14 +107,16 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
     const allTransactions = {};
     materialTypes.forEach(matType => {
         const groupedInventory = {};
-        
-        const processInventoryItem = (item) => {
+
+        const isManualInventoryAdjustment = (item) => (
+            (item.job || '').startsWith('MODIFICATION') ||
+            (item.supplier === 'Manual Edit') ||
+            (item.supplier === 'Rescheduled Return')
+        );
+
+        const getInventoryGroup = (item) => {
             if (item.materialType !== matType) return;
-            if (
-                (item.job || '').startsWith('MODIFICATION') ||
-                (item.supplier === 'Manual Edit') ||
-                (item.supplier === 'Rescheduled Return')
-            ) return;
+            if (isManualInventoryAdjustment(item)) return;
 
             const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
             if (!groupedInventory[key]) {
@@ -133,22 +135,20 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
                     ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {})
                 };
             }
-            
-            const group = groupedInventory[key];
+
+            return groupedInventory[key];
+        };
+
+        const addInventoryItemToTimeline = (item, { includeActionDetail = true } = {}) => {
+            const group = getInventoryGroup(item);
+            if (!group) return;
+
             if (item.arrivalDate && (!group.arrivalDate || new Date(item.arrivalDate) > new Date(group.arrivalDate))) {
                 group.arrivalDate = item.arrivalDate;
             }
             const dedupeKey = item.id || `${item.materialType}|${item.length}|${item.createdAt}|${item.supplier}|${item.job}`;
-            
-            return { group, dedupeKey };
-        };
 
-        inventory.forEach(item => {
-            const processed = processInventoryItem(item);
-            if (!processed) return;
-            const { group, dedupeKey } = processed;
-            
-            if (!group._detailIds.has(dedupeKey)) {
+            if (includeActionDetail && !group._detailIds.has(dedupeKey)) {
                 group._detailIds.add(dedupeKey);
                 group.details.push(item);
             }
@@ -159,7 +159,26 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
                 }
                 group.displayDetails.push(item);
             }
+        };
+
+        inventory.forEach(item => {
+            addInventoryItemToTimeline(item);
         });
+
+        (usageLog || [])
+            .filter(log => (log.status || 'Completed') === 'Completed')
+            .forEach(log => {
+                (log.details || []).forEach(detail => {
+                    if (!detail.id) return;
+                    addInventoryItemToTimeline(
+                        {
+                            ...detail,
+                            createdAt: detail.createdAt || log.createdAt,
+                        },
+                        { includeActionDetail: false }
+                    );
+                });
+            });
 
         const groupedUsage = {};
         (usageLog || []).filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
@@ -375,10 +394,10 @@ export const groupLogsByJob = (inventory, usageLog) => {
         ...inventory,
         ...usageLog
             .filter(log => (log.status || 'Completed') === 'Completed')
-            .flatMap(log => (log.details || []).map(d => ({
+            .flatMap(log => (log.details || []).map((d, index) => ({
                 ...d,
                 status: 'Used',
-                id: d.id || `${log.id}-${d.materialType}`,
+                id: d.id || `${log.id}-${index}-${d.materialType}-${d.length}`,
                 job: log.job,
                 customer: log.customer
             })))

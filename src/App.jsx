@@ -660,19 +660,23 @@ export default function App() {
                 selectedSheets.push(...availableSheets.slice(0, qty));
             }
 
-            // WRITES: delete selected sheets to fully consume them
             const nowIso = new Date().toISOString();
-            const validatedDetails = [];
             for (const s of selectedSheets) {
                 const r = doc(db, `artifacts/${appId}/public/data/inventory`, s.id);
-                batch.delete(r);
-                validatedDetails.push({ id: s.id, ...s });
+                batch.update(r, {
+                    status: 'Used',
+                    usageLogId: logToFulfill.id,
+                    jobNameUsed: logToFulfill.job || 'N/A',
+                    customerUsed: logToFulfill.customer || 'N/A',
+                    usedAt: nowIso,
+                });
             }
 
             const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
             batch.update(logDocRef, {
                 status: 'Completed',
-                details: validatedDetails,
+                details: selectedSheets,
+                qty: -selectedSheets.length,
                 fulfilledAt: nowIso,
             });
 
@@ -981,26 +985,22 @@ export default function App() {
 
         const logData = logSnap.data();
         const isCompleted = (logData.status || 'Completed') === 'Completed';
-        const details = Array.isArray(logData.details) ? logData.details : [];
-
+        const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
         const batch = writeBatch(db);
-        
-        // Return used items to On Hand
-        const candidateRefs = [];
-        if (isCompleted && details.length > 0) {
-            for (const d of details) {
-                if (!d?.id) continue;
-                candidateRefs.push(doc(db, `artifacts/${appId}/public/data/inventory`, d.id));
-            }
-        }
 
-        for (const r of candidateRefs) {
-            batch.update(r, {
-                status: 'On Hand',
-                usageLogId: null,
-                jobNameUsed: null,
-                customerUsed: null,
-                usedAt: null
+        if (isCompleted) {
+            const usedInventorySnap = await getDocs(
+                query(inventoryCollectionRef, where('usageLogId', '==', logId))
+            );
+
+            usedInventorySnap.forEach((itemDoc) => {
+                batch.update(doc(inventoryCollectionRef, itemDoc.id), {
+                    status: 'On Hand',
+                    usageLogId: null,
+                    jobNameUsed: null,
+                    customerUsed: null,
+                    usedAt: null
+                });
             });
         }
 
@@ -1119,8 +1119,7 @@ export default function App() {
                     return acc;
                 }, {});
 
-                const selectedRefs = [];
-                const validatedDetails = [];
+                const selectedSheets = [];
                 for (const [key, qty] of Object.entries(itemsNeeded)) {
                     const [materialType, lengthStr] = key.split('|');
                     const length = parseInt(lengthStr, 10);
@@ -1130,24 +1129,27 @@ export default function App() {
                     if (availableSheets.length < qty) {
                         throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                     }
-                    availableSheets.slice(0, qty).forEach(s => {
-                        selectedRefs.push(doc(inventoryCollectionRef, s.id));
-                        validatedDetails.push({ id: s.id, ...s });
-                    });
+                    selectedSheets.push(...availableSheets.slice(0, qty));
                 }
 
-                // Update inventory (delete) and usage log
+                // Store the concrete sheet snapshots so the inventory timeline can keep the original add counts.
                 const usedAtIso = new Date().toISOString();
-                for (const r of selectedRefs) {
-                    batch.delete(r);
+                for (const sheet of selectedSheets) {
+                    batch.update(doc(inventoryCollectionRef, sheet.id), {
+                        status: 'Used',
+                        usageLogId: latestLog.id,
+                        jobNameUsed: newLogData.jobName.trim() || 'N/A',
+                        customerUsed: newLogData.customer,
+                        usedAt: usedAtIso,
+                    });
                 }
 
                 batch.update(logDocRef, {
                     job: newLogData.jobName.trim() || 'N/A',
                     customer: newLogData.customer,
                     status: 'Completed',
-                    details: validatedDetails,
-                    qty: -validatedDetails.length,
+                    details: selectedSheets,
+                    qty: -selectedSheets.length,
                     usedAt: usedAtIso,
                     fulfilledAt: usedAtIso,
                 });

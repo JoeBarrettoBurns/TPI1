@@ -415,18 +415,23 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                     if (!canFulfill) return;
 
                     const usedAtIso = now.toISOString();
-                    const updatedDetails = [];
 
                     for (const s of selectedSheets) {
                         const r = doc(db, `artifacts/${appId}/public/data/inventory`, s.id);
-                        batch.delete(r);
-                        updatedDetails.push({ id: s.id, ...s });
+                        batch.update(r, {
+                            status: 'Used',
+                            usageLogId: log.id,
+                            jobNameUsed: log.job || 'N/A',
+                            customerUsed: log.customer || 'N/A',
+                            usedAt: usedAtIso,
+                        });
                     }
 
                     const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
                     batch.update(logDocRef, {
                         status: 'Completed',
-                        details: updatedDetails,
+                        details: selectedSheets,
+                        qty: -selectedSheets.length,
                         fulfilledAt: usedAtIso,
                     });
 
