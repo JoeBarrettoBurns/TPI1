@@ -51,14 +51,21 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
 
     return (
         <div className="overflow-x-auto mt-6 bg-zinc-800 rounded-xl shadow-sm border border-zinc-700">
-            <table className="w-full text-left table-auto">
+            <table className="w-full text-center table-auto">
                 <thead>
                     <tr className="bg-zinc-900/60 border-b border-zinc-700">
                         <th className="px-3 py-4 font-semibold text-zinc-400 whitespace-nowrap">DATE</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400">JOB #</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400">CUSTOMER</th>
-                        <th className="px-3 py-4 font-semibold text-zinc-400 w-full">DESCRIPTION</th>
-                        <th className="px-3 py-4 font-semibold text-zinc-400 text-right">QTY</th>
+                        <th className="px-3 py-3 font-semibold text-zinc-400 w-full">
+                            <div>DESCRIPTION</div>
+                            <div className="mt-2 grid w-[18rem] grid-cols-[4rem_4rem_1fr] rounded-md bg-zinc-950/35 text-left text-[10px] uppercase tracking-wide text-zinc-400">
+                                <span className="px-2 py-1">QTY</span>
+                                <span className="px-2 py-1">Length</span>
+                                <span className="px-2 py-1">Material</span>
+                            </div>
+                        </th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 text-center">QTY</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400 text-center whitespace-nowrap w-24">ACTIONS</th>
                     </tr>
                 </thead>
@@ -71,7 +78,7 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
                                 }`}
                         >
                             <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center justify-center gap-2">
                                     {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" title="Scheduled" />}
                                     <span>{new Date(item.usedAt || item.createdAt).toLocaleDateString()}</span>
                                 </div>
@@ -81,7 +88,7 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
                             <td className="px-3 py-2 text-zinc-300 w-full">
                                 <LogItemSummary details={item.details} materials={materials} tone="outgoing" />
                             </td>
-                            <td className="px-3 py-2 text-red-400 font-mono text-right">{item.displayQty}</td>
+                            <td className="px-3 py-2 text-red-400 font-mono text-center">{item.displayQty}</td>
                             <td className="px-3 py-2 text-center whitespace-nowrap w-24">
                                 {item.status === 'Scheduled' && (
                                     <button title="Fulfill Scheduled Usage" onClick={(e) => { e.stopPropagation(); onFulfillLog(item); }} className="inline-flex align-middle text-purple-400 hover:text-purple-300 mr-2"><Truck size={16} /></button>

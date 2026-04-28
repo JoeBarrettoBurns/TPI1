@@ -59,15 +59,22 @@ export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDel
 
     return (
         <div className="overflow-x-auto mt-6 bg-zinc-800 rounded-xl shadow-sm border border-zinc-700">
-            <table className="w-full text-left table-auto">
+            <table className="w-full text-center table-auto">
                 <thead>
                     <tr className="bg-zinc-900/60 border-b border-zinc-700">
                         <th className="px-3 py-4 font-semibold text-zinc-400">ORDER</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400">SUPPLIER</th>
-                        <th className="px-3 py-4 font-semibold text-zinc-400 w-full">DESCRIPTION</th>
+                        <th className="px-3 py-3 font-semibold text-zinc-400 w-full">
+                            <div>DESCRIPTION</div>
+                            <div className="mt-2 grid w-[18rem] grid-cols-[4rem_4rem_1fr] rounded-md bg-zinc-950/35 text-left text-[10px] uppercase tracking-wide text-zinc-400">
+                                <span className="px-2 py-1">QTY</span>
+                                <span className="px-2 py-1">Length</span>
+                                <span className="px-2 py-1">Material</span>
+                            </div>
+                        </th>
                         <th className="px-3 py-4 font-semibold text-zinc-400 whitespace-nowrap">DATE ORDERED</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400 whitespace-nowrap">DATE INCOMING</th>
-                        <th className="px-3 py-4 font-semibold text-zinc-400 text-right">QTY</th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 text-center">QTY</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400 text-center whitespace-nowrap w-24">Actions</th>
                     </tr>
                 </thead>
@@ -83,7 +90,7 @@ export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDel
                             <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">
                                 {item.dateIncoming ? new Date(item.dateIncoming).toLocaleDateString() : 'N/A'}
                             </td>
-                            <td className="px-3 py-2 text-green-400 font-mono text-right">+{item.qty}</td>
+                            <td className="px-3 py-2 text-green-400 font-mono text-center">+{item.qty}</td>
                             <td className="px-3 py-2 text-center whitespace-nowrap w-24">
                                 {item.isFuture && (item.details || []).length > 0 && (
                                     <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(item); }} className="inline-flex align-middle text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>

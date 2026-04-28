@@ -39,9 +39,17 @@ const summarizeDetails = (details) => {
     ));
 };
 
-const toneClasses = {
-    incoming: 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/25',
-    outgoing: 'bg-rose-500/15 text-rose-200 ring-rose-400/25',
+const chunkItems = (items, chunkSize) => {
+    const chunks = [];
+    for (let index = 0; index < items.length; index += chunkSize) {
+        chunks.push(items.slice(index, index + chunkSize));
+    }
+    return chunks;
+};
+
+const qtyCellClasses = {
+    incoming: 'bg-emerald-500/15 text-emerald-100',
+    outgoing: 'bg-rose-500/15 text-rose-100',
 };
 
 export const LogItemSummary = ({ details, tone = 'incoming' }) => {
@@ -51,22 +59,29 @@ export const LogItemSummary = ({ details, tone = 'incoming' }) => {
         return <span className="text-zinc-400">No item details</span>;
     }
 
-    const qtyTone = toneClasses[tone] || toneClasses.incoming;
+    const qtyTone = qtyCellClasses[tone] || qtyCellClasses.incoming;
+    const columns = chunkItems(summary, 3);
 
     return (
-        <div className="flex w-full flex-wrap items-center gap-1.5">
-            {summary.map((item) => (
-                <span key={`${item.materialType}-${item.length}`} className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-zinc-900/50 p-2 text-base leading-none ring-1 ring-inset ring-zinc-700/80">
-                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-base font-bold leading-none ring-1 ring-inset ${qtyTone}`}>
-                        Qty {item.quantity}
-                    </span>
-                    {item.length && (
-                        <span className="inline-flex items-center rounded-full bg-sky-500/15 px-3 py-1 text-base font-bold leading-none text-sky-200 ring-1 ring-inset ring-sky-400/25">
-                            {item.length}
-                        </span>
-                    )}
-                    <strong className="truncate font-semibold text-cyan-100">{item.materialType}</strong>
-                </span>
+        <div className="flex w-full flex-wrap items-start gap-3">
+            {columns.map((column, columnIndex) => (
+                <table key={columnIndex} className="w-[18rem] table-fixed overflow-hidden rounded-lg border border-zinc-700/80 bg-zinc-900/40 text-sm">
+                    <tbody className="divide-y divide-zinc-700/70">
+                        {column.map((item) => (
+                            <tr key={`${item.materialType}-${item.length}`}>
+                                <td className={`w-16 whitespace-nowrap px-2 py-1 text-center font-bold ${qtyTone}`}>
+                                    {item.quantity}
+                                </td>
+                                <td className="w-16 whitespace-nowrap bg-sky-500/15 px-2 py-1 text-center font-bold text-sky-100">
+                                    {item.length || 'N/A'}
+                                </td>
+                                <td className="min-w-0 bg-cyan-500/10 px-2 py-1 text-center font-semibold text-cyan-100">
+                                    <span className="block truncate">{item.materialType}</span>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             ))}
         </div>
     );
