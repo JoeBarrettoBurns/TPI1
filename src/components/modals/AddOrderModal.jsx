@@ -73,6 +73,10 @@ export const AddOrderModal = ({
     const [error, setError] = useState('');
     const categories = useMemo(() => [...new Set(Object.values(materials || {}).map(m => m.category))], [materials]);
     const submitLabel = mode === 'buy' ? 'Open Email' : 'Submit Order';
+    const isManualEditOrder = Boolean(
+        initialData &&
+        ((initialData.job || '').startsWith('MODIFICATION') || initialData.supplier === 'Manual Edit')
+    );
     const shouldShowCustomSheets = mode === 'buy' || jobs.some((currentJob) =>
         currentJob.items.some((item) => item.customWidth || item.customLength || item.customQty)
     );
@@ -150,7 +154,7 @@ export const AddOrderModal = ({
             }
 
             for (const item of job.items) {
-                if (mode !== 'buy') {
+                if (mode !== 'buy' && !isManualEditOrder) {
                     const cost = parseFloat(item.costPerPound);
                     if (isNaN(cost) || cost <= 0) {
                         setError(`Cost per Pound for "${item.materialType}" must be a positive number.`);
@@ -414,7 +418,7 @@ export const AddOrderModal = ({
                                     />
                                 )}
                                 {mode !== 'buy' && (
-                                    <FormInput label="Cost per Pound ($)" name="costPerPound" type="number" value={item.costPerPound} onChange={(e) => setItemField(jobIndex, itemIndex, 'costPerPound', e.target.value)} step="0.01" required />
+                                    <FormInput label="Cost per Pound ($)" name="costPerPound" type="number" value={item.costPerPound} onChange={(e) => setItemField(jobIndex, itemIndex, 'costPerPound', e.target.value)} step="0.01" required={!isManualEditOrder} />
                                 )}
                             </div>
                         ))}

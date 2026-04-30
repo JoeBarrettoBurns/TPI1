@@ -45,6 +45,7 @@ export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDel
                 dateOrdered: item.date,
                 customer: item.supplier,
                 qty: displayDetails.length,
+                isEditable: (item.details || []).length > 0,
                 isDeletable: (item.details || []).length > 0,
                 dateIncoming: latestIncomingDate,
             };
@@ -95,11 +96,11 @@ export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDel
                                 {item.isFuture && (item.details || []).length > 0 && (
                                     <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(item); }} className="inline-flex align-middle text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>
                                 )}
+                                {item.isEditable && (
+                                    <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="inline-flex align-middle text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
+                                )}
                                 {item.isDeletable && (
-                                    <>
-                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="inline-flex align-middle text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
-                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="inline-flex align-middle text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
-                                    </>
+                                    <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="inline-flex align-middle text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
                                 )}
                             </td>
                         </tr>

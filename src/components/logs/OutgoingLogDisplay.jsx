@@ -26,10 +26,6 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
     const outgoingItems = useMemo(() => {
         return usageLog
             .filter(item => {
-                const job = item.job || '';
-                const isModification = job.startsWith('MODIFICATION');
-                // Hide all modification entries from UI; they are server-side only
-                if (isModification) return false;
                 return !!item.customer;
             })
             .map(item => ({

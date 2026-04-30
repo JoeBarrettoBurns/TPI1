@@ -230,6 +230,10 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
 
     const getGroupKey = (item) => {
         const createdDate = item.createdAt ? item.createdAt.split('T')[0] : 'unknown-date';
+        if ((item.job || '').startsWith('MODIFICATION')) {
+            const editSessionKey = item.manualEditSessionId || createdDate;
+            return `${item.job}|${editSessionKey}`;
+        }
         return `${item.job || 'N/A'}|${createdDate}`;
     };
 
@@ -245,11 +249,14 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
                 isFuture: item.status === 'Ordered',
                 isReceived: !!item.dateReceived,
                 isAddition: true,
+                isHistoryOnly: !!item.__historyOnly,
+                sourceUsageLog: item.__sourceUsageLog || null,
                 materials: {},
                 details: [],
                 displayDetails: [],
                 _detailIds: new Set(),
                 _displayDetailIds: new Set(),
+                _sourceLogIds: new Set(),
             };
         }
 
@@ -258,6 +265,9 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
         if (!group.supplier && item.supplier) {
             group.supplier = item.supplier;
             group.customer = item.supplier;
+        }
+        if (!group.sourceUsageLog && item.__sourceUsageLog) {
+            group.sourceUsageLog = item.__sourceUsageLog;
         }
         group.isFuture = group.isFuture || item.status === 'Ordered';
         group.isReceived = group.isReceived || !!item.dateReceived;
@@ -282,16 +292,47 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
         return true;
     };
 
-    inventory.forEach(item => {
+    const addInventoryItemToGroup = (item, { includeDeletableDetail = true } = {}) => {
         const group = ensureGroup(item);
-        if (pushUniqueDetail(group.details, group._detailIds, item)) {
+        if (includeDeletableDetail && pushUniqueDetail(group.details, group._detailIds, item)) {
             addMaterialCount(group, item);
         }
         pushUniqueDetail(group.displayDetails, group._displayDetailIds, item);
+    };
+
+    inventory.forEach(item => {
+        if ((item.job || '').startsWith('MODIFICATION') && item.returnedByLogEdit) return;
+        addInventoryItemToGroup(item);
+    });
+
+    usageLog
+        .filter(log =>
+            (log.status || 'Completed') === 'Completed' &&
+            log.job === 'MODIFICATION: REMOVE' &&
+            log.customer === 'Manual Edit'
+        )
+        .forEach(log => {
+            (log.details || []).forEach((detail, index) => {
+                if (!detail.materialType) return;
+                const item = {
+                    ...detail,
+                    id: detail.id || `${log.id}-${index}-${detail.materialType}-${detail.length}`,
+                    createdAt: detail.createdAt || log.createdAt,
+                    __historyOnly: true,
+                    __sourceLogId: log.id,
+                    __sourceUsageLog: { id: log.id, ...log, isAddition: false },
+                };
+                addInventoryItemToGroup(item);
+                const group = ensureGroup(item);
+                if (log.id) group._sourceLogIds.add(log.id);
+            });
     });
 
     return Object.values(grouped)
-        .map(({ _detailIds, _displayDetailIds, ...group }) => group)
+        .map(({ _detailIds, _displayDetailIds, _sourceLogIds, ...group }) => ({
+            ...group,
+            sourceLogIds: Array.from(_sourceLogIds || []),
+        }))
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 };
 

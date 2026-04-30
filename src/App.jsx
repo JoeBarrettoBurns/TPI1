@@ -61,6 +61,10 @@ function getTodayDateInputValue() {
     return new Date().toISOString().split('T')[0];
 }
 
+function createManualEditSessionId() {
+    return `manual-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function normalizeOrderItemsForStorage(items = []) {
     return items.map((item) => ({
         materialType: item.materialType || '',
@@ -117,6 +121,7 @@ export default function App() {
     const [activeView, setActiveView] = useState('dashboard');
     const [modal, setModal] = useState({ type: null, data: null, error: null });
     const [isEditMode, setIsEditMode] = useState(false);
+    const [manualEditSessionId, setManualEditSessionId] = useState(null);
     const [scrollToMaterial, setScrollToMaterial] = useState(null);
     const [activeCategory, setActiveCategory] = useState(null);
     const [categoriesToDelete, setCategoriesToDelete] = useState([]);
@@ -257,11 +262,17 @@ export default function App() {
         }
     }, [clearAuthAccessDenied]);
 
+    const handleStartEditing = useCallback(() => {
+        setManualEditSessionId(createManualEditSessionId());
+        setIsEditMode(true);
+    }, []);
+
     const handleFinishEditing = useCallback(() => {
         if (categoriesToDelete.length > 0) {
             setModal({ type: 'confirm-delete-categories', data: categoriesToDelete });
         } else {
             setIsEditMode(false);
+            setManualEditSessionId(null);
         }
     }, [categoriesToDelete]);
 
@@ -274,7 +285,7 @@ export default function App() {
             { type: 'command', name: 'Use Stock', aliases: ['use'], action: () => setModal({ type: 'use' }) },
             { type: 'command', name: 'Manage Categories', aliases: ['mc', 'manage cat'], action: () => setModal({ type: 'manage-categories' }) },
             { type: 'command', name: 'Manage Suppliers', aliases: ['ms', 'manage sup'], action: () => setModal({ type: 'manage-suppliers' }) },
-            { type: 'command', name: 'Edit/Finish', aliases: ['edit', 'finish'], action: () => isEditMode ? handleFinishEditing() : setIsEditMode(true), view: 'dashboard' },
+            { type: 'command', name: 'Edit/Finish', aliases: ['edit', 'finish'], action: () => isEditMode ? handleFinishEditing() : handleStartEditing(), view: 'dashboard' },
             { type: 'command', name: 'Sign Out', aliases: ['sign out', 'logout', 'log off'], action: () => handleSignOut() },
             { type: 'command', name: 'Authentication', aliases: ['auth', 'allowlist', 'whitelist'], action: () => setModal({ type: 'authentication' }) },
         ];
@@ -304,7 +315,7 @@ export default function App() {
 
         setFuse(new Fuse(searchDocs, fuseOptions));
 
-    }, [loading, materials, inventory, usageLog, initialCategories, isEditMode, allJobs, materialTypes, handleFinishEditing, handleSignOut]);
+    }, [loading, materials, inventory, usageLog, initialCategories, isEditMode, allJobs, materialTypes, handleFinishEditing, handleStartEditing, handleSignOut]);
 
 
     const handleSearchChange = (e) => {
@@ -524,6 +535,7 @@ export default function App() {
 
             setCategoriesToDelete([]);
             setIsEditMode(false);
+            setManualEditSessionId(null);
             closeModal();
             setActiveView('dashboard');
         } catch (err) {
@@ -853,9 +865,13 @@ export default function App() {
         const batch = writeBatch(db);
 
         if (isEditing) {
-            originalOrderGroup.details.forEach(item => {
+            (originalOrderGroup.details || []).forEach(item => {
+                if (!item?.id) return;
                 const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
                 batch.delete(docRef);
+            });
+            (originalOrderGroup.sourceLogIds || []).forEach(logId => {
+                batch.delete(doc(db, `artifacts/${appId}/public/data/usage_logs`, logId));
             });
         }
 
@@ -967,11 +983,17 @@ export default function App() {
     }, [closeModal, supplierInfo]);
 
     const handleDeleteInventoryGroup = async (group) => {
-        if (!group?.details?.length) return;
+        const details = group?.details || [];
+        const sourceLogIds = group?.sourceLogIds || [];
+        if (!details.length && !sourceLogIds.length) return;
         const batch = writeBatch(db);
-        group.details.forEach(item => {
+        details.forEach(item => {
+            if (!item?.id) return;
             const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
             batch.delete(docRef);
+        });
+        sourceLogIds.forEach(logId => {
+            batch.delete(doc(db, `artifacts/${appId}/public/data/usage_logs`, logId));
         });
         await batch.commit();
     };
@@ -1026,7 +1048,10 @@ export default function App() {
         if (diff === 0) return;
 
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+        const usageLogCollectionRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
         const batch = writeBatch(db);
+        const nowIso = new Date().toISOString();
+        const editSessionId = manualEditSessionId || createManualEditSessionId();
 
         if (diff > 0) {
             const materialInfo = materials[materialType];
@@ -1035,14 +1060,15 @@ export default function App() {
                 gauge: getGaugeFromMaterial(materialType),
                 supplier: 'Manual Edit',
                 costPerPound: 0,
-                createdAt: new Date().toISOString(),
+                createdAt: nowIso,
                 job: `MODIFICATION: ADD`,
                 status: 'On Hand',
-                dateReceived: new Date().toISOString().split('T')[0],
+                dateReceived: nowIso.split('T')[0],
                 width: 48,
                 length: length,
                 density: materialInfo?.density || 0,
                 thickness: materialInfo?.thickness || 0,
+                manualEditSessionId: editSessionId,
             };
             for (let i = 0; i < diff; i++) {
                 const newDocRef = doc(inventoryCollectionRef);
@@ -1062,13 +1088,31 @@ export default function App() {
                 throw new Error(`Cannot remove ${sheetsToRemove} sheets. Only ${availableSheets.length} available.`);
             }
 
-            const sheetsToDelete = availableSheets.slice(0, sheetsToRemove);
-            const refs = sheetsToDelete.map(s => doc(db, `artifacts/${appId}/public/data/inventory`, s.id));
+            const sheetsToUse = availableSheets.slice(0, sheetsToRemove);
+            const logDocRef = doc(usageLogCollectionRef);
 
-            // WRITES
-            for (const r of refs) {
-                batch.delete(r);
+            for (const sheet of sheetsToUse) {
+                const sheetRef = doc(inventoryCollectionRef, sheet.id);
+                batch.update(sheetRef, {
+                    status: 'Used',
+                    usageLogId: logDocRef.id,
+                    jobNameUsed: 'MODIFICATION: REMOVE',
+                    customerUsed: 'Manual Edit',
+                    usedAt: nowIso,
+                    manualEditSessionId: editSessionId,
+                });
             }
+
+            batch.set(logDocRef, {
+                job: 'MODIFICATION: REMOVE',
+                customer: 'Manual Edit',
+                usedAt: nowIso,
+                createdAt: nowIso,
+                status: 'Completed',
+                details: sheetsToUse,
+                qty: -sheetsToUse.length,
+                manualEditSessionId: editSessionId,
+            });
         }
 
         await batch.commit();
@@ -1191,6 +1235,7 @@ export default function App() {
                         jobNameUsed: null,
                         customerUsed: null,
                         usedAt: null,
+                        returnedByLogEdit: true,
                     });
                 }
 
@@ -1369,6 +1414,7 @@ export default function App() {
                     jobNameUsed: newLogData.jobName,
                     customerUsed: newLogData.customer,
                     usedAt: usedAtIso,
+                    returnedByLogEdit: null,
                 };
 
                 // WRITES: return extras, refresh kept items, then use newly allocated sheets
@@ -1379,6 +1425,7 @@ export default function App() {
                         jobNameUsed: null,
                         customerUsed: null,
                         usedAt: null,
+                        returnedByLogEdit: true,
                     });
                 }
 
@@ -1554,7 +1601,7 @@ export default function App() {
                     onAdd={() => setModal({ type: 'add' })}
                     onBuy={() => handleOpenBuyModal()}
                     onUse={() => setModal({ type: 'use' })}
-                    onEdit={() => isEditMode ? handleFinishEditing() : setIsEditMode(true)}
+                    onEdit={() => isEditMode ? handleFinishEditing() : handleStartEditing()}
                     onSignOut={handleSignOut}
                     isEditMode={isEditMode}
                     onManageCategories={() => setModal({ type: 'manage-categories' })}

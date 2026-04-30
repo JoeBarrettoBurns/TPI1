@@ -9,7 +9,7 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
         if (!sourceDetails) return [];
 
         const isModificationOrDeletion = logEntry.job && (logEntry.job.startsWith('MODIFICATION') || logEntry.job.startsWith('DELETION'));
-        if (isModificationOrDeletion) {
+        if (isModificationOrDeletion && sourceDetails.some(d => typeof d.qty === 'number')) {
             return sourceDetails.map(d => ({ ...d, count: d.qty }));
         }
 
