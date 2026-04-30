@@ -221,6 +221,23 @@ export default function App() {
 
     const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
     const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);
+    const manageCategoriesCategoryOptions = useMemo(() => {
+        const seen = new Set();
+        const out = [];
+        for (const c of categories) {
+            if (c && !seen.has(c)) {
+                seen.add(c);
+                out.push(c);
+            }
+        }
+        for (const c of initialCategories) {
+            if (c && !seen.has(c)) {
+                seen.add(c);
+                out.push(c);
+            }
+        }
+        return out;
+    }, [categories, initialCategories]);
     const materialIndicatorSettings = useMemo(
         () => buildMaterialIndicatorSettingsMap(materials),
         [materials]
@@ -514,9 +531,9 @@ export default function App() {
         );
     };
 
-    const handleConfirmDeleteCategories = async () => {
+    const handleDeleteSingleCategory = useCallback(async (categoryName) => {
         try {
-            const materialsToDelete = Object.values(materials).filter(m => categoriesToDelete.includes(m.category));
+            const materialsToDelete = Object.values(materials).filter(m => m.category === categoryName);
             const materialIdsToDelete = materialsToDelete.map(m => m.id);
             const inventoryToDelete = inventory.filter(item => materialIdsToDelete.includes(item.materialType));
 
@@ -533,11 +550,41 @@ export default function App() {
                 await batch.commit();
             }
 
+            setCategories(prev => prev.filter(c => c !== categoryName));
+            if (refetchMaterials) await refetchMaterials();
+        } catch (err) {
+            console.error('Error deleting category:', err);
+            throw err;
+        }
+    }, [materials, inventory, refetchMaterials, setCategories]);
+
+    const handleConfirmDeleteCategories = async () => {
+        try {
+            const toRemove = categoriesToDelete;
+            const materialsToDelete = Object.values(materials).filter(m => toRemove.includes(m.category));
+            const materialIdsToDelete = materialsToDelete.map(m => m.id);
+            const inventoryToDelete = inventory.filter(item => materialIdsToDelete.includes(item.materialType));
+
+            const allDocRefsToDelete = [
+                ...materialIdsToDelete.map(id => doc(db, `artifacts/${appId}/public/data/materials`, id.replace(/\//g, '-'))),
+                ...inventoryToDelete.map(item => doc(db, `artifacts/${appId}/public/data/inventory`, item.id))
+            ];
+
+            const MAX_BATCH_SIZE = 500;
+            for (let i = 0; i < allDocRefsToDelete.length; i += MAX_BATCH_SIZE) {
+                const chunk = allDocRefsToDelete.slice(i, i + MAX_BATCH_SIZE);
+                const batch = writeBatch(db);
+                chunk.forEach(docRef => batch.delete(docRef));
+                await batch.commit();
+            }
+
+            setCategories((prev) => prev.filter((c) => !toRemove.includes(c)));
             setCategoriesToDelete([]);
             setIsEditMode(false);
             setManualEditSessionId(null);
             closeModal();
             setActiveView('dashboard');
+            if (refetchMaterials) await refetchMaterials();
         } catch (err) {
             console.error("Error deleting categories:", err);
             setModal(prev => ({ ...prev, error: "Failed to delete categories. Please try again." }));
@@ -712,6 +759,7 @@ export default function App() {
             });
 
             const batch = writeBatch(db);
+            let batchHasWrites = false;
 
             if (mode === 'add') {
                 for (const material of materialsFromModal) {
@@ -729,8 +777,9 @@ export default function App() {
                         visualLowThreshold: normalizedIndicatorSettings.low,
                         visualHighThreshold: normalizedIndicatorSettings.high,
                     });
+                    batchHasWrites = true;
                 }
-                await batch.commit();
+                if (batchHasWrites) await batch.commit();
                 return;
             }
 
@@ -745,9 +794,25 @@ export default function App() {
             const keepOriginalIds = new Set(
                 materialsFromModal.filter(m => !m.isNew && m.id).map(m => m.id)
             );
+            const removedMaterialIds = [];
             for (const origId of Object.keys(originalById)) {
                 if (!keepOriginalIds.has(origId)) {
                     batch.delete(doc(materialsCollectionRef, origId));
+                    removedMaterialIds.push(origId);
+                    batchHasWrites = true;
+                }
+            }
+            if (removedMaterialIds.length > 0) {
+                const idMatchesType = (mt) =>
+                    removedMaterialIds.includes(mt) ||
+                    removedMaterialIds.some(
+                        rid => mt === rid.replace(/-/g, '/') || mt === rid.replace(/\//g, '-')
+                    );
+                for (const item of inventory) {
+                    if (idMatchesType(item.materialType)) {
+                        batch.delete(doc(inventoryCollectionRef, item.id));
+                        batchHasWrites = true;
+                    }
                 }
             }
 
@@ -773,6 +838,7 @@ export default function App() {
                         visualLowThreshold: normalizedIndicatorSettings.low,
                         visualHighThreshold: normalizedIndicatorSettings.high,
                     });
+                    batchHasWrites = true;
                     continue;
                 }
 
@@ -799,6 +865,7 @@ export default function App() {
                         visualLowThreshold: normalizedIndicatorSettings.low,
                         visualHighThreshold: normalizedIndicatorSettings.high,
                     });
+                    batchHasWrites = true;
 
                     // Update inventory documents referencing the old name in any historical format
                     const oldVariants = Array.from(new Set([
@@ -811,10 +878,12 @@ export default function App() {
                         const invSnapshot = await getDocs(invQuery);
                         invSnapshot.forEach(itemDoc => {
                             batch.update(doc(inventoryCollectionRef, itemDoc.id), { materialType: newId });
+                            batchHasWrites = true;
                         });
                     }
 
                     batch.delete(doc(materialsCollectionRef, originalDocId));
+                    batchHasWrites = true;
                 } else if (
                     existing.thickness !== newThickness ||
                     existing.density !== newDensity ||
@@ -827,9 +896,10 @@ export default function App() {
                         visualLowThreshold: normalizedIndicatorSettings.low,
                         visualHighThreshold: normalizedIndicatorSettings.high,
                     });
+                    batchHasWrites = true;
                 }
             }
-            await batch.commit();
+            if (batchHasWrites) await batch.commit();
         } catch (error) {
             console.error("Transaction failed: ", error);
             throw error;
@@ -1688,7 +1758,17 @@ export default function App() {
             {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} materials={materials} suppliers={suppliers} />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} materials={materials} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
-            {modal.type === 'manage-categories' && <ManageCategoriesModal onClose={closeModal} onSave={handleManageCategory} categories={initialCategories} materials={materials} refetchMaterials={refetchMaterials} materialIndicatorSettings={materialIndicatorSettings} />}
+            {modal.type === 'manage-categories' && (
+                <ManageCategoriesModal
+                    onClose={closeModal}
+                    onSave={handleManageCategory}
+                    onDeleteCategory={handleDeleteSingleCategory}
+                    categories={manageCategoriesCategoryOptions}
+                    materials={materials}
+                    refetchMaterials={refetchMaterials}
+                    materialIndicatorSettings={materialIndicatorSettings}
+                />
+            )}
             {modal.type === 'manage-suppliers' && <ManageSuppliersModal onClose={closeModal} suppliers={suppliers} supplierInfo={supplierInfo} onAddSupplier={handleAddSupplier} onDeleteSupplier={handleDeleteSupplier} onUpdateSupplierInfo={handleUpdateSupplierInfo} />}
             {modal.type === 'buy-order-drafts' && <BuyOrderDraftsModal onClose={closeModal} drafts={modal.data?.drafts || []} />}
             {modal.type === 'confirm-delete-categories' &&

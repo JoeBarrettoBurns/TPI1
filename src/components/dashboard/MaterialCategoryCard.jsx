@@ -154,20 +154,25 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
 
     return (
         <div ref={setNodeRef} style={style} {...attributes} className={`bg-zinc-800 rounded-2xl flex flex-col transition-all duration-300 ${cardClasses} ${draggingClasses}`}>
-            <div {...listeners} className={`flex justify-between items-center p-6 ${headerCursor}`}>
-                <h3 className="text-xl font-bold text-blue-400">{category}</h3>
-                <div className="flex items-center gap-2">
-                    {isEditMode && (
-                        <button
-                            onClick={() => onDeleteCategory(category)}
-                            className={`p-1 rounded-full transition-colors ${isMarkedForDeletion ? 'text-amber-400 hover:bg-amber-500/20' : 'text-red-400 hover:bg-red-500/20'}`}
-                            title={isMarkedForDeletion ? 'Undo marking for deletion' : 'Mark for deletion'}
-                        >
-                            {isMarkedForDeletion ? <RotateCcw size={18} /> : <Trash2 size={18} />}
-                        </button>
-                    )}
-                    {isEditMode && <GripVertical className="text-zinc-500" />}
+            <div className="flex justify-between items-center gap-3 p-6">
+                <div {...listeners} className={`flex min-w-0 flex-1 items-center gap-2 ${headerCursor}`}>
+                    <h3 className="truncate text-xl font-bold text-blue-400">{category}</h3>
+                    {isEditMode && <GripVertical className="shrink-0 text-zinc-500" aria-hidden />}
                 </div>
+                {isEditMode && onDeleteCategory && (
+                    <button
+                        type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteCategory(category);
+                        }}
+                        className={`shrink-0 rounded-full p-1 transition-colors touch-manipulation ${isMarkedForDeletion ? 'text-amber-400 hover:bg-amber-500/20' : 'text-red-400 hover:bg-red-500/20'}`}
+                        title={isMarkedForDeletion ? 'Undo marking for deletion' : 'Mark for deletion'}
+                    >
+                        {isMarkedForDeletion ? <RotateCcw size={18} /> : <Trash2 size={18} />}
+                    </button>
+                )}
             </div>
             <div className="overflow-x-auto px-6 pb-6">
                 {materialsInCategory.length > 0 ? (

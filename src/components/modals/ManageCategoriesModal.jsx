@@ -4,11 +4,12 @@ import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
-import { X, PlusCircle, Wrench } from 'lucide-react';
+import { X, PlusCircle, Wrench, Trash2 } from 'lucide-react';
 import { db, appId } from '../../firebase/config';
 import { repairInventoryMaterialKeys } from '../../utils/backupService';
 import { rebuildMissingMaterialsFromInventory } from '../../utils/recoveryService';
 import { DEFAULT_CATEGORY_INDICATOR_SETTINGS, normalizeCategoryIndicatorSettings } from '../../utils/categoryIndicatorSettings';
+import { DeleteCategoryModal } from './DeleteCategoryModal';
 
 function createEmptyMaterialRow() {
 	return {
@@ -21,7 +22,7 @@ function createEmptyMaterialRow() {
 	};
 }
 
-export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, refetchMaterials, materialIndicatorSettings }) => {
+export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categories, materials, refetchMaterials, materialIndicatorSettings }) => {
 	const [mode, setMode] = useState('edit'); // 'edit' or 'add'
 	const [selectedCategory, setSelectedCategory] = useState(categories[0] || '');
 	const [newCategoryName, setNewCategoryName] = useState('');
@@ -29,28 +30,43 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState('');
 	const [busyMsg, setBusyMsg] = useState('');
+	const [categoryPendingDelete, setCategoryPendingDelete] = useState(null);
+	const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+	const [deleteError, setDeleteError] = useState('');
 
 	useEffect(() => {
-		if (mode === 'edit' && selectedCategory) {
-			const materialsInCategory = Object.entries(materials)
-				.filter(([, material]) => material.category === selectedCategory)
-				.map(([id, material]) => {
-					const settings = normalizeCategoryIndicatorSettings(materialIndicatorSettings?.[id] || material);
-					return {
-						...material,
-						name: material.name || id,
-						id,
-						originalName: material.name || id,
-						low: String(settings.low),
-						high: String(settings.high),
-						isNew: false,
-					};
-				});
-			setCategoryMaterials(materialsInCategory);
-		} else {
-			setCategoryMaterials([createEmptyMaterialRow()]);
+		if (categories.length && !categories.includes(selectedCategory)) {
+			setSelectedCategory(categories[0]);
 		}
-	}, [selectedCategory, materials, mode, materialIndicatorSettings]);
+	}, [categories, selectedCategory]);
+
+	useEffect(() => {
+		if (mode !== 'edit') {
+			setCategoryMaterials([createEmptyMaterialRow()]);
+			return;
+		}
+		if (!selectedCategory || categories.length === 0) {
+			setCategoryMaterials([]);
+			return;
+		}
+		const materialsInCategory = Object.entries(materials)
+			.filter(([, material]) => material.category === selectedCategory)
+			.map(([id, material]) => {
+				const settings = normalizeCategoryIndicatorSettings(materialIndicatorSettings?.[id] || material);
+				return {
+					...material,
+					name: material.name || id,
+					id,
+					originalName: material.name || id,
+					low: String(settings.low),
+					high: String(settings.high),
+					isNew: false,
+				};
+			});
+		setCategoryMaterials(
+			materialsInCategory.length > 0 ? materialsInCategory : [createEmptyMaterialRow()]
+		);
+	}, [selectedCategory, materials, mode, materialIndicatorSettings, categories.length]);
 
 	const handleMaterialChange = (index, field, value) => {
 		const newMaterials = [...categoryMaterials];
@@ -72,6 +88,20 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 		const finalCategoryName = mode === 'add' ? newCategoryName.trim() : selectedCategory;
 		if (!finalCategoryName) {
 			setError('Category name is required.');
+			return;
+		}
+		if (mode === 'edit' && categoryMaterials.length === 0) {
+			setIsSubmitting(true);
+			setError('');
+			try {
+				await onSave(finalCategoryName, [], mode);
+				if (refetchMaterials) await refetchMaterials();
+				onClose();
+			} catch (err) {
+				setError(err.message || 'Failed to save changes.');
+			} finally {
+				setIsSubmitting(false);
+			}
 			return;
 		}
 		if (categoryMaterials.some(m => !m.name.trim() || !m.thickness || !m.density)) {
@@ -101,6 +131,21 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 			setError(err.message || 'Failed to save changes.');
 		} finally {
 			setIsSubmitting(false);
+		}
+	};
+
+	const confirmDeleteCategory = async () => {
+		if (!onDeleteCategory || !categoryPendingDelete) return;
+		setDeleteError('');
+		setDeleteSubmitting(true);
+		try {
+			await onDeleteCategory(categoryPendingDelete);
+			setCategoryPendingDelete(null);
+			onClose();
+		} catch (err) {
+			setDeleteError(err.message || 'Failed to delete category.');
+		} finally {
+			setDeleteSubmitting(false);
 		}
 	};
 
@@ -154,16 +199,38 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 			</div>
 			<form onSubmit={handleSubmit} className="space-y-6">
 				{mode === 'edit' ? (
-					<div>
-						<label htmlFor="category-select" className="block text-sm font-medium text-zinc-300">Category</label>
-						<select
-							id="category-select"
-							value={selectedCategory}
-							onChange={(e) => setSelectedCategory(e.target.value)}
-							className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg"
-						>
-							{categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-						</select>
+					<div className="space-y-3">
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+							<div className="flex-1 min-w-0">
+								<label htmlFor="category-select" className="block text-sm font-medium text-zinc-300">Category</label>
+								<select
+									id="category-select"
+									value={selectedCategory}
+									onChange={(e) => setSelectedCategory(e.target.value)}
+									className="w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg"
+								>
+									{categories.length === 0 ? (
+										<option value="">No categories yet</option>
+									) : (
+										categories.map(cat => <option key={cat} value={cat}>{cat}</option>)
+									)}
+								</select>
+							</div>
+							{onDeleteCategory && selectedCategory && (
+								<Button
+									type="button"
+									variant="danger"
+									className="shrink-0"
+									disabled={!selectedCategory || deleteSubmitting}
+									onClick={() => {
+										setDeleteError('');
+										setCategoryPendingDelete(selectedCategory);
+									}}
+								>
+									<Trash2 size={16} /> Delete category
+								</Button>
+							)}
+						</div>
 					</div>
 				) : (
 					<FormInput
@@ -180,11 +247,14 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 					<h4 className="text-lg font-semibold text-white">Materials in {mode === 'edit' ? selectedCategory : newCategoryName || 'New Category'}</h4>
 					{categoryMaterials.map((material, index) => (
 						<div key={index} className="p-4 border border-slate-700 rounded-lg bg-slate-900/50 relative">
-							{categoryMaterials.length > 1 && (
-								<button type="button" onClick={() => removeMaterialRow(index)} className="absolute top-2 right-2 text-red-400 hover:text-red-300">
-									<X size={18} />
-								</button>
-							)}
+							<button
+								type="button"
+								onClick={() => removeMaterialRow(index)}
+								className="absolute top-2 right-2 text-red-400 hover:text-red-300"
+								title={categoryMaterials.length === 1 ? 'Remove material (save to apply, or delete category)' : 'Remove row'}
+							>
+								{categoryMaterials.length === 1 ? <Trash2 size={18} /> : <X size={18} />}
+							</button>
 							<div className="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-4 items-start">
 								<div className="rounded-lg border border-slate-700 bg-slate-950/50 p-3">
 									<p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">High / Low</p>
@@ -214,6 +284,15 @@ export const ManageCategoriesModal = ({ onClose, onSave, categories, materials, 
 					</Button>
 				</div>
 			</form>
+			{categoryPendingDelete && (
+				<DeleteCategoryModal
+					onClose={() => { if (!deleteSubmitting) setCategoryPendingDelete(null); }}
+					onConfirm={confirmDeleteCategory}
+					categoryName={categoryPendingDelete}
+					error={deleteError}
+					isSubmitting={deleteSubmitting}
+				/>
+			)}
 		</BaseModal>
 	);
 };
