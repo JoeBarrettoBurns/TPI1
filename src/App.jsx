@@ -876,10 +876,10 @@ export default function App() {
                     for (const oldName of oldVariants) {
                         const invQuery = query(inventoryCollectionRef, where("materialType", "==", oldName));
                         const invSnapshot = await getDocs(invQuery);
-                        invSnapshot.forEach(itemDoc => {
+                        for (const itemDoc of invSnapshot.docs) {
                             batch.update(doc(inventoryCollectionRef, itemDoc.id), { materialType: newId });
                             batchHasWrites = true;
-                        });
+                        }
                     }
 
                     batch.delete(doc(materialsCollectionRef, originalDocId));
