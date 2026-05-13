@@ -108,15 +108,19 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
     materialTypes.forEach(matType => {
         const groupedInventory = {};
 
-        const isManualInventoryAdjustment = (item) => (
-            (item.job || '').startsWith('MODIFICATION') ||
-            (item.supplier === 'Manual Edit') ||
-            (item.supplier === 'Rescheduled Return')
-        );
+        /** Hide internal/rescheduled rows from per-material timeline; keep manual stock edits visible. */
+        const skipInventoryItemInMaterialTimeline = (item) => {
+            if (item.supplier === 'Rescheduled Return') return true;
+            const job = item.job || '';
+            if (job.startsWith('MODIFICATION')) {
+                return item.supplier !== 'Manual Edit';
+            }
+            return false;
+        };
 
         const getInventoryGroup = (item) => {
             if (item.materialType !== matType) return;
-            if (isManualInventoryAdjustment(item)) return;
+            if (skipInventoryItemInMaterialTimeline(item)) return;
 
             const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
             if (!groupedInventory[key]) {
@@ -464,4 +468,179 @@ export const groupLogsByJob = (inventory, usageLog) => {
     });
 
     return Object.values(jobs).sort((a, b) => new Date(b.date) - new Date(a.date));
+};
+
+function shallowCopyJobMaterials(materials) {
+    if (!materials || typeof materials !== 'object') return {};
+    const out = {};
+    for (const [type, sheets] of Object.entries(materials)) {
+        out[type] = Array.isArray(sheets) ? [...sheets] : sheets;
+    }
+    return out;
+}
+
+/** Common plural legal-name tokens → canonical form (pairs with hyphen/space normalize). */
+const CUSTOMER_NAME_TOKEN_CANON = {
+    SOLUTIONS: 'SOLUTION',
+    SYSTEMS: 'SYSTEM',
+    SERVICES: 'SERVICE',
+    PRODUCTS: 'PRODUCT',
+    INDUSTRIES: 'INDUSTRY',
+    TECHNOLOGIES: 'TECHNOLOGY',
+    MATERIALS: 'MATERIAL',
+    GROUPS: 'GROUP',
+    SUPPLIES: 'SUPPLY',
+    ENTERPRISES: 'ENTERPRISE',
+    PARTS: 'PART',
+};
+
+function canonicalizeCustomerTokens(upperSpaceSeparated) {
+    return upperSpaceSeparated
+        .split(' ')
+        .filter(Boolean)
+        .map((t) => CUSTOMER_NAME_TOKEN_CANON[t] || t)
+        .join(' ');
+}
+
+/**
+ * Normalize customer names so variants merge (e.g. "EI SOLUTION" vs "EI-SOLUTIONS").
+ * Uppercase; hyphens/underscores/dots/commas → spaces; & → AND; collapse whitespace;
+ * map common plural suffix tokens (SOLUTIONS→SOLUTION).
+ */
+export function normalizeCustomerKey(customer) {
+    if (customer == null || typeof customer !== 'string') return '';
+    let s = customer.trim();
+    if (!s) return '';
+    s = s.toUpperCase();
+    s = s.replace(/[\u2013\u2014\u2212]/g, '-');
+    s = s.replace(/[-_.]+/g, ' ');
+    s = s.replace(/,/g, ' ');
+    s = s.replace(/\s*&\s*/g, ' AND ');
+    s = s.replace(/\s+/g, ' ').trim();
+    s = canonicalizeCustomerTokens(s);
+    return s;
+}
+
+/**
+ * Split job names into purchase order base `JNNNN` and an optional part/rest string.
+ * Supported shapes: `J5851_EXT`, `J5815-2IN-146`, `J5788-REPLACEMENT` (underscore or hyphen after the digits).
+ * Names that do not start with `J` + digits stay in one leaf group keyed by uppercase full string.
+ */
+export function parseJobPoParts(raw) {
+    const full = String(raw ?? '').trim();
+    if (!full) return { baseKey: '', displayBase: '', partSuffix: '', full: '' };
+    const m = full.match(/^J(\d+)(?:[_-](.+))?$/i);
+    if (m) {
+        const displayBase = `J${m[1]}`;
+        const baseKey = displayBase.toUpperCase();
+        const partSuffix = (m[2] || '').trim();
+        return { baseKey, displayBase, partSuffix, full };
+    }
+    const fk = full.toUpperCase();
+    return { baseKey: fk, displayBase: full, partSuffix: '', full };
+}
+
+/** Stable id for a customer + job pair derived from usage logs (Use Stock). */
+export const customerJobPairId = (customer, jobName) =>
+    `${normalizeCustomerKey(customer)}::${(jobName || '').trim().toUpperCase()}`;
+
+/**
+ * Customers come from usage logs where Use Stock recorded a customer name.
+ * Jobs are grouped under that customer. Rows reuse materials from `allJobs` when the job name matches.
+ * `orphanJobs` lists jobs from inventory/logs that never appeared on a usage log with a customer (incoming-only POs, etc.).
+ */
+export const buildCustomerJobGroups = (usageLog, allJobs = []) => {
+    const logs = (usageLog || []).filter(log => (log.status || '') !== 'Archived');
+
+    const usagePairs = logs.filter(log => {
+        const jobName = (log.job || '').trim();
+        const customer = (log.customer || '').trim();
+        if (!jobName || jobName === 'N/A' || jobName.startsWith('MODIFICATION')) return false;
+        return Boolean(customer);
+    });
+
+    const jobByName = new Map((allJobs || []).map(j => [j.job, j]));
+
+    const parseMs = (iso) => {
+        if (!iso) return 0;
+        const n = new Date(iso).getTime();
+        return Number.isFinite(n) ? n : 0;
+    };
+
+    const sortedPairs = [...usagePairs].sort((a, b) => parseMs(b.usedAt || b.createdAt) - parseMs(a.usedAt || a.createdAt));
+
+    const pairMap = new Map();
+
+    sortedPairs.forEach(log => {
+        const jobName = log.job.trim();
+        const customerLabel = log.customer.trim();
+        const id = customerJobPairId(customerLabel, jobName);
+        const logDate = log.usedAt || log.createdAt;
+        const status = log.status || 'Completed';
+        const enrich = jobByName.get(jobName);
+
+        const existing = pairMap.get(id);
+        if (!existing) {
+            pairMap.set(id, {
+                id,
+                job: jobName,
+                customer: customerLabel,
+                supplier: enrich?.supplier,
+                date: logDate,
+                status,
+                materials: shallowCopyJobMaterials(enrich?.materials || {}),
+            });
+            return;
+        }
+
+        if (parseMs(logDate) > parseMs(existing.date)) {
+            existing.date = logDate;
+        }
+        if (status === 'Scheduled' || existing.status === 'Scheduled') {
+            existing.status = 'Scheduled';
+        }
+        if (enrich?.materials && Object.keys(existing.materials || {}).length === 0) {
+            existing.materials = shallowCopyJobMaterials(enrich.materials);
+        }
+    });
+
+    const customerMap = new Map();
+
+    pairMap.forEach(row => {
+        const ck = normalizeCustomerKey(row.customer);
+        if (!ck) return;
+        if (!customerMap.has(ck)) {
+            customerMap.set(ck, { jobs: [], labelCounts: new Map() });
+        }
+        const group = customerMap.get(ck);
+        group.jobs.push(row);
+        const rawLabel = row.customer.trim();
+        group.labelCounts.set(rawLabel, (group.labelCounts.get(rawLabel) || 0) + 1);
+    });
+
+    const customerGroups = Array.from(customerMap.entries())
+        .map(([customerKey, g]) => {
+            const bestLabel = [...g.labelCounts.entries()].sort((a, b) => {
+                if (b[1] !== a[1]) return b[1] - a[1];
+                return b[0].length - a[0].length;
+            })[0][0];
+            return {
+                customerKey,
+                customer: bestLabel,
+                jobs: g.jobs.sort((a, b) => new Date(b.date) - new Date(a.date)),
+            };
+        })
+        .sort((a, b) => {
+            const latestA = Math.max(...a.jobs.map(j => parseMs(j.date)));
+            const latestB = Math.max(...b.jobs.map(j => parseMs(j.date)));
+            return latestB - latestA;
+        });
+
+    const linkedJobNames = new Set([...pairMap.values()].map(r => r.job));
+
+    const orphanJobs = (allJobs || [])
+        .filter(j => j.job && !linkedJobNames.has(j.job))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return { customerGroups, orphanJobs };
 };

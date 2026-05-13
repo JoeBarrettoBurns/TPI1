@@ -1596,9 +1596,6 @@ export default function App() {
                     inventory={inventory}
                     usageLog={usageLog}
                     materials={materials}
-                    suppliers={suppliers}
-                    handleAddOrEditOrder={handleAddOrEditOrder}
-                    handleUseStock={handleUseStock}
                     initialSelectedJob={selectedJobFromSearch}
                     onClearSelectedJob={() => setSelectedJobFromSearch(null)}
                     searchQuery={searchQuery}

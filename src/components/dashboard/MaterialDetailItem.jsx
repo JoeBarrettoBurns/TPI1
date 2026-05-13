@@ -33,7 +33,11 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
     const [logToDelete, setLogToDelete] = useState(null);
     const [numToShow, setNumToShow] = useState(5);
 
-    const matTransactions = (transactions[matType] || []).filter(t => !(t.job || '').startsWith('MODIFICATION'));
+    const matTransactions = (transactions[matType] || []).filter((t) => {
+        const job = t.job || '';
+        if (!job.startsWith('MODIFICATION')) return true;
+        return t.customer === 'Manual Edit' || t.supplier === 'Manual Edit';
+    });
     const visibleTransactions = matTransactions.slice(0, numToShow);
     const totalIncomingSheets = incomingSummary[matType]?.totalCount || 0;
     const latestArrival = incomingSummary[matType]?.latestArrivalDate;
@@ -66,7 +70,7 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
 
     const handleConfirmDelete = () => {
         if (!logToDelete) return;
-        if (logToDelete.isAddition && !logToDelete.job?.startsWith('MODIFICATION')) {
+        if (logToDelete.isAddition) {
             onDeleteInventoryGroup(logToDelete);
         } else {
             onDeleteLog(logToDelete.id);
@@ -183,7 +187,7 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
                                         : !t.isAddition ? 'bg-red-900/20'
                                             : '';
                                 
-                                const displayDate = t.isAddition ? t.arrivalDate : t.usedAt;
+                                const displayDate = t.isAddition ? (t.arrivalDate || t.date) : t.usedAt;
 
                                 return (
                                     <tr key={t.id} onClick={() => setDetailLog(t)} className={`border-b border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 ${rowClass}`}>
