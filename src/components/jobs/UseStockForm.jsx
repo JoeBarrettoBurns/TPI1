@@ -4,6 +4,7 @@ import { Button } from '../common/Button';
 import { FormInput } from '../common/FormInput';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { STANDARD_LENGTHS } from '../../constants/materials';
+import { formatUseStockJobLabel } from '../../utils/dataProcessing';
 
 export const UseStockForm = ({ onSave, inventory, materialTypes, inventorySummary, incomingSummary, suppliers }) => {
     const createNewItem = () => ({
@@ -13,6 +14,8 @@ export const UseStockForm = ({ onSave, inventory, materialTypes, inventorySummar
 
     const createNewJob = () => ({
         jobName: '',
+        jobNumber: '',
+        jobSection: '',
         customer: '',
         items: [createNewItem()]
     });
@@ -62,10 +65,16 @@ export const UseStockForm = ({ onSave, inventory, materialTypes, inventorySummar
             return;
         }
 
+        if (!formatUseStockJobLabel(jobs[0].jobNumber, jobs[0].jobSection)) {
+            setError('Enter a Job #.');
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             await onSave(jobs, options);
-            setSuccessMessage(`Successfully logged usage for "${jobs[0].jobName}".`);
+            const jobLabel = formatUseStockJobLabel(jobs[0].jobNumber, jobs[0].jobSection) || jobs[0].jobName;
+            setSuccessMessage(`Successfully logged usage for "${jobLabel}".`);
             resetForm();
         } catch (err) {
             console.error("Submission error:", err);
@@ -82,8 +91,11 @@ export const UseStockForm = ({ onSave, inventory, materialTypes, inventorySummar
         <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormInput label="Job Name" name="jobName" value={job.jobName} onChange={(e) => handleJobChange(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} required style={{ textTransform: 'uppercase' }} />
-                    <FormInput label="Customer" name="customer" value={job.customer} onChange={(e) => handleJobChange(jobIndex, 'customer', (e.target.value || '').toUpperCase())} required style={{ textTransform: 'uppercase' }} />
+                    <FormInput label="Job #" name="jobNumber" value={job.jobNumber} onChange={(e) => handleJobChange(jobIndex, 'jobNumber', (e.target.value || '').toUpperCase())} required style={{ textTransform: 'uppercase' }} placeholder="e.g. J5851 or 5851" />
+                    <FormInput label="Section" name="jobSection" value={job.jobSection} onChange={(e) => handleJobChange(jobIndex, 'jobSection', (e.target.value || '').toUpperCase())} style={{ textTransform: 'uppercase' }} placeholder="Optional" />
+                    <div className="md:col-span-2">
+                        <FormInput label="Customer" name="customer" value={job.customer} onChange={(e) => handleJobChange(jobIndex, 'customer', (e.target.value || '').toUpperCase())} required style={{ textTransform: 'uppercase' }} />
+                    </div>
                 </div>
 
                 <div className="flex gap-4 p-2 bg-zinc-900/50 rounded-lg">

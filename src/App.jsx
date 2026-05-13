@@ -13,6 +13,7 @@ import {
     calculateInventorySummary,
     calculateIncomingSummary,
     calculateScheduledOutgoingSummary,
+    formatUseStockJobLabel,
     getGaugeFromMaterial,
     groupLogsByJob
 } from './utils/dataProcessing';
@@ -597,6 +598,12 @@ export default function App() {
         const usageLogCollectionRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
+        const resolveUseStockJobLabel = (job) => {
+            const fromParts = formatUseStockJobLabel(job.jobNumber, job.jobSection, job.joinWith);
+            if (fromParts) return fromParts;
+            return (job.jobName || '').trim() || 'N/A';
+        };
+
         // If scheduling, we only write the log entries
         if (isScheduled) {
             for (const job of jobs) {
@@ -628,7 +635,7 @@ export default function App() {
                     // Schedule at end-of-day to prevent immediate auto-fulfill for "today"
                     const scheduledUsedAtIso = new Date(scheduledDate + 'T23:59:59').toISOString();
                     const logEntry = {
-                        job: job.jobName.trim() || 'N/A',
+                        job: resolveUseStockJobLabel(job),
                         customer: job.customer,
                         createdAt: new Date().toISOString(),
                         usedAt: scheduledUsedAtIso,
@@ -668,7 +675,7 @@ export default function App() {
                         batch.update(ref, {
                             status: 'Used',
                             usageLogId: logDocRef.id,
-                            jobNameUsed: job.jobName.trim() || 'N/A',
+                            jobNameUsed: resolveUseStockJobLabel(job),
                             customerUsed: job.customer,
                             usedAt: new Date().toISOString(),
                         });
@@ -679,7 +686,7 @@ export default function App() {
             if (usedItems.length > 0) {
                 const nowIso = new Date().toISOString();
                 const logEntry = {
-                    job: job.jobName.trim() || 'N/A',
+                    job: resolveUseStockJobLabel(job),
                     customer: job.customer,
                     usedAt: nowIso,
                     createdAt: nowIso,

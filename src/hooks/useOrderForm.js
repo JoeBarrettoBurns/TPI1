@@ -63,6 +63,9 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
 
         return {
             jobName: jobOverride.jobName ?? '',
+            jobNumber: jobOverride.jobNumber ?? '',
+            jobSection: jobOverride.jobSection ?? '',
+            joinWith: jobOverride.joinWith ?? '_',
             customer: jobOverride.customer ?? '',
             supplier: getDefaultSupplier(jobOverride.supplier ?? prefill?.supplier),
             suppliers: multiSupplier

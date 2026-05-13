@@ -6,9 +6,17 @@ import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { STANDARD_LENGTHS } from '../../constants/materials';
+import { splitUseStockJobFields, formatUseStockJobLabel } from '../../utils/dataProcessing';
 
 export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory, materialTypes }) => {
-    const [jobData, setJobData] = useState({ jobName: '', customer: '', items: [], date: '' });
+    const [jobData, setJobData] = useState({
+        jobNumber: '',
+        jobSection: '',
+        joinWith: '_',
+        customer: '',
+        items: [],
+        date: '',
+    });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
@@ -39,11 +47,15 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
 
             const dateForInput = formatDateForInput(logEntry.usedAt || logEntry.createdAt);
 
+            const { jobNumber, jobSection, joinWith } = splitUseStockJobFields(logEntry.job || '');
+
             setJobData({
-                jobName: logEntry.job || '',
+                jobNumber,
+                jobSection,
+                joinWith,
                 customer: logEntry.customer || '',
                 items: Object.values(itemsByMaterial),
-                date: dateForInput
+                date: dateForInput,
             });
         }
     }, [logEntry]);
@@ -61,7 +73,11 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
         setIsSubmitting(true);
         setError('');
         try {
-            await onSave(logEntry, jobData, inventory);
+            const resolvedJobName =
+                formatUseStockJobLabel(jobData.jobNumber, jobData.jobSection, jobData.joinWith).trim()
+                || (jobData.jobNumber || '').trim()
+                || 'N/A';
+            await onSave(logEntry, { ...jobData, jobName: resolvedJobName }, inventory);
             onClose();
         } catch (err) {
             console.error("Failed to save log:", err);
@@ -76,8 +92,31 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="p-4 border border-slate-700 rounded-lg bg-slate-900/50 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormInput label="Job #" name="jobName" value={jobData.jobName} onChange={(e) => setJobData(prev => ({ ...prev, jobName: (e.target.value || '').toUpperCase() }))} style={{ textTransform: 'uppercase' }} />
-                        <FormInput label="Customer" name="customer" value={jobData.customer} onChange={(e) => setJobData(prev => ({ ...prev, customer: (e.target.value || '').toUpperCase() }))} required style={{ textTransform: 'uppercase' }} />
+                        <FormInput
+                            label="Job #"
+                            name="jobNumber"
+                            value={jobData.jobNumber}
+                            onChange={(e) => setJobData(prev => ({ ...prev, jobNumber: (e.target.value || '').toUpperCase() }))}
+                            style={{ textTransform: 'uppercase' }}
+                        />
+                        <FormInput
+                            label="Section"
+                            name="jobSection"
+                            value={jobData.jobSection}
+                            onChange={(e) => setJobData(prev => ({ ...prev, jobSection: (e.target.value || '').toUpperCase() }))}
+                            style={{ textTransform: 'uppercase' }}
+                            placeholder="Optional"
+                        />
+                        <div className="md:col-span-2">
+                            <FormInput
+                                label="Customer"
+                                name="customer"
+                                value={jobData.customer}
+                                onChange={(e) => setJobData(prev => ({ ...prev, customer: (e.target.value || '').toUpperCase() }))}
+                                required
+                                style={{ textTransform: 'uppercase' }}
+                            />
+                        </div>
                     </div>
 
                     <FormInput

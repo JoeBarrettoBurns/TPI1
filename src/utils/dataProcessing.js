@@ -540,6 +540,57 @@ export function parseJobPoParts(raw) {
     return { baseKey: fk, displayBase: full, partSuffix: '', full };
 }
 
+/**
+ * Split a stored job string (e.g. legacy usage log `job`) into Job # + Section for editing.
+ * `joinWith` is `_` or `-` after the numeric PO when present, so re-saving preserves the original separator.
+ */
+export function splitUseStockJobFields(rawJob) {
+    const raw = String(rawJob ?? '').trim();
+    if (!raw) return { jobNumber: '', jobSection: '', joinWith: '_' };
+
+    const parsed = parseJobPoParts(raw);
+    if (!parsed.partSuffix) {
+        return { jobNumber: parsed.displayBase, jobSection: '', joinWith: '_' };
+    }
+
+    const sepMatch = raw.match(/^J\d+([_-])/i);
+    const joinWith = sepMatch && sepMatch[1] === '-' ? '-' : '_';
+
+    return {
+        jobNumber: parsed.displayBase,
+        jobSection: parsed.partSuffix,
+        joinWith,
+    };
+}
+
+/**
+ * Compose the stored `job` string from separate Job # and Section fields.
+ * `joinWith` is `_` (default) or `-` after the PO digits; use {@link splitUseStockJobFields} when editing legacy logs.
+ */
+export function formatUseStockJobLabel(jobNumberRaw, jobSectionRaw, joinWith = '_') {
+    const sep = joinWith === '-' ? '-' : '_';
+    const numIn = String(jobNumberRaw ?? '').trim();
+    if (!numIn) return '';
+
+    const secIn = String(jobSectionRaw ?? '').trim();
+    const sec = secIn ? secIn.toUpperCase().replace(/\s+/g, '_') : '';
+
+    let num = numIn.toUpperCase();
+    const strictBase = num.match(/^J(\d+)$/i);
+    if (strictBase) {
+        const base = `J${strictBase[1]}`;
+        return sec ? `${base}${sep}${sec}` : base;
+    }
+
+    const digitsOnly = num.match(/^(\d+)$/);
+    if (digitsOnly) {
+        const base = `J${digitsOnly[1]}`;
+        return sec ? `${base}${sep}${sec}` : base;
+    }
+
+    return sec ? `${num}${sep}${sec}` : num;
+}
+
 /** Stable id for a customer + job pair derived from usage logs (Use Stock). */
 export const customerJobPairId = (customer, jobName) =>
     `${normalizeCustomerKey(customer)}::${(jobName || '').trim().toUpperCase()}`;
