@@ -402,7 +402,7 @@ function JobsGroupedLogTable({ groups, selectedJob, onSelectJob, showPartyColumn
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-[10px] text-zinc-500 border-b border-zinc-700/80 bg-zinc-900/50">
                 <span className="inline-flex items-center gap-1.5 font-medium text-sky-300/90">
                     <Layers size={12} className="text-sky-400 shrink-0" aria-hidden />
-                    <span>Grouped</span>
+                    <span>Job</span>
                     <span className="font-normal text-zinc-500">— one job #, multiple parts</span>
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-zinc-400">
@@ -452,7 +452,7 @@ function JobsGroupedLogTable({ groups, selectedJob, onSelectJob, showPartyColumn
                                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                                             <span className="inline-flex items-center gap-1.5 rounded-md bg-sky-500/15 border border-sky-500/35 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-sky-200">
                                                 <Layers size={12} className="text-sky-400" aria-hidden />
-                                                Grouped
+                                                Job
                                             </span>
                                             <span className="text-xs font-bold text-white tracking-wide font-mono">{group.displayBase}</span>
                                             <span className="text-[10px] uppercase tracking-wide text-sky-200/70">{group.parts.length} part{group.parts.length === 1 ? '' : 's'}</span>
