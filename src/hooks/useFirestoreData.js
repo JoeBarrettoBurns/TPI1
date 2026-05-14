@@ -6,7 +6,6 @@ import {
     query,
     where,
     orderBy,
-    limit,
     onSnapshot,
     doc,
     getDoc,
@@ -455,7 +454,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
         const usageLogRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
         const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
-        const qUsageLog = query(usageLogRef, orderBy('createdAt', 'desc'), limit(100));
+        const qUsageLog = query(usageLogRef, orderBy('createdAt', 'desc'));
         // #region agent log
         fetch('http://127.0.0.1:7496/ingest/c991b8ad-d2e7-4957-a523-2d962e494a95',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98f95f'},body:JSON.stringify({sessionId:'98f95f',runId:'usage-permission-pre',hypothesisId:'H3',location:'src/hooks/useFirestoreData.js:404',message:'usage logs subscription start',data:{appId,userIdPresent:!!userId,path:`artifacts/${appId}/public/data/usage_logs`,currentUserPrimary:debugEmailMeta(auth.currentUser?.email||''),currentUserProviders:debugProviderMetas(auth.currentUser)},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
@@ -611,15 +610,14 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
         const loadUsageLogsViaFullRead = async () => {
             const snap = await getDocs(usageLogRef);
-            if (snap.size > 8000) {
-                throw new Error(
-                    `usage_logs has ${snap.size} documents; deploy firestore indexes and use the ordered query instead of loading all.`
+            if (snap.size > 25_000) {
+                console.warn(
+                    `[usage_logs] Loading ${snap.size} documents via full collection read; consider fixing the indexed listener for better performance.`
                 );
             }
             return snap.docs
                 .map((d) => ({ id: d.id, ...d.data() }))
-                .sort((a, b) => parseCreatedAtMs(b) - parseCreatedAtMs(a))
-                .slice(0, 100);
+                .sort((a, b) => parseCreatedAtMs(b) - parseCreatedAtMs(a));
         };
 
         const unsubUsageLog = onSnapshot(
@@ -665,7 +663,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                             setError('');
                         } else {
                             setError(
-                                `Usage logs: real-time listener failed (${err?.code || 'error'}). Loaded latest ${usageData.length} entries (fallback). If this persists, check the browser console and Firebase → Firestore → Indexes.`
+                                `Usage logs: real-time listener failed (${err?.code || 'error'}). Loaded ${usageData.length} entries via full read (fallback). If this persists, check the browser console and Firebase → Firestore → Indexes.`
                             );
                         }
                     } catch (fallbackErr) {

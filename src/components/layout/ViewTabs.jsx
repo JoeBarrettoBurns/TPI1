@@ -8,8 +8,9 @@ const Tab = ({ label, view, activeView, setActiveView }) => {
 
     return (
         <button
+            type="button"
             onClick={() => setActiveView(view)}
-            className={`px-3 py-1.5 md:px-4 md:py-2 rounded-md text-sm md:text-base font-semibold transition-colors duration-200 ${classes}`}
+            className={`shrink-0 px-3 py-1.5 md:px-4 md:py-2 rounded-md text-sm md:text-base font-semibold transition-colors duration-200 ${classes}`}
         >
             {label}
         </button>
@@ -37,11 +38,19 @@ export const ViewTabs = ({ activeView, setActiveView, categories }) => {
                 )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-                <span className="text-zinc-400 font-semibold mr-2">Categories:</span>
-                {categoryViews.map(cat =>
-                    <Tab key={cat} label={cat} view={cat} activeView={activeView} setActiveView={setActiveView} />
-                )}
+            <div className="flex items-center gap-2 min-w-0">
+                <span className="text-zinc-400 font-semibold mr-2 shrink-0">Categories:</span>
+                <div className="relative min-w-0 flex-1">
+                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin] [-ms-overflow-style:auto]">
+                        {categoryViews.map(cat =>
+                            <Tab key={cat} label={cat} view={cat} activeView={activeView} setActiveView={setActiveView} />
+                        )}
+                    </div>
+                    <div
+                        className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-zinc-900 to-transparent"
+                        aria-hidden
+                    />
+                </div>
             </div>
         </div>
     );

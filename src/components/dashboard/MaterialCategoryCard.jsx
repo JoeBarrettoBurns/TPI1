@@ -5,7 +5,7 @@ import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { STANDARD_LENGTHS } from '../../constants/materials';
-import { GripVertical, Trash2, RotateCcw } from 'lucide-react';
+import { GripVertical, Trash2, RotateCcw, Pencil } from 'lucide-react';
 import { useFirestoreDnd } from '../../hooks/useFirestoreDnd';
 import { normalizeCategoryIndicatorSettings } from '../../utils/categoryIndicatorSettings';
 
@@ -236,7 +236,7 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
     };
 
     return (
-        <tr ref={setNodeRef} style={style} className="border-b border-zinc-700 last:border-b-0 hover:bg-zinc-700/50 transition-colors">
+        <tr ref={setNodeRef} style={style} className="group/row border-b border-zinc-700 last:border-b-0 hover:bg-zinc-700/50 transition-colors">
             <td className="p-2 font-medium text-zinc-300">
                 <div className="flex items-center gap-2">
                     {isEditMode && (
@@ -279,10 +279,37 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
                             />
                         ) : (
                             <div
-                                onDoubleClick={() => { if (isEditMode && !isCustom) { setEditingCell({ matType, len }); setEditValue(stockCount); } }}
-                                className={`flex items-center justify-center gap-2 ${isEditMode && !isCustom ? 'cursor-pointer' : ''}`}
-                                title={isCustom ? `${stockCount} custom/non-standard sheets` : `${stockCount} sheets on hand`}
+                                role={isEditMode && !isCustom ? 'button' : undefined}
+                                tabIndex={isEditMode && !isCustom ? 0 : undefined}
+                                onClick={() => {
+                                    if (isEditMode && !isCustom) {
+                                        setEditingCell({ matType, len });
+                                        setEditValue(String(stockCount));
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if (!isEditMode || isCustom) return;
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        setEditingCell({ matType, len });
+                                        setEditValue(String(stockCount));
+                                    }
+                                }}
+                                className={`group/cell relative flex items-center justify-center gap-2 rounded-md px-1 py-0.5 -mx-1 transition-colors ${isEditMode && !isCustom ? 'cursor-pointer hover:bg-zinc-600/60 focus:outline-none focus:ring-2 focus:ring-amber-400/80' : ''}`}
+                                title={
+                                    isCustom
+                                        ? `${stockCount} custom/non-standard sheets`
+                                        : isEditMode
+                                            ? `${stockCount} sheets on hand — click to edit`
+                                            : `${stockCount} sheets on hand`
+                                }
                             >
+                                {isEditMode && !isCustom && (
+                                    <Pencil
+                                        className="h-3.5 w-3.5 shrink-0 text-zinc-400 opacity-0 transition-opacity group-hover/row:opacity-70 group-hover/cell:opacity-70"
+                                        aria-hidden
+                                    />
+                                )}
                                 <span className={`font-bold text-2xl ${textColor}`}>{stockCount}</span>
                                 <div className="w-4 h-10 rounded-full border-2 border-zinc-600 overflow-hidden">
                                     <div className="h-full" style={stockStyle}></div>

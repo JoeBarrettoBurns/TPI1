@@ -400,38 +400,68 @@ export const calculateAnalyticsByCategory = (inventory, materials) => {
 export const groupLogsByJob = (inventory, usageLog) => {
     const jobs = {};
 
-    // First pass: create job entries from both sources, only if a job name exists
-    inventory.forEach(item => {
-        if (!item.job || item.job === 'N/A' || item.job.startsWith('MODIFICATION')) return;
-        const key = item.job;
+    const isTrackableJobName = (jobName) => {
+        const name = (jobName || '').trim();
+        return Boolean(name && name !== 'N/A' && !name.startsWith('MODIFICATION'));
+    };
+
+    const ensureJob = (jobName, source = {}) => {
+        if (!isTrackableJobName(jobName)) return null;
+        const key = jobName;
         if (!jobs[key]) {
             jobs[key] = {
                 id: key,
-                job: item.job,
-                supplier: item.supplier,
-                date: item.createdAt,
-                status: 'In Stock',
+                job: jobName,
+                supplier: source.supplier,
+                customer: source.customer,
+                date: source.date,
+                status: source.status || 'In Stock',
                 materials: {},
             };
+        } else {
+            const existing = jobs[key];
+            if (!existing.supplier && source.supplier) existing.supplier = source.supplier;
+            if (!existing.customer && source.customer) existing.customer = source.customer;
+            if (source.status === 'Scheduled' || existing.status !== 'Scheduled') {
+                existing.status = source.status || existing.status;
+            }
+            const sourceMs = source.date ? new Date(source.date).getTime() : 0;
+            const existingMs = existing.date ? new Date(existing.date).getTime() : 0;
+            if (sourceMs > existingMs) existing.date = source.date;
         }
+        return jobs[key];
+    };
+
+    // First pass: create job entries from both sources, only if a job name exists
+    inventory.forEach(item => {
+        ensureJob(item.job, {
+            supplier: item.supplier,
+            customer: item.customer,
+            date: item.createdAt,
+            status: 'In Stock',
+        });
     });
 
     usageLog.forEach(log => {
-        if (!log.job || log.job === 'N/A' || log.job.startsWith('MODIFICATION')) return;
-        const key = log.job;
-        if (!jobs[key]) {
-            jobs[key] = {
-                id: key,
-                job: log.job,
-                customer: log.customer,
-                date: log.usedAt || log.createdAt,
-                status: log.status || 'Completed',
-                materials: {},
-            };
+        ensureJob(log.job, {
+            customer: log.customer,
+            date: log.usedAt || log.createdAt,
+            status: log.status || 'Completed',
+        });
+
+        // Used sheet snapshots still carry their original inventory PO. Preserve those
+        // jobs after the live inventory document moves out of On Hand/Ordered queries.
+        if ((log.status || 'Completed') === 'Completed') {
+            (log.details || []).forEach((detail) => {
+                if (!detail?.job || detail.job === log.job) return;
+                ensureJob(detail.job, {
+                    supplier: detail.supplier,
+                    customer: detail.customer || detail.supplier,
+                    date: detail.createdAt || log.usedAt || log.createdAt,
+                    status: 'Completed',
+                });
+            });
         }
-        jobs[key].status = log.status || 'Completed';
-        jobs[key].customer = jobs[key].customer || log.customer;
-        jobs[key].date = log.usedAt || log.createdAt;
     });
 
     // Second pass: collate all sheets under the correct job
@@ -439,17 +469,33 @@ export const groupLogsByJob = (inventory, usageLog) => {
         ...inventory,
         ...usageLog
             .filter(log => (log.status || 'Completed') === 'Completed')
-            .flatMap(log => (log.details || []).map((d, index) => ({
-                ...d,
-                status: 'Used',
-                id: d.id || `${log.id}-${index}-${d.materialType}-${d.length}`,
-                job: log.job,
-                customer: log.customer
-            })))
+            .flatMap(log => (log.details || []).flatMap((d, index) => {
+                const baseId = d.id || `${log.id}-${index}-${d.materialType}-${d.length}`;
+                const outgoingSheet = {
+                    ...d,
+                    status: 'Used',
+                    id: `${baseId}|use:${log.id}`,
+                    job: log.job,
+                    customer: log.customer
+                };
+                if (!isTrackableJobName(d.job) || d.job === log.job) {
+                    return [outgoingSheet];
+                }
+                return [
+                    outgoingSheet,
+                    {
+                        ...d,
+                        status: 'Used',
+                        id: `${baseId}|source:${d.job}`,
+                        job: d.job,
+                        customer: d.customer || d.supplier,
+                    },
+                ];
+            }))
     ];
 
     allSheets.forEach(sheet => {
-        if (!sheet.job || sheet.job === 'N/A' || sheet.job.startsWith('MODIFICATION')) return;
+        if (!isTrackableJobName(sheet.job)) return;
         const key = sheet.job;
         if (jobs[key]) {
             if (!jobs[key].materials[sheet.materialType]) {
@@ -596,6 +642,29 @@ export const customerJobPairId = (customer, jobName) =>
     `${normalizeCustomerKey(customer)}::${(jobName || '').trim().toUpperCase()}`;
 
 /**
+ * True when the usage-log `customer` field is actually a PO/job placeholder (e.g. `J5639`)
+ * matching the job row, instead of a real company name — so we should prefer `allJobs` metadata.
+ */
+function usageCustomerLooksLikeJobPo(customerRaw, jobName) {
+    const c = String(customerRaw ?? '').trim();
+    if (!c) return false;
+    const { baseKey } = parseJobPoParts(jobName);
+    if (!baseKey || !/^J\d+$/i.test(baseKey)) return false;
+    if (/^J\d+$/i.test(c)) return true;
+    const pc = parseJobPoParts(c);
+    return pc.baseKey === baseKey;
+}
+
+function resolveUsageCustomerLabel(customerRaw, jobName, enrich) {
+    const trimmed = String(customerRaw ?? '').trim();
+    if (!trimmed) return trimmed;
+    if (!usageCustomerLooksLikeJobPo(trimmed, jobName) || !enrich) return trimmed;
+    const real = String(enrich.customer || enrich.supplier || '').trim();
+    if (real && real !== 'N/A') return real;
+    return trimmed;
+}
+
+/**
  * Customers come from usage logs where Use Stock recorded a customer name.
  * Jobs are grouped under that customer. Rows reuse materials from `allJobs` when the job name matches.
  * `orphanJobs` lists jobs from inventory/logs that never appeared on a usage log with a customer (incoming-only POs, etc.).
@@ -624,12 +693,11 @@ export const buildCustomerJobGroups = (usageLog, allJobs = []) => {
 
     sortedPairs.forEach(log => {
         const jobName = log.job.trim();
-        const customerLabel = log.customer.trim();
+        const enrich = jobByName.get(jobName);
+        const customerLabel = resolveUsageCustomerLabel(log.customer, jobName, enrich);
         const id = customerJobPairId(customerLabel, jobName);
         const logDate = log.usedAt || log.createdAt;
         const status = log.status || 'Completed';
-        const enrich = jobByName.get(jobName);
-
         const existing = pairMap.get(id);
         if (!existing) {
             pairMap.set(id, {

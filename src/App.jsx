@@ -1,6 +1,6 @@
 // src/App.jsx
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { writeBatch, doc, collection, updateDoc, getDocs, query, where, getDoc, setDoc, onSnapshot, orderBy, limit } from './firebase/firestoreWithTracking';
@@ -28,32 +28,33 @@ import { ViewTabs } from './components/layout/ViewTabs';
 import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { ErrorMessage } from './components/common/ErrorMessage';
 import { SearchResultsDropdown } from './components/common/SearchResultsDropdown';
+import { ConfirmationModal } from './components/modals/ConfirmationModal';
+import { Bot } from 'lucide-react';
 
-// Views
+// Views: keep auth + dashboard eager for fastest first paint; lazy-load the rest.
 import { AuthView } from './views/AuthView';
 import { DashboardView } from './views/DashboardView';
-import { LogsView } from './views/LogsView';
-import { MaterialDetailView } from './views/MaterialDetailView';
-import { PriceHistoryView } from './views/PriceHistoryView';
-import { ReorderView } from './views/ReorderView';
-import { JobOverviewView } from './views/JobOverviewView';
-import { SheetCostCalculatorView } from './views/SheetCostCalculatorView';
+
+const LogsView = lazy(() => import('./views/LogsView').then((m) => ({ default: m.LogsView })));
+const MaterialDetailView = lazy(() => import('./views/MaterialDetailView').then((m) => ({ default: m.MaterialDetailView })));
+const PriceHistoryView = lazy(() => import('./views/PriceHistoryView').then((m) => ({ default: m.PriceHistoryView })));
+const ReorderView = lazy(() => import('./views/ReorderView').then((m) => ({ default: m.ReorderView })));
+const JobOverviewView = lazy(() => import('./views/JobOverviewView').then((m) => ({ default: m.JobOverviewView })));
+const SheetCostCalculatorView = lazy(() => import('./views/SheetCostCalculatorView').then((m) => ({ default: m.SheetCostCalculatorView })));
 
 
-// Modals
-import { AddOrderModal } from './components/modals/AddOrderModal';
-import { UseStockModal } from './components/modals/UseStockModal';
-import { EditOutgoingLogModal } from './components/modals/EditOutgoingLogModal';
-import { ManageCategoriesModal } from './components/modals/ManageCategoriesModal';
-import { BackupModal } from './components/modals/BackupModal';
-import { AuthenticationModal } from './components/modals/AuthenticationModal';
-import { ManageSuppliersModal } from './components/modals/ManageSuppliersModal';
-import { ConfirmationModal } from './components/modals/ConfirmationModal';
-import { BuyOrderDraftsModal } from './components/modals/BuyOrderDraftsModal';
+// Modals: lazy-loaded — code loads when opened (smaller initial bundle).
+const AddOrderModal = lazy(() => import('./components/modals/AddOrderModal').then((m) => ({ default: m.AddOrderModal })));
+const UseStockModal = lazy(() => import('./components/modals/UseStockModal').then((m) => ({ default: m.UseStockModal })));
+const EditOutgoingLogModal = lazy(() => import('./components/modals/EditOutgoingLogModal').then((m) => ({ default: m.EditOutgoingLogModal })));
+const ManageCategoriesModal = lazy(() => import('./components/modals/ManageCategoriesModal').then((m) => ({ default: m.ManageCategoriesModal })));
+const BackupModal = lazy(() => import('./components/modals/BackupModal').then((m) => ({ default: m.BackupModal })));
+const AuthenticationModal = lazy(() => import('./components/modals/AuthenticationModal').then((m) => ({ default: m.AuthenticationModal })));
+const ManageSuppliersModal = lazy(() => import('./components/modals/ManageSuppliersModal').then((m) => ({ default: m.ManageSuppliersModal })));
+const BuyOrderDraftsModal = lazy(() => import('./components/modals/BuyOrderDraftsModal').then((m) => ({ default: m.BuyOrderDraftsModal })));
 
-import { AIAssistant } from './components/assistant/AIAssistant';
-import { DebugPanel } from './components/debug/DebugPanel';
-import { Bot } from 'lucide-react';
+const AIAssistant = lazy(() => import('./components/assistant/AIAssistant').then((m) => ({ default: m.AIAssistant })));
+const DebugPanel = lazy(() => import('./components/debug/DebugPanel').then((m) => ({ default: m.DebugPanel })));
 
 const BUY_ORDERS_PATH = `artifacts/${appId}/public/data/buy_orders`;
 const LATEST_BUY_ORDER_LIMIT = 15;
@@ -132,14 +133,17 @@ export default function App() {
     const [searchResults, setSearchResults] = useState([]);
     const [activeIndex, setActiveIndex] = useState(0);
     const [fuse, setFuse] = useState(null);
-    const searchTimeoutRef = useRef(null);
     const [isAssistantVisible, setIsAssistantVisible] = useState(false);
     const [openBuyOrders, setOpenBuyOrders] = useState([]);
+    // Full inventory + live inventory listeners are heavy; delay until a view needs them or after idle warmup.
     const shouldLoadInventoryDetails = useMemo(() => {
-        const lightweightViews = new Set(['dashboard', 'reorder', 'sheet-calculator']);
+        const lightweightViews = new Set(['dashboard', 'sheet-calculator']);
         const inventoryDependentModals = new Set(['use', 'edit-log', 'edit-order']);
         return !lightweightViews.has(activeView) || isEditMode || inventoryDependentModals.has(modal.type);
     }, [activeView, isEditMode, modal.type]);
+
+    const [inventoryDetailsWarmup, setInventoryDetailsWarmup] = useState(false);
+    const loadInventoryDetails = shouldLoadInventoryDetails || inventoryDetailsWarmup;
 
     const {
         inventory,
@@ -157,7 +161,38 @@ export default function App() {
         authDeniedDetail,
         clearAuthAccessDenied,
         refetchMaterials
-    } = useFirestoreData({ loadInventoryDetails: true });
+    } = useFirestoreData({ loadInventoryDetails });
+
+    useEffect(() => {
+        if (!userId) {
+            setInventoryDetailsWarmup(false);
+            return undefined;
+        }
+        if (shouldLoadInventoryDetails) {
+            setInventoryDetailsWarmup(true);
+            return undefined;
+        }
+        if (inventoryDetailsWarmup) {
+            return undefined;
+        }
+        let cancelled = false;
+        const enable = () => {
+            if (!cancelled) {
+                setInventoryDetailsWarmup(true);
+            }
+        };
+        const idleId = typeof window.requestIdleCallback === 'function'
+            ? window.requestIdleCallback(enable, { timeout: 2500 })
+            : window.setTimeout(enable, 200);
+        return () => {
+            cancelled = true;
+            if (typeof window.cancelIdleCallback === 'function') {
+                window.cancelIdleCallback(idleId);
+            } else {
+                window.clearTimeout(idleId);
+            }
+        };
+    }, [userId, shouldLoadInventoryDetails, inventoryDetailsWarmup]);
 
     const { suppliers, setSuppliers, supplierInfo, setSupplierInfo } = useSuppliersSync(userId);
 
@@ -195,9 +230,6 @@ export default function App() {
         setSearchQuery('');
         setSearchResults([]);
         setActiveIndex(0);
-        if (searchTimeoutRef.current) {
-            clearTimeout(searchTimeoutRef.current);
-        }
     }, []);
 
     useEffect(() => {
@@ -337,10 +369,6 @@ export default function App() {
 
 
     const handleSearchChange = (e) => {
-        if (searchTimeoutRef.current) {
-            clearTimeout(searchTimeoutRef.current);
-        }
-
         const query = e.target.value;
         setSearchQuery(query);
         setActiveIndex(0);
@@ -354,10 +382,6 @@ export default function App() {
             const results = fuse.search(query).slice(0, 10);
             setSearchResults(results);
         }
-
-        searchTimeoutRef.current = setTimeout(() => {
-            setSearchResults([]);
-        }, 2000); // Disappear after 2 seconds
     };
 
     const handleResultSelect = (result) => {
@@ -475,16 +499,18 @@ export default function App() {
         });
     }, []);
 
-    const handleClearAllBuyOrders = useCallback(async () => {
+    const handleClearAllBuyOrders = useCallback(() => {
         if (openBuyOrders.length === 0) {
             return;
         }
+        setModal({ type: 'confirm-clear-buy-orders', data: null });
+    }, [openBuyOrders.length]);
 
-        const confirmed = window.confirm(`Clear all ${openBuyOrders.length} open buy order${openBuyOrders.length === 1 ? '' : 's'}?`);
-        if (!confirmed) {
+    const handleConfirmClearAllBuyOrders = useCallback(async () => {
+        if (openBuyOrders.length === 0) {
+            closeModal();
             return;
         }
-
         const batch = writeBatch(db);
         const clearedAt = new Date().toISOString();
 
@@ -496,23 +522,32 @@ export default function App() {
         });
 
         await batch.commit();
-    }, [openBuyOrders]);
+        closeModal();
+    }, [openBuyOrders, closeModal]);
 
-    const handleDeleteBuyOrder = useCallback(async (buyOrder) => {
+    const handleDeleteBuyOrder = useCallback((buyOrder) => {
         if (!buyOrder?.id) {
             return;
         }
+        setModal({ type: 'confirm-delete-buy-order', data: buyOrder });
+    }, []);
 
-        const confirmed = window.confirm('Remove this buy order from the queue?');
-        if (!confirmed) {
+    const handleConfirmDeleteBuyOrder = useCallback(async () => {
+        const buyOrder = modal.data;
+        if (!buyOrder?.id) {
+            closeModal();
             return;
         }
-
-        await updateDoc(doc(db, BUY_ORDERS_PATH, buyOrder.id), {
-            workflowStatus: 'cleared',
-            clearedAt: new Date().toISOString(),
-        });
-    }, []);
+        try {
+            await updateDoc(doc(db, BUY_ORDERS_PATH, buyOrder.id), {
+                workflowStatus: 'cleared',
+                clearedAt: new Date().toISOString(),
+            });
+        } catch (err) {
+            console.error('Failed to remove buy order:', err);
+        }
+        closeModal();
+    }, [modal.data, closeModal]);
 
     const handleDragStart = (event) => setActiveCategory(event.active.id);
     const handleDragEnd = (event) => {
@@ -749,7 +784,10 @@ export default function App() {
             await batch.commit();
         } catch (error) {
             console.error("Fulfillment Error:", error);
-            alert(`Failed to fulfill order: ${error.message}`);
+            setModal({
+                type: 'fulfill-error',
+                data: { message: error?.message ? `Failed to fulfill order: ${error.message}` : 'Failed to fulfill order.' },
+            });
         }
     };
 
@@ -1599,6 +1637,7 @@ export default function App() {
                 );
             case 'jobs':
                 return <JobOverviewView
+                    userId={userId}
                     allJobs={allJobs}
                     inventory={inventory}
                     usageLog={usageLog}
@@ -1680,7 +1719,6 @@ export default function App() {
                     isEditMode={isEditMode}
                     onManageCategories={() => setModal({ type: 'manage-categories' })}
                     onManageSuppliers={() => setModal({ type: 'manage-suppliers' })}
-                    activeView={activeView}
                     searchQuery={searchQuery}
                     onSearchChange={handleSearchChange}
                     onKeyDown={handleSearchKeyDown}
@@ -1704,7 +1742,11 @@ export default function App() {
                 <ViewTabs activeView={activeView} setActiveView={setActiveView} categories={categories} />
                 {error && <ErrorMessage message={error} />}
 
-                {showLoading ? <LoadingSpinner /> : renderActiveView()}
+                {showLoading ? <LoadingSpinner /> : (
+                    <Suspense fallback={<LoadingSpinner />}>
+                        {renderActiveView()}
+                    </Suspense>
+                )}
 
                 <footer className="text-center text-zinc-500 mt-8 text-sm">
                     <p>TecnoPan Inventory System</p>
@@ -1717,8 +1759,9 @@ export default function App() {
                 </footer>
             </div>
 
-            {/* Debug Panel - Firestore usage tracker */}
-            <DebugPanel />
+            <Suspense fallback={null}>
+                <DebugPanel />
+            </Suspense>
 
             {AI_ASSISTANT_ENABLED && (
                 <>
@@ -1731,18 +1774,21 @@ export default function App() {
                         <Bot size={28} />
                     </button>
 
-                    <AIAssistant
-                        isVisible={isAssistantVisible}
-                        onClose={() => setIsAssistantVisible(false)}
-                        inventory={inventory}
-                        materials={materials}
-                        suppliers={suppliers}
-                        usageLog={usageLog}
-                        onExecuteOrder={(jobs) => handleAddOrEditOrder(jobs)}
-                        onOpenModal={(type) => setModal({ type })}
-                    />
+                    <Suspense fallback={null}>
+                        <AIAssistant
+                            isVisible={isAssistantVisible}
+                            onClose={() => setIsAssistantVisible(false)}
+                            inventory={inventory}
+                            materials={materials}
+                            suppliers={suppliers}
+                            usageLog={usageLog}
+                            onExecuteOrder={(jobs) => handleAddOrEditOrder(jobs)}
+                            onOpenModal={(type) => setModal({ type })}
+                        />
+                    </Suspense>
                 </>
             )}
+            <Suspense fallback={null}>
 
 
 
@@ -1784,8 +1830,39 @@ export default function App() {
                     message={`Are you sure you want to delete ${modal.data.length} categor${modal.data.length > 1 ? 'ies' : 'y'} and all associated materials/inventory? This action cannot be undone.`}
                 />
             }
+            {modal.type === 'confirm-clear-buy-orders' && (
+                <ConfirmationModal
+                    isOpen={true}
+                    onClose={closeModal}
+                    onConfirm={handleConfirmClearAllBuyOrders}
+                    title="Clear buy orders"
+                    message={`Clear all ${openBuyOrders.length} open buy order${openBuyOrders.length === 1 ? '' : 's'}? They will be marked as cleared and removed from this queue.`}
+                />
+            )}
+            {modal.type === 'confirm-delete-buy-order' && (
+                <ConfirmationModal
+                    isOpen={true}
+                    onClose={closeModal}
+                    onConfirm={handleConfirmDeleteBuyOrder}
+                    title="Remove buy order"
+                    message="Remove this buy order from the queue? It will be marked as cleared."
+                />
+            )}
+            {modal.type === 'fulfill-error' && (
+                <ConfirmationModal
+                    isOpen={true}
+                    onClose={closeModal}
+                    onConfirm={closeModal}
+                    title="Fulfillment failed"
+                    message={modal.data?.message || 'Failed to fulfill order.'}
+                    showCancel={false}
+                    confirmLabel="OK"
+                    confirmVariant="primary"
+                />
+            )}
             {modal.type === 'backup' && <BackupModal onClose={closeModal} />}
             {modal.type === 'authentication' && <AuthenticationModal onClose={closeModal} />}
+            </Suspense>
         </div>
     );
 }

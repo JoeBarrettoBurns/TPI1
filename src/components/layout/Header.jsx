@@ -1,7 +1,7 @@
 // src/components/layout/Header.jsx
 
-import React, { forwardRef } from 'react';
-import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart, Shield } from 'lucide-react';
+import React, { forwardRef, useState, useRef, useEffect } from 'react';
+import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart, Shield, Settings } from 'lucide-react';
 import { Button } from '../common/Button';
 
 export const Header = forwardRef(({
@@ -17,14 +17,40 @@ export const Header = forwardRef(({
     onManageSuppliers,
     onOpenBackup,
     onOpenAuthentication,
-    activeView,
     onSignOut,
     onLogoClick
 }, ref) => {
+    const [moreOpen, setMoreOpen] = useState(false);
+    const moreMenuRef = useRef(null);
+
+    useEffect(() => {
+        const handleDocPointerDown = (event) => {
+            if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+                setMoreOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleDocPointerDown);
+        return () => document.removeEventListener('mousedown', handleDocPointerDown);
+    }, []);
+
+    useEffect(() => {
+        const handleEscape = (event) => {
+            if (event.key === 'Escape') {
+                setMoreOpen(false);
+            }
+        };
+        if (moreOpen) {
+            document.addEventListener('keydown', handleEscape);
+            return () => document.removeEventListener('keydown', handleEscape);
+        }
+        return undefined;
+    }, [moreOpen]);
+
+    const menuItemClass =
+        'w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm text-zinc-200 hover:bg-zinc-700 transition-colors';
 
     return (
         <header className="mb-8">
-            {/* Top Row: Title and Action Buttons */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-4">
                     <img src="/tecnopan-logo.png" alt="TecnoPan Logo" onClick={onLogoClick} className="h-12 md:h-16 w-auto cursor-pointer" />
@@ -36,18 +62,55 @@ export const Header = forwardRef(({
                         <ShoppingCart size={20} /> <span className="hidden sm:inline">Buy</span>
                     </Button>
                     <Button onClick={onUse} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Minus size={20} /> <span className="hidden sm:inline">Use Stock</span></Button>
-                    <Button onClick={onManageCategories} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Box size={20} /> <span className="hidden sm:inline">Manage Categories</span></Button>
-                    <Button onClick={onManageSuppliers} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Users size={20} /> <span className="hidden sm:inline">Manage Suppliers</span></Button>
-                    <Button onClick={onOpenAuthentication} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Shield size={20} /> <span className="hidden sm:inline">Authentication</span></Button>
-                    <Button onClick={onOpenBackup} variant="secondary" className="px-3 py-2 md:px-5 md:py-3"><Database size={20} /> <span className="hidden sm:inline">Backups</span></Button>
                     <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className="px-3 py-2 md:px-5 md:py-3">
                         <Edit size={20} /> <span className="hidden sm:inline">{isEditMode ? 'Finish Editing' : 'Edit'}</span>
                     </Button>
-                    <Button onClick={onSignOut} variant="danger" className="ml-0 md:ml-4 px-3 py-2 md:px-5 md:py-3"><LogOut size={20} /> <span className="hidden sm:inline">Sign Out</span></Button>
+
+                    <div className="relative" ref={moreMenuRef}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            className="px-3 py-2 md:px-5 md:py-3"
+                            aria-expanded={moreOpen}
+                            aria-haspopup="menu"
+                            aria-label={moreOpen ? 'Close settings menu' : 'Open settings menu'}
+                            onClick={() => setMoreOpen((o) => !o)}
+                        >
+                            <Settings size={20} />
+                            <span className="hidden sm:inline">Settings</span>
+                        </Button>
+                        {moreOpen && (
+                            <div
+                                role="menu"
+                                className="absolute right-0 z-50 mt-2 min-w-[14rem] rounded-xl border border-zinc-600 bg-zinc-800 py-1 shadow-xl"
+                            >
+                                <button type="button" role="menuitem" className={menuItemClass} onClick={() => { onManageCategories(); setMoreOpen(false); }}>
+                                    <Box size={18} className="shrink-0 text-zinc-400" />
+                                    <span>Manage Categories</span>
+                                </button>
+                                <button type="button" role="menuitem" className={menuItemClass} onClick={() => { onManageSuppliers(); setMoreOpen(false); }}>
+                                    <Users size={18} className="shrink-0 text-zinc-400" />
+                                    <span>Manage Suppliers</span>
+                                </button>
+                                <button type="button" role="menuitem" className={menuItemClass} onClick={() => { onOpenAuthentication(); setMoreOpen(false); }}>
+                                    <Shield size={18} className="shrink-0 text-zinc-400" />
+                                    <span>Authentication</span>
+                                </button>
+                                <button type="button" role="menuitem" className={menuItemClass} onClick={() => { onOpenBackup(); setMoreOpen(false); }}>
+                                    <Database size={18} className="shrink-0 text-zinc-400" />
+                                    <span>Backups</span>
+                                </button>
+                                <div className="my-1 border-t border-zinc-700" role="separator" />
+                                <button type="button" role="menuitem" className={`${menuItemClass} text-red-300 hover:bg-red-950/50`} onClick={() => { onSignOut(); setMoreOpen(false); }}>
+                                    <LogOut size={18} className="shrink-0" />
+                                    <span>Sign Out</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Bottom Row: Search Bar */}
             <div className="mt-4 md:w-1/3">
                 <input
                     ref={ref}
@@ -63,3 +126,5 @@ export const Header = forwardRef(({
         </header>
     );
 });
+
+Header.displayName = 'Header';
