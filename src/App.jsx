@@ -92,6 +92,16 @@ function getBuyOrderPrimarySupplier(buyOrder) {
     return '';
 }
 
+function triggerMailto(mailto) {
+    const link = document.createElement('a');
+    link.href = mailto;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
 function openMailtoLinks(emailDrafts = []) {
     const validDrafts = emailDrafts.filter((draft) => draft?.mailto);
     if (validDrafts.length === 0) {
@@ -99,15 +109,21 @@ function openMailtoLinks(emailDrafts = []) {
     }
 
     const [firstDraft, ...remainingDrafts] = validDrafts;
-    const blockedDrafts = [];
-    remainingDrafts.forEach((draft) => {
-        const popup = window.open(draft.mailto, '_blank', 'noopener,noreferrer');
-        if (!popup) {
-            blockedDrafts.push(draft);
-        }
+
+    // Open the first draft immediately while we still have the user gesture.
+    triggerMailto(firstDraft.mailto);
+
+    // Stagger the rest: firing multiple mailto: launches at once causes the OS
+    // mail handler to drop some of them, so give each one time to register.
+    remainingDrafts.forEach((draft, index) => {
+        window.setTimeout(() => triggerMailto(draft.mailto), (index + 1) * 600);
     });
-    window.location.href = firstDraft.mailto;
-    return blockedDrafts;
+
+    // window.open()/anchor clicks on mailto: links don't give a reliable
+    // success/blocked signal, so we never silently drop a draft. Always return
+    // the remaining drafts so the UI can offer a one-click fallback for any the
+    // mail client didn't pick up.
+    return remainingDrafts;
 }
 
 
@@ -1063,7 +1079,7 @@ export default function App() {
                 customSubject: requestedEmailSubject,
             }),
         }));
-        const blockedEmailDrafts = openMailtoLinks(emailDrafts);
+        const fallbackEmailDrafts = openMailtoLinks(emailDrafts);
 
         const buyOrderRef = doc(collection(db, BUY_ORDERS_PATH));
         await setDoc(buyOrderRef, {
@@ -1089,8 +1105,8 @@ export default function App() {
                 body,
             })),
         });
-        if (blockedEmailDrafts.length > 0) {
-            setModal({ type: 'buy-order-drafts', data: { drafts: blockedEmailDrafts } });
+        if (fallbackEmailDrafts.length > 0) {
+            setModal({ type: 'buy-order-drafts', data: { drafts: fallbackEmailDrafts } });
         } else {
             closeModal();
         }

@@ -7,7 +7,7 @@ export const BuyOrderDraftsModal = ({ onClose, drafts = [] }) => (
     <BaseModal onClose={onClose} title="Open Remaining Emails" maxWidthClass="max-w-3xl">
         <div className="space-y-4">
             <p className="text-sm text-zinc-300">
-                Your first supplier email was opened automatically. The remaining drafts were blocked from opening automatically by the browser/runtime, so open them here one by one.
+                We tried to open an email for each supplier automatically. Some mail clients only accept one at a time, so if any draft below didn&apos;t open, click its button to open it.
             </p>
             {drafts.length === 0 ? (
                 <p className="text-zinc-400">No additional supplier drafts are waiting.</p>
