@@ -20,16 +20,14 @@ const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoO
                                 {items.length > 0 ? `${items.length} low stock item(s)` : 'No items currently low on stock'}
                             </p>
                         </div>
-                        <a
+                        <Button
+                            as="a"
                             href={createSupplierMailtoLink({ supplier, items, supplierInfoOverrides }).mailto}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            variant="primary"
                         >
-                            <Button variant="primary">
-                                <Mail size={16} />
-                                <span>Email Order</span>
-                            </Button>
-                        </a>
+                            <Mail size={16} />
+                            <span>Email Order</span>
+                        </Button>
                     </div>
                 )
             })}

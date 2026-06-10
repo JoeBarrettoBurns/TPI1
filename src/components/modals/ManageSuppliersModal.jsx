@@ -5,7 +5,7 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X, Save, Mail, RotateCcw } from 'lucide-react';
 import { SUPPLIER_INFO as DEFAULT_SUPPLIER_INFO, CC_EMAIL } from '../../constants/suppliers';
-import { getDefaultSupplierEmailBody, normalizeEmailPlainText } from '../../utils/buyOrderUtils';
+import { encodeMailtoRecipients, getDefaultSupplierEmailBody, normalizeEmailPlainText } from '../../utils/buyOrderUtils';
 
 const EMAIL_BODY_TEXTAREA_CLASS =
     'w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-sans text-sm leading-relaxed';
@@ -49,13 +49,13 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
 
     const buildMailtoLink = (name) => {
         const data = edits[name] || {};
-        const to = (data.email || '').trim();
+        const to = encodeMailtoRecipients(data.email || '');
         const subject = encodeURIComponent((data.subject || '').trim());
         const bodyText = (data.emailBody && data.emailBody.trim())
             ? normalizeEmailPlainText(data.emailBody)
             : getDefaultSupplierEmailBody(data);
         const body = encodeURIComponent(bodyText);
-        const cc = encodeURIComponent((data.ccEmail || CC_EMAIL || '').trim());
+        const cc = encodeMailtoRecipients(data.ccEmail || CC_EMAIL || '');
         return `mailto:${to}?cc=${cc}&subject=${subject}&body=${body}`;
     };
 
@@ -184,7 +184,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
                                                 ...edits[selected],
                                                 bodyTemplate: buildDefaultBodyTemplate(edits[selected]?.bodyMaterial),
                                             }))}><RotateCcw size={16} /><span>Reset to default from material</span></Button>
-                                            <a href={buildMailtoLink(selected)} target="_blank" rel="noopener noreferrer">
+                                            <a href={buildMailtoLink(selected)}>
                                                 <Button variant="ghost"><Mail size={16} /><span>Open Email</span></Button>
                                             </a>
                                             <Button onClick={() => handleSaveEdit(selected)}><Save size={16} /><span>Save Changes</span></Button>

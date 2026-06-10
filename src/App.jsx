@@ -95,8 +95,6 @@ function getBuyOrderPrimarySupplier(buyOrder) {
 function triggerMailto(mailto) {
     const link = document.createElement('a');
     link.href = mailto;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -110,20 +108,34 @@ function openMailtoLinks(emailDrafts = []) {
 
     const [firstDraft, ...remainingDrafts] = validDrafts;
 
-    // Open the first draft immediately while we still have the user gesture.
+    // The first draft navigates the current page; this is never blocked.
     triggerMailto(firstDraft.mailto);
 
-    // Stagger the rest: firing multiple mailto: launches at once causes the OS
-    // mail handler to drop some of them, so give each one time to register.
-    remainingDrafts.forEach((draft, index) => {
-        window.setTimeout(() => triggerMailto(draft.mailto), (index + 1) * 600);
+    // Browsers only allow launching an external app (the mail client) during a
+    // real user click. Delayed attempts (setTimeout, iframes) are silently
+    // blocked, so the ONLY way to open more drafts from one click is to call
+    // window.open for each one synchronously, inside the same click. The popup
+    // blocker may block these until the user chooses "Always allow pop-ups"
+    // for this site; anything blocked is returned for the fallback dialog.
+    const blockedDrafts = [];
+    remainingDrafts.forEach((draft) => {
+        const win = window.open(draft.mailto, '_blank');
+        if (!win) {
+            blockedDrafts.push(draft);
+        } else {
+            // The tab exists only to hand the mailto to the OS; close it after
+            // the mail client has had time to pick it up.
+            window.setTimeout(() => {
+                try {
+                    win.close();
+                } catch {
+                    /* ignore */
+                }
+            }, 4000);
+        }
     });
 
-    // window.open()/anchor clicks on mailto: links don't give a reliable
-    // success/blocked signal, so we never silently drop a draft. Always return
-    // the remaining drafts so the UI can offer a one-click fallback for any the
-    // mail client didn't pick up.
-    return remainingDrafts;
+    return blockedDrafts;
 }
 
 
