@@ -19,6 +19,7 @@ import {
 } from './utils/dataProcessing';
 import { STANDARD_LENGTHS } from './constants/materials';
 import { buildBuyOrderEmailBody, createSupplierMailtoLink } from './utils/buyOrderUtils';
+import { repairCountIssues } from './utils/countRepair';
 import { buildMaterialIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
 import { AI_ASSISTANT_ENABLED } from './constants/featureFlags';
 
@@ -190,6 +191,9 @@ export default function App() {
         clearAuthAccessDenied,
         refetchMaterials
     } = useFirestoreData({ loadInventoryDetails });
+
+    /** Audit identity stamped on log/inventory writes — the signed-in account. */
+    const auditActor = () => authUser?.email || authUser?.displayName || 'Unknown';
 
     useEffect(() => {
         if (!userId) {
@@ -705,6 +709,7 @@ export default function App() {
                         status: 'Scheduled',
                         details: itemsForLog,
                         qty: -totalItems,
+                        createdBy: auditActor(),
                     };
                     batch.set(logDocRef, logEntry);
                 }
@@ -756,6 +761,7 @@ export default function App() {
                     status: 'Completed',
                     details: usedItems,
                     qty: -usedItems.length,
+                    createdBy: auditActor(),
                 };
                 batch.set(logDocRef, logEntry);
             }
@@ -807,6 +813,8 @@ export default function App() {
                 details: selectedSheets,
                 qty: -selectedSheets.length,
                 fulfilledAt: nowIso,
+                lastEditedBy: auditActor(),
+                lastEditedAt: nowIso,
             });
 
             await batch.commit();
@@ -1035,6 +1043,8 @@ export default function App() {
                     status: job.status,
                     arrivalDate: job.status === 'Ordered' && localDate ? localDate.toISOString() : null,
                     dateReceived: null,
+                    createdBy: isEditing ? (originalOrderGroup.createdBy || auditActor()) : auditActor(),
+                    ...(isEditing ? { lastEditedBy: auditActor(), lastEditedAt: new Date().toISOString() } : {}),
                 };
 
                 STANDARD_LENGTHS.forEach(len => {
@@ -1178,7 +1188,12 @@ export default function App() {
         orderGroup.details.forEach(item => {
             if (item.id) {
                 const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
-                batch.update(docRef, { status: 'On Hand', dateReceived: new Date().toISOString().split('T')[0] });
+                batch.update(docRef, {
+                    status: 'On Hand',
+                    dateReceived: new Date().toISOString().split('T')[0],
+                    lastEditedBy: auditActor(),
+                    lastEditedAt: new Date().toISOString(),
+                });
             }
         });
         await batch.commit();
@@ -1212,6 +1227,7 @@ export default function App() {
                 density: materialInfo?.density || 0,
                 thickness: materialInfo?.thickness || 0,
                 manualEditSessionId: editSessionId,
+                createdBy: auditActor(),
             };
             for (let i = 0; i < diff; i++) {
                 const newDocRef = doc(inventoryCollectionRef);
@@ -1255,6 +1271,7 @@ export default function App() {
                 details: sheetsToUse,
                 qty: -sheetsToUse.length,
                 manualEditSessionId: editSessionId,
+                createdBy: auditActor(),
             });
         }
 
@@ -1339,6 +1356,8 @@ export default function App() {
                     qty: -selectedSheets.length,
                     usedAt: usedAtIso,
                     fulfilledAt: usedAtIso,
+                    lastEditedBy: auditActor(),
+                    lastEditedAt: usedAtIso,
                 });
 
                 await batch.commit();
@@ -1353,6 +1372,8 @@ export default function App() {
                     qty: -totalItems,
                     status: 'Scheduled',
                     fulfilledAt: null,
+                    lastEditedBy: auditActor(),
+                    lastEditedAt: new Date().toISOString(),
                 });
             }
         } else {
@@ -1440,8 +1461,10 @@ export default function App() {
                     qty: -totalItems,
                     status: 'Scheduled',
                     fulfilledAt: null,
+                    lastEditedBy: auditActor(),
+                    lastEditedAt: nowIso,
                 });
-                
+
                 await batch.commit();
                 return;
             }
@@ -1587,6 +1610,8 @@ export default function App() {
                     details: finalUsedItemsForLog,
                     qty: -finalUsedItemsForLog.length,
                     usedAt: usedAtIso,
+                    lastEditedBy: auditActor(),
+                    lastEditedAt: new Date().toISOString(),
                 });
                 
                 await batch.commit();
@@ -1682,6 +1707,7 @@ export default function App() {
                     onFulfillLog={handleFulfillScheduledLog}
                     onReceiveOrder={handleReceiveOrder}
                     searchQuery={searchQuery}
+                    onRepairCountIssues={(issues) => repairCountIssues(db, appId, issues, usageLog, `Count Repair (${auditActor()})`)}
                 />;
             case 'price-history':
                 return <PriceHistoryView inventory={inventory} materials={materials} searchQuery={searchQuery} />;

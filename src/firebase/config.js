@@ -10,7 +10,7 @@ import {
     GoogleAuthProvider,
     signOut,
 } from 'firebase/auth';
-import { getFirestore, setLogLevel } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
     apiKey: "AIzaSyBuNRK1SCGJcQ76BFAyEEnYZh-V84AJLFM",
@@ -51,6 +51,3 @@ export {
     GoogleAuthProvider,
     signOut,
 };
-
-// Set the log level for debugging Firebase issues.
-setLogLevel('debug');

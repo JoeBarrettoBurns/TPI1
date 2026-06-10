@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { Edit, Trash2, Truck } from 'lucide-react';
 import { LogItemSummary } from './LogItemSummary';
+import { AuditTag } from '../common/AuditTag';
 
 // Helper function to generate a detailed description with shortened names
 const generateDescription = (details) => {
@@ -87,7 +88,12 @@ export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDel
                             <td className="px-3 py-2 text-zinc-300 w-full">
                                 <LogItemSummary details={item.displayDetails} materials={materials} tone="incoming" />
                             </td>
-                            <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">{new Date(item.dateOrdered).toLocaleDateString()}</td>
+                            <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">
+                                <div>{new Date(item.dateOrdered).toLocaleDateString()}</div>
+                                <div className="mt-1 flex justify-center">
+                                    <AuditTag createdBy={item.createdBy} lastEditedBy={item.lastEditedBy} />
+                                </div>
+                            </td>
                             <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">
                                 {item.dateIncoming ? new Date(item.dateIncoming).toLocaleDateString() : 'N/A'}
                             </td>

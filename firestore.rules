@@ -59,9 +59,13 @@ service cloud.firestore {
              (isFallbackStaff() || isAllowlisted());
     }
 
-    // Allow any authenticated user to read/write the allowlist so the client can self-heal casing mismatches
+    // Any signed-in user may READ the allowlist (the client needs it to evaluate access
+    // before it knows whether the user is staff), but only allowlisted/staff accounts may
+    // WRITE it. Leaving this writable to any authenticated user would let anyone with a
+    // Google account add themselves and gain full access to the app data.
     match /artifacts/{appId}/config/access_allowlist {
-      allow read, write: if request.auth != null && isExpectedAppId(appId);
+      allow read: if request.auth != null && isExpectedAppId(appId);
+      allow write: if hasAccess(appId);
     }
 
     // Protect all actual app data

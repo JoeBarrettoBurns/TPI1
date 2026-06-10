@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { Edit, Trash2, CalendarClock, Truck } from 'lucide-react';
 import { LogItemSummary } from './LogItemSummary';
+import { AuditTag } from '../common/AuditTag';
 
 // Helper function to generate a detailed description with shortened names
 const generateDescription = (details) => {
@@ -77,6 +78,9 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
                                 <div className="flex items-center justify-center gap-2">
                                     {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" title="Scheduled" />}
                                     <span>{new Date(item.usedAt || item.createdAt).toLocaleDateString()}</span>
+                                </div>
+                                <div className="mt-1 flex justify-center">
+                                    <AuditTag createdBy={item.createdBy} lastEditedBy={item.lastEditedBy} />
                                 </div>
                             </td>
                             <td className="px-3 py-2 truncate text-zinc-300">{item.job}</td>

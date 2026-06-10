@@ -14,7 +14,7 @@ const getLength = (item) => {
     return length ? `${length}"` : null;
 };
 
-const summarizeDetails = (details) => {
+export const summarizeDetails = (details) => {
     if (!Array.isArray(details) || details.length === 0) return [];
 
     const groups = details.reduce((acc, item) => {

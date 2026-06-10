@@ -255,6 +255,9 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
                 isAddition: true,
                 isHistoryOnly: !!item.__historyOnly,
                 sourceUsageLog: item.__sourceUsageLog || null,
+                createdBy: item.createdBy || null,
+                lastEditedBy: null,
+                lastEditedAt: null,
                 materials: {},
                 details: [],
                 displayDetails: [],
@@ -272,6 +275,15 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
         }
         if (!group.sourceUsageLog && item.__sourceUsageLog) {
             group.sourceUsageLog = item.__sourceUsageLog;
+        }
+        if (!group.createdBy && item.createdBy) group.createdBy = item.createdBy;
+        if (item.lastEditedBy) {
+            const itemEditMs = item.lastEditedAt ? new Date(item.lastEditedAt).getTime() : 0;
+            const groupEditMs = group.lastEditedAt ? new Date(group.lastEditedAt).getTime() : 0;
+            if (!group.lastEditedBy || itemEditMs >= groupEditMs) {
+                group.lastEditedBy = item.lastEditedBy;
+                group.lastEditedAt = item.lastEditedAt || group.lastEditedAt;
+            }
         }
         group.isFuture = group.isFuture || item.status === 'Ordered';
         group.isReceived = group.isReceived || !!item.dateReceived;
@@ -331,6 +343,30 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
                 if (log.id) group._sourceLogIds.add(log.id);
             });
     });
+
+    // Sheets consumed by jobs leave the On Hand/Ordered inventory queries, but their
+    // snapshots live on in completed usage logs. Merge them back as display-only
+    // details so each incoming group keeps the quantities that were originally
+    // logged (mirrors calculateMaterialTransactions / groupLogsByJob).
+    usageLog
+        .filter(log =>
+            (log.status || 'Completed') === 'Completed' &&
+            !(log.job === 'MODIFICATION: REMOVE' && log.customer === 'Manual Edit')
+        )
+        .forEach(log => {
+            (log.details || []).forEach(detail => {
+                if (!detail?.id || !detail.materialType) return;
+                if ((detail.job || '').startsWith('MODIFICATION') && detail.returnedByLogEdit) return;
+                addInventoryItemToGroup(
+                    {
+                        ...detail,
+                        createdAt: detail.createdAt || log.createdAt,
+                        __historyOnly: true,
+                    },
+                    { includeDeletableDetail: false }
+                );
+            });
+        });
 
     return Object.values(grouped)
         .map(({ _detailIds, _displayDetailIds, _sourceLogIds, ...group }) => ({
