@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useOrderForm } from '../../hooks/useOrderForm';
 import { formatUseStockJobLabel } from '../../utils/dataProcessing';
+import { localDateInputValue } from '../../utils/dates';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
@@ -60,7 +61,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
                 const materialType = match[1];
                 const incoming = incomingSummary[materialType];
                 if (incoming && incoming.totalCount > 0 && incoming.latestArrivalDate) {
-                    const arrivalDate = new Date(incoming.latestArrivalDate).toISOString().split('T')[0];
+                    const arrivalDate = localDateInputValue(incoming.latestArrivalDate);
                     setScheduleSuggestion({
                         materialType: materialType,
                         count: incoming.totalCount,

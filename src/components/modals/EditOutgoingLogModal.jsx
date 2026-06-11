@@ -7,6 +7,7 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { STANDARD_LENGTHS } from '../../constants/materials';
 import { splitUseStockJobFields, formatUseStockJobLabel } from '../../utils/dataProcessing';
+import { localDateInputValue } from '../../utils/dates';
 
 export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory, materialTypes }) => {
     const [jobData, setJobData] = useState({
@@ -36,16 +37,7 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
             });
 
             // Format to YYYY-MM-DD using local time components to avoid off-by-one
-            const formatDateForInput = (isoString) => {
-                if (!isoString) return '';
-                const d = new Date(isoString);
-                const year = d.getFullYear();
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            };
-
-            const dateForInput = formatDateForInput(logEntry.usedAt || logEntry.createdAt);
+            const dateForInput = localDateInputValue(logEntry.usedAt || logEntry.createdAt);
 
             const { jobNumber, jobSection, joinWith } = splitUseStockJobFields(logEntry.job || '');
 

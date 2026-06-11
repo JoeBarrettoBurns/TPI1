@@ -10,7 +10,12 @@ import {
     GoogleAuthProvider,
     signOut,
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+    getFirestore,
+    initializeFirestore,
+    persistentLocalCache,
+    persistentMultipleTabManager,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
     apiKey: "AIzaSyBuNRK1SCGJcQ76BFAyEEnYZh-V84AJLFM",
@@ -39,7 +44,18 @@ function getSecondaryApp() {
 /** Separate Auth instance so creating an email/password user does not replace the signed-in admin session. */
 export const secondaryAuth = getAuth(getSecondaryApp());
 
-export const db = getFirestore(app);
+// Persistent IndexedDB cache: repeat visits render from local data instantly
+// while listeners sync only the deltas from the server.
+let firestoreDb;
+try {
+    firestoreDb = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+} catch (e) {
+    console.warn('Persistent Firestore cache unavailable; falling back to default cache.', e);
+    firestoreDb = getFirestore(app);
+}
+export const db = firestoreDb;
 
 export {
     onAuthStateChanged,

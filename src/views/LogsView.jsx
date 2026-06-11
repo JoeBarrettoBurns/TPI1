@@ -164,7 +164,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
         return grouped.filter(group =>
             (group.job || '').toLowerCase().includes(lowercasedQuery) ||
             (group.supplier || '').toLowerCase().includes(lowercasedQuery) ||
-            (group.displayDetails || group.details || []).some(d => d.materialType.toLowerCase().includes(lowercasedQuery))
+            (group.displayDetails || group.details || []).some(d => (d.materialType || '').toLowerCase().includes(lowercasedQuery))
         );
     }, [inventory, usageLog, searchQuery]);
 
@@ -175,7 +175,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
         return filtered.filter(log =>
             (log.job || '').toLowerCase().includes(lowercasedQuery) ||
             (log.customer || '').toLowerCase().includes(lowercasedQuery) ||
-            log.details.some(d => d.materialType.toLowerCase().includes(lowercasedQuery))
+            (log.details || []).some(d => (d.materialType || '').toLowerCase().includes(lowercasedQuery))
         );
     }, [usageLog, searchQuery]);
 

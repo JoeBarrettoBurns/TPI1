@@ -1,13 +1,10 @@
 import { useState, useCallback } from 'react';
 import { STANDARD_LENGTHS } from '../constants/materials';
+import { localDateInputValue } from '../utils/dates';
 
 function toInputDate(value) {
     if (!value) return '';
-    try {
-        return new Date(value).toISOString().split('T')[0];
-    } catch {
-        return '';
-    }
+    return localDateInputValue(value);
 }
 
 export function useOrderForm(initialData, materialTypes, suppliers, prefill = null, options = {}) {

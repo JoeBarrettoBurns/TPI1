@@ -21,6 +21,7 @@ import { STANDARD_LENGTHS } from './constants/materials';
 import { buildBuyOrderEmailBody, createSupplierMailtoLink } from './utils/buyOrderUtils';
 import { repairCountIssues } from './utils/countRepair';
 import { buildMaterialIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
+import { localDateInputValue } from './utils/dates';
 import { AI_ASSISTANT_ENABLED } from './constants/featureFlags';
 
 // Layout & Common Components
@@ -61,7 +62,7 @@ const BUY_ORDERS_PATH = `artifacts/${appId}/public/data/buy_orders`;
 const LATEST_BUY_ORDER_LIMIT = 15;
 
 function getTodayDateInputValue() {
-    return new Date().toISOString().split('T')[0];
+    return localDateInputValue();
 }
 
 function createManualEditSessionId() {
@@ -164,15 +165,6 @@ export default function App() {
     const [fuse, setFuse] = useState(null);
     const [isAssistantVisible, setIsAssistantVisible] = useState(false);
     const [openBuyOrders, setOpenBuyOrders] = useState([]);
-    // Full inventory + live inventory listeners are heavy; delay until a view needs them or after idle warmup.
-    const shouldLoadInventoryDetails = useMemo(() => {
-        const lightweightViews = new Set(['dashboard', 'sheet-calculator']);
-        const inventoryDependentModals = new Set(['use', 'edit-log', 'edit-order']);
-        return !lightweightViews.has(activeView) || isEditMode || inventoryDependentModals.has(modal.type);
-    }, [activeView, isEditMode, modal.type]);
-
-    const [inventoryDetailsWarmup, setInventoryDetailsWarmup] = useState(false);
-    const loadInventoryDetails = shouldLoadInventoryDetails || inventoryDetailsWarmup;
 
     const {
         inventory,
@@ -190,41 +182,10 @@ export default function App() {
         authDeniedDetail,
         clearAuthAccessDenied,
         refetchMaterials
-    } = useFirestoreData({ loadInventoryDetails });
+    } = useFirestoreData();
 
     /** Audit identity stamped on log/inventory writes — the signed-in account. */
     const auditActor = () => authUser?.email || authUser?.displayName || 'Unknown';
-
-    useEffect(() => {
-        if (!userId) {
-            setInventoryDetailsWarmup(false);
-            return undefined;
-        }
-        if (shouldLoadInventoryDetails) {
-            setInventoryDetailsWarmup(true);
-            return undefined;
-        }
-        if (inventoryDetailsWarmup) {
-            return undefined;
-        }
-        let cancelled = false;
-        const enable = () => {
-            if (!cancelled) {
-                setInventoryDetailsWarmup(true);
-            }
-        };
-        const idleId = typeof window.requestIdleCallback === 'function'
-            ? window.requestIdleCallback(enable, { timeout: 2500 })
-            : window.setTimeout(enable, 200);
-        return () => {
-            cancelled = true;
-            if (typeof window.cancelIdleCallback === 'function') {
-                window.cancelIdleCallback(idleId);
-            } else {
-                window.clearTimeout(idleId);
-            }
-        };
-    }, [userId, shouldLoadInventoryDetails, inventoryDetailsWarmup]);
 
     const { suppliers, setSuppliers, supplierInfo, setSupplierInfo } = useSuppliersSync(userId);
 
@@ -333,7 +294,7 @@ export default function App() {
         return Object.keys(incomingSummaryData || {}).length > 0 ? incomingSummaryData : calculatedIncomingSummary;
     }, [inventory.length, calculatedIncomingSummary, incomingSummaryData]);
     const scheduledOutgoingSummary = useMemo(() => calculateScheduledOutgoingSummary(usageLog, materialTypes), [usageLog, materialTypes]);
-    const showLoading = loading || (shouldLoadInventoryDetails && !inventoryReady);
+    const showLoading = loading || !inventoryReady;
 
     const handleSignOut = useCallback(async () => {
         try {
@@ -420,7 +381,10 @@ export default function App() {
         const item = result.item;
         switch (item.type) {
             case 'command':
-                if (item.view && activeView !== item.view) break;
+                // View-scoped commands (e.g. Edit/Finish) navigate there first instead of silently doing nothing.
+                if (item.view && activeView !== item.view) {
+                    setActiveView(item.view);
+                }
                 item.action();
                 break;
             case 'view':
@@ -718,7 +682,10 @@ export default function App() {
             return;
         }
 
-        // Use Now: skip individual transaction reads for speed
+        // Use Now: skip individual transaction reads for speed.
+        // Sheets already taken by an earlier item/job in this same submission must
+        // not be selected again, or two log entries would claim the same sheet.
+        const allocatedSheetIds = new Set();
         for (const job of jobs) {
             const logDocRef = doc(usageLogCollectionRef);
             const usedItems = [];
@@ -729,7 +696,7 @@ export default function App() {
                     if (qty <= 0) continue;
 
                     const matchingSheets = inventory
-                        .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand')
+                        .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !allocatedSheetIds.has(i.id))
                         .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
                     if (matchingSheets.length < qty) {
@@ -739,7 +706,8 @@ export default function App() {
                     const sheetsToUse = matchingSheets.slice(0, qty);
                     for (const sheet of sheetsToUse) {
                         const ref = doc(inventoryCollectionRef, sheet.id);
-                        usedItems.push({ id: sheet.id, ...sheet });
+                        allocatedSheetIds.add(sheet.id);
+                        usedItems.push({ ...sheet, status: 'Used' });
                         batch.update(ref, {
                             status: 'Used',
                             usageLogId: logDocRef.id,
@@ -810,7 +778,7 @@ export default function App() {
             const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
             batch.update(logDocRef, {
                 status: 'Completed',
-                details: selectedSheets,
+                details: selectedSheets.map(s => ({ ...s, status: 'Used' })),
                 qty: -selectedSheets.length,
                 fulfilledAt: nowIso,
                 lastEditedBy: auditActor(),
@@ -1190,7 +1158,7 @@ export default function App() {
                 const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
                 batch.update(docRef, {
                     status: 'On Hand',
-                    dateReceived: new Date().toISOString().split('T')[0],
+                    dateReceived: localDateInputValue(),
                     lastEditedBy: auditActor(),
                     lastEditedAt: new Date().toISOString(),
                 });
@@ -1221,7 +1189,7 @@ export default function App() {
                 createdAt: nowIso,
                 job: `MODIFICATION: ADD`,
                 status: 'On Hand',
-                dateReceived: nowIso.split('T')[0],
+                dateReceived: localDateInputValue(),
                 width: 48,
                 length: length,
                 density: materialInfo?.density || 0,
@@ -1268,7 +1236,7 @@ export default function App() {
                 usedAt: nowIso,
                 createdAt: nowIso,
                 status: 'Completed',
-                details: sheetsToUse,
+                details: sheetsToUse.map(s => ({ ...s, status: 'Used' })),
                 qty: -sheetsToUse.length,
                 manualEditSessionId: editSessionId,
                 createdBy: auditActor(),
@@ -1352,7 +1320,7 @@ export default function App() {
                     job: newLogData.jobName.trim() || 'N/A',
                     customer: newLogData.customer,
                     status: 'Completed',
-                    details: selectedSheets,
+                    details: selectedSheets.map(s => ({ ...s, status: 'Used' })),
                     qty: -selectedSheets.length,
                     usedAt: usedAtIso,
                     fulfilledAt: usedAtIso,
@@ -1417,7 +1385,7 @@ export default function App() {
                         job: d.job || 'N/A',
                         status: 'On Hand',
                         arrivalDate: null,
-                        dateReceived: nowIso.slice(0, 10),
+                        dateReceived: localDateInputValue(),
                         width: d.width || 48,
                         length: d.length,
                         density: d.density ?? materials[d.materialType]?.density ?? 0,
@@ -1529,6 +1497,13 @@ export default function App() {
                 const returnDetailIds = new Set();
 
                 Object.entries(originalItemsByKey).forEach(([key, details]) => {
+                    // The edit form only exposes standard lengths; custom-length sheets
+                    // stay on the log untouched instead of being silently returned.
+                    const lengthFromKey = parseInt(key.split('|')[1], 10);
+                    if (!STANDARD_LENGTHS.includes(lengthFromKey)) {
+                        keptOriginalDetails.push(...details);
+                        return;
+                    }
                     const desiredQty = desiredCounts[key] || 0;
                     const keepCount = Math.min(details.length, desiredQty);
                     keptOriginalDetails.push(...details.slice(0, keepCount));
@@ -1603,7 +1578,8 @@ export default function App() {
                     batch.update(r, usageUpdate);
                 }
 
-                const finalUsedItemsForLog = [...keptItemsForLog, ...updatedUsedItemsForLog];
+                const finalUsedItemsForLog = [...keptItemsForLog, ...updatedUsedItemsForLog]
+                    .map(d => ({ ...d, status: 'Used' }));
                 batch.update(logDocRef, {
                     job: newLogData.jobName,
                     customer: newLogData.customer,
