@@ -1,42 +1,65 @@
 // src/components/dashboard/MaterialDetailItem.jsx
 
-import React, { useState, useMemo, forwardRef } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { calculateMaterialTransactions } from '../../utils/dataProcessing';
-import { STANDARD_LENGTHS } from '../../constants/materials';
-import { LogDetailModal } from '../modals/LogDetailModal';
-import { ConfirmationModal } from '../modals/ConfirmationModal';
-import { Truck, Edit, Trash2, GripVertical } from 'lucide-react';
+import React, { useState, useMemo, forwardRef } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { calculateMaterialTransactions } from "../../utils/dataProcessing";
+import { STANDARD_LENGTHS } from "../../constants/materials";
+import { LogDetailModal } from "../modals/LogDetailModal";
+import { ConfirmationModal } from "../modals/ConfirmationModal";
+import { Truck, Edit, Trash2, GripVertical } from "lucide-react";
 
-export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog, inventorySummary, incomingSummary, onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog, materials, isDragging, highlighted, isEditMode }, ref) => {
+export const MaterialDetailItem = forwardRef(
+  (
+    {
+      id,
+      matType,
+      inventory,
+      usageLog,
+      inventorySummary,
+      incomingSummary,
+      onDeleteLog,
+      onDeleteInventoryGroup,
+      onEditOrder,
+      onReceiveOrder,
+      onFulfillLog,
+      materials,
+      isDragging,
+      highlighted,
+      isEditMode,
+    },
+    ref,
+  ) => {
     const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging: isSortableDragging,
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging: isSortableDragging,
     } = useSortable({ id, disabled: !isEditMode });
 
     const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isSortableDragging ? 0.5 : 1,
-        boxShadow: isDragging ? '0 25px 50px -12px rgb(0 0 0 / 0.25)' : '',
-        zIndex: isDragging ? 10 : 'auto',
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isSortableDragging ? 0.5 : 1,
+      boxShadow: isDragging ? "0 25px 50px -12px rgb(0 0 0 / 0.25)" : "",
+      zIndex: isDragging ? 10 : "auto",
     };
 
-    const transactions = useMemo(() => calculateMaterialTransactions([matType], inventory, usageLog), [matType, inventory, usageLog]);
+    const transactions = useMemo(
+      () => calculateMaterialTransactions([matType], inventory, usageLog),
+      [matType, inventory, usageLog],
+    );
 
     const [detailLog, setDetailLog] = useState(null);
     const [logToDelete, setLogToDelete] = useState(null);
     const [numToShow, setNumToShow] = useState(5);
 
     const matTransactions = (transactions[matType] || []).filter((t) => {
-        const job = t.job || '';
-        if (!job.startsWith('MODIFICATION')) return true;
-        return t.customer === 'Manual Edit' || t.supplier === 'Manual Edit';
+      const job = t.job || "";
+      if (!job.startsWith("MODIFICATION")) return true;
+      return t.customer === "Manual Edit" || t.supplier === "Manual Edit";
     });
     const visibleTransactions = matTransactions.slice(0, numToShow);
     const totalIncomingSheets = incomingSummary[matType]?.totalCount || 0;
@@ -44,178 +67,317 @@ export const MaterialDetailItem = forwardRef(({ id, matType, inventory, usageLog
 
     // Compute FUTURE USE (scheduled) summary for this material
     const futureUseByLength = useMemo(() => {
-        const totals = { 96: 0, 120: 0, 144: 0 };
-        (usageLog || [])
-            .filter(log => (log.status || 'Completed') === 'Scheduled' && Array.isArray(log.details))
-            .forEach(log => {
-                log.details.forEach(d => {
-                    if (d.materialType === matType && STANDARD_LENGTHS.includes(d.length)) {
-                        totals[d.length] = (totals[d.length] || 0) + 1;
-                    }
-                });
-            });
-        return totals;
+      const totals = { 96: 0, 120: 0, 144: 0 };
+      (usageLog || [])
+        .filter(
+          (log) =>
+            (log.status || "Completed") === "Scheduled" &&
+            Array.isArray(log.details),
+        )
+        .forEach((log) => {
+          log.details.forEach((d) => {
+            if (
+              d.materialType === matType &&
+              STANDARD_LENGTHS.includes(d.length)
+            ) {
+              totals[d.length] = (totals[d.length] || 0) + 1;
+            }
+          });
+        });
+      return totals;
     }, [usageLog, matType]);
 
-    const totalFutureUseSheets = (futureUseByLength[96] || 0) + (futureUseByLength[120] || 0) + (futureUseByLength[144] || 0);
-    const nextScheduledUse = useMemo(() => {
-        const dates = (usageLog || [])
-            .filter(log => (log.status || 'Completed') === 'Scheduled' && Array.isArray(log.details) && log.details.some(d => d.materialType === matType))
-            .map(log => log.usedAt)
-            .filter(Boolean)
-            .map(d => new Date(d))
-            .sort((a, b) => a - b);
-        return dates.length > 0 ? dates[0] : null;
-    }, [usageLog, matType]);
+    const totalFutureUseSheets =
+      (futureUseByLength[96] || 0) +
+      (futureUseByLength[120] || 0) +
+      (futureUseByLength[144] || 0);
+    // Date when all incoming orders have arrived and all scheduled use is fulfilled
+    const projectionCompleteDate = useMemo(() => {
+      const dates = (usageLog || [])
+        .filter(
+          (log) =>
+            (log.status || "Completed") === "Scheduled" &&
+            Array.isArray(log.details) &&
+            log.details.some((d) => d.materialType === matType),
+        )
+        .map((log) => log.usedAt)
+        .filter(Boolean)
+        .map((d) => new Date(d));
+      if (latestArrival) dates.push(new Date(latestArrival));
+      if (dates.length === 0) return null;
+      return new Date(Math.max(...dates.map((d) => d.getTime())));
+    }, [usageLog, matType, latestArrival]);
 
     const handleConfirmDelete = () => {
-        if (!logToDelete) return;
-        if (logToDelete.isAddition) {
-            onDeleteInventoryGroup(logToDelete);
-        } else {
-            onDeleteLog(logToDelete.id);
-        }
-        setLogToDelete(null);
+      if (!logToDelete) return;
+      if (logToDelete.isAddition) {
+        onDeleteInventoryGroup(logToDelete);
+      } else {
+        onDeleteLog(logToDelete.id);
+      }
+      setLogToDelete(null);
     };
 
     // Correctly combine the ref from dnd-kit and the parent component's ref
     const combinedRef = (node) => {
-        setNodeRef(node);
-        if (typeof ref === 'function') {
-            ref(node);
-        } else if (ref) {
-            ref.current = node;
-        }
+      setNodeRef(node);
+      if (typeof ref === "function") {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
     };
 
     return (
+      <div
+        ref={combinedRef}
+        style={style}
+        {...attributes}
+        className={`bg-zinc-800 rounded-xl shadow-lg border border-zinc-700 overflow-hidden transition-all duration-300 ${highlighted ? "ring-2 ring-blue-500 shadow-xl shadow-blue-500/20" : "ring-0 ring-transparent"}`}
+      >
         <div
-            ref={combinedRef}
-            style={style}
-            {...attributes}
-            className={`bg-zinc-800 rounded-xl shadow-lg border border-zinc-700 overflow-hidden transition-all duration-300 ${highlighted ? 'ring-2 ring-blue-500 shadow-xl shadow-blue-500/20' : 'ring-0 ring-transparent'}`}
+          {...listeners}
+          className={`p-4 bg-zinc-900/50 flex flex-wrap justify-between items-center gap-4 ${isEditMode ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
         >
-            <div {...listeners} className={`p-4 bg-zinc-900/50 flex flex-wrap justify-between items-center gap-4 ${isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}>
-                <div>
-                    <h3 className="text-2xl font-bold text-blue-400">{matType}</h3>
-                    <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 mt-2">
-                        <div>
-                            <h4 className="text-sm font-semibold text-zinc-400 mb-1">CURRENT INVENTORY</h4>
-                            <div className="flex gap-4">
-                                {STANDARD_LENGTHS.map(len => (
-                                    <div key={len} className="text-center">
-                                        <div className="text-xs text-zinc-500">{len}"x48"</div>
-                                        <div className="text-2xl font-bold text-green-300">{inventorySummary[matType]?.[len] || 0}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        {totalIncomingSheets > 0 && (
-                            <div>
-                                <h4 className="text-sm font-semibold text-zinc-400 mb-1">FUTURE INVENTORY</h4>
-                                <div className="flex gap-4">
-                                    {STANDARD_LENGTHS.map(len => {
-                                        const currentStock = inventorySummary[matType]?.[len] || 0;
-                                        const incomingStock = incomingSummary[matType]?.lengths[len] || 0;
-                                        const projectedTotal = currentStock + incomingStock;
-                                        return (
-                                            <div key={len} className="text-center">
-                                                <div className="text-xs text-zinc-500">{len}"x48"</div>
-                                                <div className="text-2xl font-bold text-yellow-300">
-                                                    {projectedTotal}
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                                {latestArrival && (
-                                    <div className="text-xs text-yellow-400 mt-1 text-center sm:text-left">
-                                        (Latest Due: {new Date(latestArrival).toLocaleDateString()})
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        {totalFutureUseSheets > 0 && (
-                            <div>
-                                <h4 className="text-sm font-semibold text-zinc-400 mb-1">FUTURE USE</h4>
-                                <div className="flex gap-4">
-                                    {STANDARD_LENGTHS.map(len => (
-                                        <div key={len} className="text-center">
-                                            <div className="text-xs text-zinc-500">{len}"x48"</div>
-                                            <div className="text-2xl font-bold text-purple-300">
-                                                {futureUseByLength[len] || 0}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                {nextScheduledUse && (
-                                    <div className="text-xs text-purple-300 mt-1 text-center sm:text-left">
-                                        (Next: {new Date(nextScheduledUse).toLocaleDateString()})
-                                    </div>
-                                )}
-                            </div>
-                        )}
+          <div>
+            <h3 className="text-2xl font-bold text-blue-400">{matType}</h3>
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 mt-2">
+              <div>
+                <h4 className="text-sm font-semibold text-zinc-400 mb-1">
+                  CURRENT INVENTORY
+                </h4>
+                <div className="flex gap-4">
+                  {STANDARD_LENGTHS.map((len) => (
+                    <div key={len} className="text-center">
+                      <div className="text-xs text-zinc-500">{len}"x48"</div>
+                      <div className="text-2xl font-bold text-green-300">
+                        {inventorySummary[matType]?.[len] || 0}
+                      </div>
                     </div>
+                  ))}
                 </div>
-                <div className="flex items-center gap-2">
-                    {isEditMode && <GripVertical className="text-zinc-500 mr-4" />}
-                    <label htmlFor={`show-orders-${matType}`} className="text-sm text-zinc-400">Show:</label>
-                    <select id={`show-orders-${matType}`} value={numToShow > 20 ? 'all' : numToShow} onChange={(e) => setNumToShow(e.target.value === 'all' ? 10000 : parseInt(e.target.value, 10))} className="bg-zinc-700 text-white p-2 rounded-lg">
-                        <option value={5}>5</option>
-                        <option value={10}>10</option>
-                        <option value={20}>20</option>
-                        <option value={'all'}>All</option>
-                    </select>
+              </div>
+              {(totalIncomingSheets > 0 || totalFutureUseSheets > 0) && (
+                <div>
+                  <h4 className="text-sm font-semibold text-zinc-400 mb-1">
+                    PROJECTED INVENTORY
+                  </h4>
+                  <div className="flex gap-4">
+                    {STANDARD_LENGTHS.map((len) => {
+                      const currentStock =
+                        inventorySummary[matType]?.[len] || 0;
+                      const incomingStock =
+                        incomingSummary[matType]?.lengths[len] || 0;
+                      const scheduledUse = futureUseByLength[len] || 0;
+                      const projectedTotal =
+                        currentStock + incomingStock - scheduledUse;
+                      const netChange = incomingStock - scheduledUse;
+                      const numberColor =
+                        projectedTotal < 0
+                          ? "text-red-800"
+                          : projectedTotal === 0
+                            ? "text-orange-400"
+                            : netChange > 0
+                              ? "text-green-300"
+                              : netChange < 0
+                                ? "text-red-400"
+                                : "text-zinc-300";
+                      return (
+                        <div key={len} className="text-center">
+                          <div className="text-xs text-zinc-500">
+                            {len}"x48"
+                          </div>
+                          <div className={`text-2xl font-bold ${numberColor}`}>
+                            {projectedTotal}
+                          </div>
+                          {(incomingStock > 0 || scheduledUse > 0) && (
+                            <div className="text-[10px] font-mono">
+                              {incomingStock > 0 && (
+                                <span className="text-green-400">
+                                  +{incomingStock}
+                                </span>
+                              )}
+                              {incomingStock > 0 && scheduledUse > 0 && (
+                                <span className="text-zinc-600"> </span>
+                              )}
+                              {scheduledUse > 0 && (
+                                <span className="text-purple-400">
+                                  -{scheduledUse}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {projectionCompleteDate && (
+                    <div className="text-xs text-yellow-400 mt-1 text-center sm:text-left">
+                      (All done by:{" "}
+                      {projectionCompleteDate.toLocaleDateString()})
+                    </div>
+                  )}
                 </div>
+              )}
             </div>
-            {!isDragging && (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-zinc-900/80">
-                            <tr className="border-t border-b border-zinc-700">
-                                <th className="p-3 font-semibold text-zinc-400">ORDER/JOB</th>
-                                <th className="p-3 font-semibold text-zinc-400">DATE</th>
-                                <th className="p-3 font-semibold text-zinc-400">CUSTOMER/SUPPLIER</th>
-                                {STANDARD_LENGTHS.map(len => (<th key={len} className="p-3 font-semibold text-zinc-400 text-center">{len}"x48"</th>))}
-                                <th className="p-3 font-semibold text-zinc-400 text-center">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {visibleTransactions.map((t) => {
-                                const rowClass = !t.isAddition && t.isFuture ? 'bg-purple-900/30'
-                                    : t.isFuture ? 'bg-yellow-900/20'
-                                        : !t.isAddition ? 'bg-red-900/20'
-                                            : '';
-                                
-                                const displayDate = t.isAddition ? (t.arrivalDate || t.date) : t.usedAt;
-
-                                return (
-                                    <tr key={t.id} onClick={() => setDetailLog(t)} className={`border-b border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 ${rowClass}`}>
-                                        <td className="p-3 whitespace-nowrap">{t.job}</td>
-                                        <td className="p-3 whitespace-nowrap">{displayDate ? new Date(displayDate).toLocaleDateString() : 'N/A'}</td>
-                                        <td className="p-3 whitespace-nowrap">{t.customer}</td>
-                                        {STANDARD_LENGTHS.map(len => (
-                                            <td key={len} className={`p-3 text-center font-mono ${t[len] < 0 ? 'text-red-400' : 'text-zinc-300'}`}>{t[len] || ''}</td>
-                                        ))}
-                                        <td className="p-3 text-center">
-                                            {t.isFuture && t.isAddition && <button title="Receive Order" onClick={(e) => { e.stopPropagation(); onReceiveOrder(t); }} className="text-green-500 hover:text-green-400 mr-2"><Truck size={16} /></button>}
-                                            {t.isFulfillable && <button title="Fulfill Scheduled Usage" onClick={(e) => { e.stopPropagation(); onFulfillLog(t); }} className="text-purple-400 hover:text-purple-300 mr-2"><Truck size={16} /></button>}
-                                            {t.isDeletable && (
-                                                <>
-                                                    <button title="Edit" onClick={(e) => { e.stopPropagation(); onEditOrder(t); }} className="text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
-                                                    <button title="Delete" onClick={(e) => { e.stopPropagation(); setLogToDelete(t); }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
-                                                </>
-                                            )}
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                    <LogDetailModal isOpen={!!detailLog} onClose={() => setDetailLog(null)} logEntry={detailLog} materials={materials} />
-                    <ConfirmationModal isOpen={!!logToDelete} onClose={() => setLogToDelete(null)} onConfirm={handleConfirmDelete} title="Delete Entry" message="Are you sure you want to delete this entry? This action cannot be undone." />
-                </div>
-            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {isEditMode && <GripVertical className="text-zinc-500 mr-4" />}
+            <label
+              htmlFor={`show-orders-${matType}`}
+              className="text-sm text-zinc-400"
+            >
+              Show:
+            </label>
+            <select
+              id={`show-orders-${matType}`}
+              value={numToShow > 20 ? "all" : numToShow}
+              onChange={(e) =>
+                setNumToShow(
+                  e.target.value === "all"
+                    ? 10000
+                    : parseInt(e.target.value, 10),
+                )
+              }
+              className="bg-zinc-700 text-white p-2 rounded-lg"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={"all"}>All</option>
+            </select>
+          </div>
         </div>
+        {!isDragging && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-zinc-900/80">
+                <tr className="border-t border-b border-zinc-700">
+                  <th className="p-3 font-semibold text-zinc-400">ORDER/JOB</th>
+                  <th className="p-3 font-semibold text-zinc-400">DATE</th>
+                  <th className="p-3 font-semibold text-zinc-400">
+                    CUSTOMER/SUPPLIER
+                  </th>
+                  {STANDARD_LENGTHS.map((len) => (
+                    <th
+                      key={len}
+                      className="p-3 font-semibold text-zinc-400 text-center"
+                    >
+                      {len}"x48"
+                    </th>
+                  ))}
+                  <th className="p-3 font-semibold text-zinc-400 text-center">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleTransactions.map((t) => {
+                  const rowClass =
+                    !t.isAddition && t.isFuture
+                      ? "bg-purple-900/30"
+                      : t.isFuture
+                        ? "bg-yellow-900/20"
+                        : !t.isAddition
+                          ? "bg-red-900/20"
+                          : "";
+
+                  const displayDate = t.isAddition
+                    ? t.arrivalDate || t.date
+                    : t.usedAt;
+
+                  return (
+                    <tr
+                      key={t.id}
+                      onClick={() => setDetailLog(t)}
+                      className={`border-b border-zinc-700/50 cursor-pointer hover:bg-zinc-700/50 ${rowClass}`}
+                    >
+                      <td className="p-3 whitespace-nowrap">{t.job}</td>
+                      <td className="p-3 whitespace-nowrap">
+                        {displayDate
+                          ? new Date(displayDate).toLocaleDateString()
+                          : "N/A"}
+                      </td>
+                      <td className="p-3 whitespace-nowrap">{t.customer}</td>
+                      {STANDARD_LENGTHS.map((len) => (
+                        <td
+                          key={len}
+                          className={`p-3 text-center font-mono ${t[len] < 0 ? "text-red-400" : "text-zinc-300"}`}
+                        >
+                          {t[len] || ""}
+                        </td>
+                      ))}
+                      <td className="p-3 text-center">
+                        {t.isFuture && t.isAddition && (
+                          <button
+                            title="Receive Order"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onReceiveOrder(t);
+                            }}
+                            className="text-green-500 hover:text-green-400 mr-2"
+                          >
+                            <Truck size={16} />
+                          </button>
+                        )}
+                        {t.isFulfillable && (
+                          <button
+                            title="Fulfill Scheduled Usage"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onFulfillLog(t);
+                            }}
+                            className="text-purple-400 hover:text-purple-300 mr-2"
+                          >
+                            <Truck size={16} />
+                          </button>
+                        )}
+                        {t.isDeletable && (
+                          <>
+                            <button
+                              title="Edit"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditOrder(t);
+                              }}
+                              className="text-blue-500 hover:text-blue-400 mr-2"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              title="Delete"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLogToDelete(t);
+                              }}
+                              className="text-red-500 hover:text-red-400"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <LogDetailModal
+              isOpen={!!detailLog}
+              onClose={() => setDetailLog(null)}
+              logEntry={detailLog}
+              materials={materials}
+            />
+            <ConfirmationModal
+              isOpen={!!logToDelete}
+              onClose={() => setLogToDelete(null)}
+              onConfirm={handleConfirmDelete}
+              title="Delete Entry"
+              message="Are you sure you want to delete this entry? This action cannot be undone."
+            />
+          </div>
+        )}
+      </div>
     );
-});
+  },
+);
