@@ -19,7 +19,7 @@ export const AuditTag = ({ createdBy, lastEditedBy }) => {
     if (!createdBy && !lastEditedBy) return null;
 
     return (
-        <span className="inline-flex max-w-full flex-wrap items-center justify-center gap-1">
+        <span className="inline-flex max-w-full flex-col items-center gap-1">
             {createdBy && (
                 <span
                     title={`Logged by ${createdBy}`}

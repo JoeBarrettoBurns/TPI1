@@ -56,7 +56,6 @@ const ManageSuppliersModal = lazy(() => import('./components/modals/ManageSuppli
 const BuyOrderDraftsModal = lazy(() => import('./components/modals/BuyOrderDraftsModal').then((m) => ({ default: m.BuyOrderDraftsModal })));
 
 const AIAssistant = lazy(() => import('./components/assistant/AIAssistant').then((m) => ({ default: m.AIAssistant })));
-const DebugPanel = lazy(() => import('./components/debug/DebugPanel').then((m) => ({ default: m.DebugPanel })));
 
 const BUY_ORDERS_PATH = `artifacts/${appId}/public/data/buy_orders`;
 const LATEST_BUY_ORDER_LIMIT = 15;
@@ -101,45 +100,6 @@ function triggerMailto(mailto) {
     link.click();
     link.remove();
 }
-
-function openMailtoLinks(emailDrafts = []) {
-    const validDrafts = emailDrafts.filter((draft) => draft?.mailto);
-    if (validDrafts.length === 0) {
-        return [];
-    }
-
-    const [firstDraft, ...remainingDrafts] = validDrafts;
-
-    // The first draft navigates the current page; this is never blocked.
-    triggerMailto(firstDraft.mailto);
-
-    // Browsers only allow launching an external app (the mail client) during a
-    // real user click. Delayed attempts (setTimeout, iframes) are silently
-    // blocked, so the ONLY way to open more drafts from one click is to call
-    // window.open for each one synchronously, inside the same click. The popup
-    // blocker may block these until the user chooses "Always allow pop-ups"
-    // for this site; anything blocked is returned for the fallback dialog.
-    const blockedDrafts = [];
-    remainingDrafts.forEach((draft) => {
-        const win = window.open(draft.mailto, '_blank');
-        if (!win) {
-            blockedDrafts.push(draft);
-        } else {
-            // The tab exists only to hand the mailto to the OS; close it after
-            // the mail client has had time to pick it up.
-            window.setTimeout(() => {
-                try {
-                    win.close();
-                } catch {
-                    /* ignore */
-                }
-            }, 4000);
-        }
-    });
-
-    return blockedDrafts;
-}
-
 
 export default function App() {
     useEffect(() => {
@@ -1069,7 +1029,15 @@ export default function App() {
                 customSubject: requestedEmailSubject,
             }),
         }));
-        const fallbackEmailDrafts = openMailtoLinks(emailDrafts);
+        const validDrafts = emailDrafts.filter((draft) => draft?.mailto);
+
+        // A single supplier opens straight into the mail client (reliable within
+        // this click). Multiple suppliers can't all be launched from one click —
+        // popup blockers stop every draft after the first — so we present a
+        // dialog with one "Open Email" button per supplier instead.
+        if (validDrafts.length === 1) {
+            triggerMailto(validDrafts[0].mailto);
+        }
 
         const buyOrderRef = doc(collection(db, BUY_ORDERS_PATH));
         await setDoc(buyOrderRef, {
@@ -1095,8 +1063,8 @@ export default function App() {
                 body,
             })),
         });
-        if (fallbackEmailDrafts.length > 0) {
-            setModal({ type: 'buy-order-drafts', data: { drafts: fallbackEmailDrafts } });
+        if (validDrafts.length > 1) {
+            setModal({ type: 'buy-order-drafts', data: { drafts: validDrafts } });
         } else {
             closeModal();
         }
@@ -1738,38 +1706,43 @@ export default function App() {
 
     return (
         <div className="bg-zinc-900 min-h-screen font-sans text-zinc-200">
-            <div className="container mx-auto p-4 md:p-8">
-                <Header
-                    ref={searchInputRef}
-                    onAdd={() => setModal({ type: 'add' })}
-                    onBuy={() => handleOpenBuyModal()}
-                    onUse={() => setModal({ type: 'use' })}
-                    onEdit={() => isEditMode ? handleFinishEditing() : handleStartEditing()}
-                    onSignOut={handleSignOut}
-                    isEditMode={isEditMode}
-                    onManageCategories={() => setModal({ type: 'manage-categories' })}
-                    onManageSuppliers={() => setModal({ type: 'manage-suppliers' })}
-                    searchQuery={searchQuery}
-                    onSearchChange={handleSearchChange}
-                    onKeyDown={handleSearchKeyDown}
-                    onOpenBackup={() => setModal({ type: 'backup' })}
-                    onOpenAuthentication={() => setModal({ type: 'authentication' })}
-                    onLogoClick={() => setActiveView('dashboard')}
-                />
-
-                <div className="relative">
-                    {searchResults.length > 0 && (
-                        <SearchResultsDropdown
-                            results={searchResults}
-                            onSelect={handleResultSelect}
-                            activeIndex={activeIndex}
-                            setActiveIndex={setActiveIndex}
-                        />
-                    )}
+            <div className="container mx-auto p-4 pb-28 md:p-8 md:pb-32">
+                {/* Pinned top region: buttons + view tabs + categories all stay
+                    at the top. The frosted backdrop (blur + tint) lives on its
+                    own layer that is faded with a mask gradient, so the blur AND
+                    the tint dissolve together smoothly instead of ending on a
+                    hard "frost line". The controls sit on a separate, unmasked
+                    layer so they stay fully crisp. pointer-events stay off the
+                    fade zone (re-enabled on the controls). */}
+                <div className="sticky top-0 z-40 pointer-events-none -mx-4 -mt-4 px-4 pt-4 pb-20 md:-mx-8 md:-mt-8 md:px-8 md:pt-8">
+                    <div
+                        aria-hidden
+                        className="absolute inset-0 backdrop-blur-[5px] bg-zinc-900/85 [mask-image:linear-gradient(to_bottom,black_70%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
+                    />
+                    {/* On large screens the tabs fill the left and the buttons
+                        float on the right, vertically centered between the two
+                        tab rows (saves the whole empty button line). Below lg it
+                        stacks: buttons on top, then the tabs. */}
+                    <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+                        <div className="pointer-events-auto min-w-0 lg:order-1 lg:flex-1">
+                            <ViewTabs activeView={activeView} setActiveView={setActiveView} categories={categories} />
+                        </div>
+                        <div className="order-first lg:order-2 lg:flex-1 lg:min-w-0">
+                            <Header
+                                onAdd={() => setModal({ type: 'add' })}
+                                onBuy={() => handleOpenBuyModal()}
+                                onUse={() => setModal({ type: 'use' })}
+                                onEdit={() => isEditMode ? handleFinishEditing() : handleStartEditing()}
+                                onSignOut={handleSignOut}
+                                isEditMode={isEditMode}
+                                onManageCategories={() => setModal({ type: 'manage-categories' })}
+                                onManageSuppliers={() => setModal({ type: 'manage-suppliers' })}
+                                onOpenBackup={() => setModal({ type: 'backup' })}
+                                onOpenAuthentication={() => setModal({ type: 'authentication' })}
+                            />
+                        </div>
+                    </div>
                 </div>
-
-
-                <ViewTabs activeView={activeView} setActiveView={setActiveView} categories={categories} />
                 {error && <ErrorMessage message={error} />}
 
                 {showLoading ? <LoadingSpinner /> : (
@@ -1789,9 +1762,39 @@ export default function App() {
                 </footer>
             </div>
 
-            <Suspense fallback={null}>
-                <DebugPanel />
-            </Suspense>
+            {/* Pinned search bar: floats at the bottom. The frosted backdrop is
+                on its own layer faded with a mask gradient (blur + tint together)
+                so the frost dissolves smoothly upward with no hard line. The pill
+                sits on a separate, unmasked layer. pointer-events are limited to
+                the pill so the fade zone doesn't block content above it. */}
+            <div className="fixed inset-x-0 bottom-0 z-40 pointer-events-none pt-12 pb-5">
+                <div
+                    aria-hidden
+                    className="absolute inset-0 backdrop-blur-[5px] bg-zinc-900/85 [mask-image:linear-gradient(to_top,black_50%,transparent)] [-webkit-mask-image:linear-gradient(to_top,black_50%,transparent)]"
+                />
+                <div className="container relative mx-auto px-4 md:px-8">
+                    <div className="relative pointer-events-auto mx-auto w-full md:w-1/2 lg:w-1/3">
+                        {searchResults.length > 0 && (
+                            <SearchResultsDropdown
+                                results={searchResults}
+                                onSelect={handleResultSelect}
+                                activeIndex={activeIndex}
+                                setActiveIndex={setActiveIndex}
+                            />
+                        )}
+                        <input
+                            ref={searchInputRef}
+                            type="search"
+                            placeholder="Search anything..."
+                            value={searchQuery}
+                            onChange={handleSearchChange}
+                            onKeyDown={handleSearchKeyDown}
+                            className="w-full px-5 py-3 bg-zinc-800 border border-zinc-600 text-white rounded-full shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoComplete="off"
+                        />
+                    </div>
+                </div>
+            </div>
 
             {AI_ASSISTANT_ENABLED && (
                 <>

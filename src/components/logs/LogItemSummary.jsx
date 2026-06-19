@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { STANDARD_LENGTHS } from '../../constants/materials';
 
 const formatMeasurement = (value) => {
     const number = Number(value);
@@ -39,50 +39,30 @@ export const summarizeDetails = (details) => {
     ));
 };
 
-const chunkItems = (items, chunkSize) => {
-    const chunks = [];
-    for (let index = 0; index < items.length; index += chunkSize) {
-        chunks.push(items.slice(index, index + chunkSize));
-    }
-    return chunks;
+// Standard length column labels (e.g. '96"'), matching the Categories view.
+export const STANDARD_LENGTH_LABELS = STANDARD_LENGTHS.map((len) => `${len}"`);
+
+// One entry per material with a per-length-label count map, e.g.
+// [{ materialType: '2x2x14GA GALV', counts: { '96"': 5, '120"': 2 } }]
+export const groupDetailsByMaterial = (details) => {
+    const byMaterial = new Map();
+    summarizeDetails(details).forEach(({ materialType, length, quantity }) => {
+        const label = length || 'N/A';
+        if (!byMaterial.has(materialType)) byMaterial.set(materialType, {});
+        byMaterial.get(materialType)[label] = quantity;
+    });
+    return [...byMaterial.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([materialType, counts]) => ({ materialType, counts }));
 };
 
-const qtyCellClasses = {
-    incoming: 'bg-emerald-500/15 text-emerald-100',
-    outgoing: 'bg-rose-500/15 text-rose-100',
-};
-
-export const LogItemSummary = ({ details, tone = 'incoming' }) => {
-    const summary = useMemo(() => summarizeDetails(details), [details]);
-
-    if (summary.length === 0) {
-        return <span className="text-zinc-400">No item details</span>;
-    }
-
-    const qtyTone = qtyCellClasses[tone] || qtyCellClasses.incoming;
-    const columns = chunkItems(summary, 3);
-
-    return (
-        <div className="flex w-full flex-wrap items-start gap-3">
-            {columns.map((column, columnIndex) => (
-                <table key={columnIndex} className="w-[18rem] table-fixed overflow-hidden rounded-lg border border-zinc-700/80 bg-zinc-900/40 text-sm">
-                    <tbody className="divide-y divide-zinc-700/70">
-                        {column.map((item) => (
-                            <tr key={`${item.materialType}-${item.length}`}>
-                                <td className={`w-16 whitespace-nowrap px-2 py-1 text-center font-bold ${qtyTone}`}>
-                                    {item.quantity}
-                                </td>
-                                <td className="w-16 whitespace-nowrap bg-sky-500/15 px-2 py-1 text-center font-bold text-sky-100">
-                                    {item.length || 'N/A'}
-                                </td>
-                                <td className="min-w-0 bg-cyan-500/10 px-2 py-1 text-center font-semibold text-cyan-100">
-                                    <span className="block truncate">{item.materialType}</span>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            ))}
-        </div>
-    );
+// Ordered length columns to render: the standard lengths always (like the
+// Categories view), then any non-standard lengths actually present
+// (custom-cut sheets), with 'N/A' last.
+export const orderLengthLabels = (labels) => {
+    const present = new Set(labels);
+    const extras = [...present]
+        .filter((label) => label && label !== 'N/A' && !STANDARD_LENGTH_LABELS.includes(label))
+        .sort((a, b) => (parseFloat(a) || Infinity) - (parseFloat(b) || Infinity));
+    return [...STANDARD_LENGTH_LABELS, ...extras, ...(present.has('N/A') ? ['N/A'] : [])];
 };

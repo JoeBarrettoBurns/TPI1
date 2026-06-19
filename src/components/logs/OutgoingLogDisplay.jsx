@@ -2,26 +2,8 @@
 
 import React, { useMemo } from 'react';
 import { Edit, Trash2, CalendarClock, Truck } from 'lucide-react';
-import { LogItemSummary } from './LogItemSummary';
+import { groupDetailsByMaterial, orderLengthLabels } from './LogItemSummary';
 import { AuditTag } from '../common/AuditTag';
-
-// Helper function to generate a detailed description with shortened names
-const generateDescription = (details) => {
-    if (!Array.isArray(details) || details.length === 0) {
-        return 'No item details';
-    }
-
-    const materialCounts = details.reduce((acc, item) => {
-        const type = item.materialType || 'Unknown';
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-    }, {});
-
-    return Object.entries(materialCounts).map(([type, count]) => {
-        const shortType = type.replace('GALV', 'Galv').replace('ALUM', 'Al');
-        return `${count}x ${shortType}`;
-    }).join(', ');
-};
 
 export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, onEdit, onFulfillLog, ordersToShow }) => {
     const outgoingItems = useMemo(() => {
@@ -34,13 +16,20 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
                 isDeletable: true,
                 isAddition: false,
                 displayQty: item.qty,
-                description: generateDescription(item.details),
+                materialRows: groupDetailsByMaterial(item.details),
                 customer: item.customer || 'N/A'
             }))
             .sort((a, b) => new Date(b.usedAt) - new Date(a.usedAt));
     }, [usageLog]);
 
     const visibleItems = outgoingItems.slice(0, ordersToShow);
+
+    // One shared set of length columns for the whole table (like the Categories view).
+    const lengthColumns = useMemo(() => {
+        const labels = [];
+        visibleItems.forEach(item => item.materialRows.forEach(row => labels.push(...Object.keys(row.counts))));
+        return orderLengthLabels(labels);
+    }, [visibleItems]);
 
     if (visibleItems.length === 0) {
         return <p className="text-center text-zinc-400 py-8">No outgoing stock logged.</p>;
@@ -54,55 +43,84 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
                         <th className="px-3 py-4 font-semibold text-zinc-400 whitespace-nowrap">DATE</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400">JOB #</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400">CUSTOMER</th>
-                        <th className="px-3 py-3 font-semibold text-zinc-400 w-full">
-                            <div>DESCRIPTION</div>
-                            <div className="mt-2 grid w-[18rem] grid-cols-[4rem_4rem_1fr] rounded-md bg-zinc-950/35 text-left text-[10px] uppercase tracking-wide text-zinc-400">
-                                <span className="px-2 py-1">QTY</span>
-                                <span className="px-2 py-1">Length</span>
-                                <span className="px-2 py-1">Material</span>
-                            </div>
-                        </th>
+                        <th className="px-3 py-4 font-semibold text-zinc-400 text-left">MATERIAL</th>
+                        {lengthColumns.map(label => (
+                            <th key={label} className="px-3 py-4 font-semibold text-zinc-400 text-center whitespace-nowrap">
+                                {label === 'N/A' ? 'N/A' : `${label}x48"`}
+                            </th>
+                        ))}
                         <th className="px-3 py-4 font-semibold text-zinc-400 text-center">QTY</th>
                         <th className="px-3 py-4 font-semibold text-zinc-400 text-center whitespace-nowrap w-24">ACTIONS</th>
                     </tr>
                 </thead>
-                <tbody>
-                    {visibleItems.map(item => (
-                        <tr
-                            key={item.id}
-                            onClick={() => onRowClick(item)}
-                            className={`border-b border-zinc-700 hover:bg-zinc-700/50 cursor-pointer ${item.status === 'Scheduled' ? 'bg-purple-900/30' : ''
-                                }`}
-                        >
-                            <td className="px-3 py-2 truncate text-zinc-300 whitespace-nowrap">
-                                <div className="flex items-center justify-center gap-2">
-                                    {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" title="Scheduled" />}
-                                    <span>{new Date(item.usedAt || item.createdAt).toLocaleDateString()}</span>
-                                </div>
-                                <div className="mt-1 flex justify-center">
-                                    <AuditTag createdBy={item.createdBy} lastEditedBy={item.lastEditedBy} />
-                                </div>
-                            </td>
-                            <td className="px-3 py-2 truncate text-zinc-300">{item.job}</td>
-                            <td className="px-3 py-2 truncate text-zinc-300">{item.customer}</td>
-                            <td className="px-3 py-2 text-zinc-300 w-full">
-                                <LogItemSummary details={item.details} materials={materials} tone="outgoing" />
-                            </td>
-                            <td className="px-3 py-2 text-red-400 font-mono text-center">{item.displayQty}</td>
-                            <td className="px-3 py-2 text-center whitespace-nowrap w-24">
-                                {item.status === 'Scheduled' && (
-                                    <button title="Fulfill Scheduled Usage" onClick={(e) => { e.stopPropagation(); onFulfillLog(item); }} className="inline-flex align-middle text-purple-400 hover:text-purple-300 mr-2"><Truck size={16} /></button>
-                                )}
-                                {item.isDeletable && (
-                                    <>
-                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="inline-flex align-middle text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
-                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="inline-flex align-middle text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
-                                    </>
-                                )}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
+                {visibleItems.map((item, orderIdx) => {
+                    const rows = item.materialRows.length > 0
+                        ? item.materialRows
+                        : [{ materialType: 'No item details', counts: {} }];
+                    const span = rows.length;
+                    const rowBg = item.status === 'Scheduled' ? 'bg-purple-900/30' : '';
+
+                    return (
+                        <tbody key={item.id} className="group">
+                            {orderIdx === 0 && (
+                                <tr aria-hidden="true">
+                                    <td colSpan={99} className="p-0"><div className="h-3" /></td>
+                                </tr>
+                            )}
+                            {rows.map((row, idx) => (
+                                <tr
+                                    key={`${item.id}-${row.materialType}`}
+                                    onClick={() => onRowClick(item)}
+                                    className={`border-b border-zinc-700 cursor-pointer group-hover:bg-zinc-700/50 ${rowBg}`}
+                                >
+                                    {idx === 0 && (
+                                        <>
+                                            <td rowSpan={span} className="px-3 py-2 align-top text-zinc-300 whitespace-nowrap">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" title="Scheduled" />}
+                                                    <span>{new Date(item.usedAt || item.createdAt).toLocaleDateString()}</span>
+                                                </div>
+                                                <div className="mt-1 flex justify-center">
+                                                    <AuditTag createdBy={item.createdBy} lastEditedBy={item.lastEditedBy} />
+                                                </div>
+                                            </td>
+                                            <td rowSpan={span} className="px-3 py-2 align-top text-zinc-300">{item.job}</td>
+                                            <td rowSpan={span} className="px-3 py-2 align-top text-zinc-300">{item.customer}</td>
+                                        </>
+                                    )}
+                                    <td className="px-3 py-2 text-left text-zinc-200 font-medium whitespace-nowrap">{row.materialType}</td>
+                                    {lengthColumns.map(label => {
+                                        const qty = row.counts[label] || 0;
+                                        return (
+                                            <td key={label} className={`px-3 py-2 text-center font-mono ${qty ? 'text-red-400' : 'text-zinc-600'}`}>
+                                                {qty ? -qty : ''}
+                                            </td>
+                                        );
+                                    })}
+                                    {idx === 0 && (
+                                        <>
+                                            <td rowSpan={span} className="px-3 py-2 align-top text-red-400 font-mono text-center">{item.displayQty}</td>
+                                            <td rowSpan={span} className="px-3 py-2 align-top text-center whitespace-nowrap w-24">
+                                                {item.status === 'Scheduled' && (
+                                                    <button title="Fulfill Scheduled Usage" onClick={(e) => { e.stopPropagation(); onFulfillLog(item); }} className="inline-flex align-middle text-purple-400 hover:text-purple-300 mr-2"><Truck size={16} /></button>
+                                                )}
+                                                {item.isDeletable && (
+                                                    <>
+                                                        <button title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="inline-flex align-middle text-blue-500 hover:text-blue-400 mr-2"><Edit size={16} /></button>
+                                                        <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="inline-flex align-middle text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
+                                                    </>
+                                                )}
+                                            </td>
+                                        </>
+                                    )}
+                                </tr>
+                            ))}
+                            <tr aria-hidden="true">
+                                <td colSpan={99} className="p-0"><div className="h-3" /></td>
+                            </tr>
+                        </tbody>
+                    );
+                })}
             </table>
         </div>
     );

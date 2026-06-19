@@ -25,15 +25,6 @@ function normalizeSupplierKey(supplier) {
     return (supplier || '').toUpperCase().replace(/\s+/g, '_');
 }
 
-export function encodeMailtoRecipients(value) {
-    return (value || '')
-        .split(/[;,\s]+/)
-        .map((email) => email.trim())
-        .filter(Boolean)
-        .map(encodeURIComponent)
-        .join(',');
-}
-
 export function getSupplierEmailInfo(supplier, supplierInfoOverrides) {
     const supplierKey = normalizeSupplierKey(supplier);
     const override = supplierInfoOverrides?.[supplierKey];
@@ -157,8 +148,11 @@ export function createSupplierMailtoLink({
     }
     fullBody = normalizeEmailPlainText(fullBody);
     const body = encodeURIComponent(fullBody);
-    const to = encodeMailtoRecipients(info.email || '');
-    const cc = encodeMailtoRecipients(info.ccEmail || CC_EMAIL || '');
+    // Recipients are passed through exactly as saved in supplier settings — no
+    // splitting, re-encoding, or separator changes, so the mail client receives
+    // the literal To/Cc string the user entered.
+    const to = info.email || '';
+    const cc = info.ccEmail || CC_EMAIL || '';
 
     return {
         mailto: `mailto:${to}?cc=${cc}&subject=${subject}&body=${body}`,

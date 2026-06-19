@@ -225,6 +225,36 @@ function rollupGroupEconomics(parts, index, materials) {
     return { totalSheets, totalCost };
 }
 
+/**
+ * Merge every section's economics rows into one job-level breakdown so the same
+ * material+length used across parts (e.g. INT + EXT) is counted up into a single
+ * line. Same shape as buildJobEconomics so it renders through EconomicsMatrix.
+ */
+function aggregateGroupEconomics(parts, index, materials) {
+    const map = new Map();
+    for (const j of parts) {
+        for (const g of buildJobEconomics(j.job, index, materials).groups) {
+            const prev = map.get(g.key);
+            if (prev) {
+                prev.qty += g.qty;
+                prev.costSum += g.costSum;
+            } else {
+                map.set(g.key, { ...g });
+            }
+        }
+    }
+    const groups = [...map.values()].sort((a, b) => {
+        const bo = (BUCKET_ORDER[a.bucket] ?? 9) - (BUCKET_ORDER[b.bucket] ?? 9);
+        if (bo !== 0) return bo;
+        const mt = (a.materialType || '').localeCompare(b.materialType || '');
+        if (mt !== 0) return mt;
+        return (Number(a.length) || 0) - (Number(b.length) || 0);
+    });
+    const totalSheets = groups.reduce((s, g) => s + g.qty, 0);
+    const totalCost = groups.reduce((s, g) => s + g.costSum, 0);
+    return { groups, totalSheets, totalCost };
+}
+
 function summarizeCustomerJobs(jobs, index, materials) {
     let totalSheets = 0, totalCost = 0, latestMs = 0, scheduled = 0;
     const masterKeys = new Set();
@@ -481,23 +511,104 @@ function JobListColumn({ groups, archivedGroups, selectedBaseKey, onSelectBaseKe
 
 // ─── Column 3: PO detail ──────────────────────────────────────────────────────
 
-function CompactEconomicsLines({ groups }) {
-    if (!groups?.length) return <span className="text-zinc-500 text-xs">—</span>;
-    const tallList = groups.length > 8;
+function lengthColLabel(len) {
+    return Number.isFinite(Number(len)) ? `${len}"` : 'Custom';
+}
+
+/** Pivot flat economics rows into a material(×bucket) × length grid for tabular display. */
+function buildEconomicsMatrix(groups) {
+    const lengthSet = new Set();
+    const rowMap = new Map();
+    for (const g of groups || []) {
+        lengthSet.add(g.length);
+        const rk = `${g.bucket}|${g.materialType}`;
+        let row = rowMap.get(rk);
+        if (!row) {
+            row = { key: rk, bucket: g.bucket, bucketLabel: g.bucketLabel, materialType: g.materialType, cells: {}, qty: 0, costSum: 0 };
+            rowMap.set(rk, row);
+        }
+        row.cells[g.length] = (row.cells[g.length] || 0) + g.qty;
+        row.qty += g.qty;
+        row.costSum += g.costSum;
+    }
+    const lengths = [...lengthSet].sort((a, b) => {
+        const na = Number(a), nb = Number(b);
+        const aNum = Number.isFinite(na), bNum = Number.isFinite(nb);
+        if (aNum && bNum) return na - nb;
+        if (aNum) return -1;
+        if (bNum) return 1;
+        return String(a).localeCompare(String(b));
+    });
+    const rows = [...rowMap.values()];
+    const multiBucket = new Set(rows.map((r) => r.bucket)).size > 1;
+    const colTotals = {};
+    let totalCost = 0;
+    for (const r of rows) {
+        for (const len of lengths) colTotals[len] = (colTotals[len] || 0) + (r.cells[len] || 0);
+        totalCost += r.costSum;
+    }
+    return { lengths, rows, multiBucket, colTotals, totalCost };
+}
+
+/** Material × length sheet grid, styled to match the dashboard category tables. */
+function EconomicsMatrix({ groups }) {
+    const { lengths, rows, multiBucket, colTotals, totalCost } = useMemo(() => buildEconomicsMatrix(groups), [groups]);
+    if (!rows.length) return <span className="text-zinc-500 text-xs">—</span>;
+
+    const headCls = 'py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500';
+    const colCls = 'px-2 py-1.5 text-center border-l border-zinc-800 font-mono tabular-nums';
+
     return (
-        <div className={`flex flex-col gap-1 ${tallList ? 'max-h-56 overflow-y-auto pr-1' : ''}`}>
-            {groups.map((g) => (
-                <div key={g.key} className="grid grid-cols-[3rem_2.25rem_minmax(0,1fr)_auto] gap-x-2.5 items-baseline text-[11px] leading-snug">
-                    <span className="text-zinc-500 font-medium uppercase tracking-tight">{g.bucketLabel}</span>
-                    <span className="font-mono text-zinc-200 tabular-nums text-right">{g.qty}×</span>
-                    <span className="text-zinc-300 min-w-0 truncate">
-                        {shortMat(g.materialType)}<span className="text-zinc-500"> {g.length}&quot;</span>
-                    </span>
-                    <span className="font-mono text-emerald-400/95 tabular-nums text-right whitespace-nowrap pl-1">
-                        {formatLineCost(g.costSum) ?? <span className="text-zinc-600">—</span>}
-                    </span>
-                </div>
-            ))}
+        <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+                <thead>
+                    <tr className="border-b border-zinc-700">
+                        <th className={`${headCls} pr-2`}>Material</th>
+                        {lengths.map((len) => (
+                            <th key={len} className={`${headCls} px-2 text-center border-l border-zinc-800`}>{lengthColLabel(len)}</th>
+                        ))}
+                        <th className={`${headCls} pl-2 text-right border-l border-zinc-800`}>Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((r) => (
+                        <tr key={r.key} className="border-b border-zinc-800 last:border-b-0">
+                            <td className="py-1.5 pr-2 text-[11px] text-zinc-300">
+                                <span className="truncate">{shortMat(r.materialType)}</span>
+                                {multiBucket && (
+                                    <span className="ml-1.5 rounded bg-zinc-800 px-1 py-px text-[9px] uppercase text-zinc-500">{r.bucketLabel}</span>
+                                )}
+                            </td>
+                            {lengths.map((len) => {
+                                const q = r.cells[len] || 0;
+                                return (
+                                    <td key={len} className={colCls}>
+                                        {q > 0 ? <span className="text-zinc-100">{q}</span> : <span className="text-zinc-700">·</span>}
+                                    </td>
+                                );
+                            })}
+                            <td className="pl-2 py-1.5 text-right border-l border-zinc-800 font-mono tabular-nums text-emerald-400/95 whitespace-nowrap text-[11px]">
+                                {formatLineCost(r.costSum) ?? <span className="text-zinc-600">—</span>}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+                {rows.length > 1 && (
+                    <tfoot>
+                        <tr className="border-t border-zinc-700">
+                            <td className="py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Total</td>
+                            {lengths.map((len) => (
+                                <td key={len} className={`${colCls} text-zinc-200 font-semibold`}>
+                                    {colTotals[len] > 0 ? colTotals[len] : <span className="text-zinc-700">·</span>}
+                                </td>
+                            ))}
+                            <td className="pl-2 py-1.5 text-right border-l border-zinc-800 font-mono tabular-nums text-emerald-400 font-semibold whitespace-nowrap text-[11px]">
+                                {formatLineCost(totalCost) ?? <span className="text-zinc-600">—</span>}
+                            </td>
+                        </tr>
+                    </tfoot>
+                )}
+            </table>
         </div>
     );
 }
@@ -534,7 +645,7 @@ function JobSectionCard({ job, jobEconIndex, materials }) {
                     <p className="text-center text-zinc-600 text-xs py-4">No sheet rows yet.</p>
                 ) : (
                     <>
-                        <CompactEconomicsLines groups={econ.groups} />
+                        <EconomicsMatrix groups={econ.groups} />
                         <div className="flex justify-between items-baseline mt-3 pt-3 border-t border-zinc-700/60 text-sm">
                             <span className="text-zinc-500">{econ.totalSheets} sheet{econ.totalSheets === 1 ? '' : 's'}</span>
                             <span className="font-mono font-semibold text-emerald-400 tabular-nums">
@@ -543,6 +654,31 @@ function JobSectionCard({ job, jobEconIndex, materials }) {
                         </div>
                     </>
                 )}
+            </div>
+        </div>
+    );
+}
+
+/** Combined breakdown across all sections of a multi-section PO. */
+function JobTotalCard({ econ, sectionCount }) {
+    if (!econ.groups.length) return null;
+    const cost = formatJobTotalCost(econ.totalCost, econ.totalSheets);
+    return (
+        <div className="rounded-lg border border-emerald-700/40 bg-emerald-950/20 overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b border-emerald-700/30 px-4 py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                    <Layers size={14} className="text-emerald-400 shrink-0" aria-hidden />
+                    <h3 className="text-sm font-bold text-white">Job total</h3>
+                    <span className="text-[10px] text-zinc-500">all {sectionCount} sections</span>
+                </div>
+                {cost && <span className="font-mono text-sm font-semibold text-emerald-400 tabular-nums">{cost}</span>}
+            </div>
+            <div className="p-4">
+                <EconomicsMatrix groups={econ.groups} />
+                <div className="flex justify-between items-baseline mt-3 pt-3 border-t border-emerald-700/30 text-sm">
+                    <span className="text-zinc-400">{econ.totalSheets} sheet{econ.totalSheets === 1 ? '' : 's'} total</span>
+                    <span className="font-mono font-semibold text-emerald-400 tabular-nums">{cost ?? '—'}</span>
+                </div>
             </div>
         </div>
     );
@@ -560,7 +696,7 @@ function DetailColumn({ group, jobEconIndex, materials }) {
     }
 
     const multi = group.parts.length > 1;
-    const rollup = multi ? rollupGroupEconomics(group.parts, jobEconIndex, materials) : null;
+    const rollup = multi ? aggregateGroupEconomics(group.parts, jobEconIndex, materials) : null;
     const sectionLabels = uniqueSectionSuffixes(group.parts);
 
     return (
@@ -587,6 +723,7 @@ function DetailColumn({ group, jobEconIndex, materials }) {
             </PanelHeader>
 
             <div className="overflow-y-auto flex-1 min-h-0 p-3 space-y-3">
+                {multi && rollup && <JobTotalCard econ={rollup} sectionCount={group.parts.length} />}
                 {group.parts.map((job) => (
                     <JobSectionCard key={job.id} job={job} jobEconIndex={jobEconIndex} materials={materials} />
                 ))}

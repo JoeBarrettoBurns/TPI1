@@ -20,13 +20,10 @@ export const BuyOrderDraftsModal = ({ onClose, drafts = [] }) => {
     };
 
     return (
-        <BaseModal onClose={onClose} title="Open Remaining Emails" maxWidthClass="max-w-3xl">
+        <BaseModal onClose={onClose} title="Open Supplier Emails" maxWidthClass="max-w-3xl">
             <div className="space-y-4">
                 <p className="text-sm text-zinc-300">
-                    Your browser blocked the extra email drafts from opening automatically. Click each supplier below to open its email.
-                </p>
-                <p className="text-xs text-zinc-500">
-                    Tip: to open all drafts automatically next time, click the &quot;pop-ups blocked&quot; icon in your browser&apos;s address bar and choose &quot;Always allow pop-ups from this site&quot;.
+                    This order goes to multiple suppliers. Click each supplier below to open its draft email.
                 </p>
                 {remainingDrafts.length === 0 ? (
                     <p className="text-zinc-400">All supplier drafts have been opened.</p>

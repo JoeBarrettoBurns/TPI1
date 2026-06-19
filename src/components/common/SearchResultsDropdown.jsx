@@ -26,7 +26,7 @@ export const SearchResultsDropdown = ({ results, onSelect, activeIndex, setActiv
     }
 
     return (
-        <div className="absolute top-full mt-2 w-full md:w-1/3 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+        <div className="absolute bottom-full mb-2 w-full bg-zinc-800 border border-zinc-700 rounded-2xl shadow-lg z-50 max-h-96 overflow-y-auto">
             <ul className="divide-y divide-zinc-700">
                 {results.map((result, index) => (
                     <li

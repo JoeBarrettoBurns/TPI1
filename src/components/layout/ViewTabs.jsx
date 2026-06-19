@@ -30,7 +30,7 @@ export const ViewTabs = ({ activeView, setActiveView, categories }) => {
     const categoryViews = categories || [];
 
     return (
-        <div className="mb-8 space-y-4">
+        <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2 border-b-2 border-zinc-700 pb-4">
                 <span className="text-zinc-400 font-semibold mr-2">Views:</span>
                 {mainViews.map(v =>
