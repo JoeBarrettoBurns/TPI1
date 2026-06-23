@@ -52,12 +52,12 @@ export const Header = ({
         // are re-enabled here so the wrapper's fade zone never swallows clicks.
         <header>
             <div className="pointer-events-auto flex w-full flex-nowrap items-stretch gap-2">
-                <Button onClick={onAdd} className="flex-1 min-w-0 text-sm md:text-base"><Plus size={18} /> <span className="hidden sm:inline">Add Stock</span></Button>
-                <Button onClick={onBuy} variant="secondary" className="flex-1 min-w-0 text-sm md:text-base">
+                <Button onClick={onAdd} className="flex-1 min-w-0 !py-2 !bg-blue-800/70 hover:!bg-blue-700/70 text-sm md:text-base"><Plus size={18} /> <span className="hidden sm:inline">Add Stock</span></Button>
+                <Button onClick={onBuy} variant="secondary" className="flex-1 min-w-0 !py-2 !bg-zinc-700/60 hover:!bg-zinc-600/70 text-sm md:text-base">
                     <ShoppingCart size={18} /> <span className="hidden sm:inline">Buy</span>
                 </Button>
-                <Button onClick={onUse} variant="secondary" className="flex-1 min-w-0 text-sm md:text-base"><Minus size={18} /> <span className="hidden sm:inline">Use Stock</span></Button>
-                <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className="flex-1 min-w-0 text-sm md:text-base">
+                <Button onClick={onUse} variant="secondary" className="flex-1 min-w-0 !py-2 !bg-zinc-700/50 hover:!bg-zinc-600/70 text-sm md:text-base"><Minus size={18} /> <span className="hidden sm:inline">Use Stock</span></Button>
+                <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className={`flex-1 min-w-0 !py-2 text-sm md:text-base ${isEditMode ? '!bg-green-600/60 hover:!bg-green-500/70' : '!bg-amber-600/60 hover:!bg-amber-500/70'}`}>
                     <Edit size={18} /> <span className="hidden sm:inline">{isEditMode ? 'Finish Editing' : 'Edit'}</span>
                 </Button>
 
@@ -65,7 +65,7 @@ export const Header = ({
                     <Button
                         type="button"
                         variant="secondary"
-                        className="w-full text-sm md:text-base"
+                        className="w-full !py-2 !bg-zinc-700/50 hover:!bg-zinc-600/70 text-sm md:text-base"
                         aria-expanded={moreOpen}
                         aria-haspopup="menu"
                         aria-label={moreOpen ? 'Close settings menu' : 'Open settings menu'}

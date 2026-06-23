@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useOrderForm } from '../../hooks/useOrderForm';
 import { formatUseStockJobLabel } from '../../utils/dataProcessing';
-import { localDateInputValue } from '../../utils/dates';
+import { localDateInputValue, parseLocalDate } from '../../utils/dates';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
 import { Button } from '../common/Button';
@@ -165,7 +165,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
                 {scheduleSuggestion && (
                     <div className="text-center mt-2 p-4 bg-yellow-900/30 border border-yellow-700 rounded-lg">
                         <p className="text-yellow-200 mb-3">
-                            However, an order of {scheduleSuggestion.materialType} is scheduled to arrive on {new Date(scheduleSuggestion.date + 'T00:00:00').toLocaleDateString()}.
+                            However, an order of {scheduleSuggestion.materialType} is scheduled to arrive on {parseLocalDate(scheduleSuggestion.date).toLocaleDateString()}.
                         </p>
                         <Button variant="warning" onClick={handleScheduleInstead} type="button">
                             Schedule Usage for Arrival Date

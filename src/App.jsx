@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { writeBatch, doc, collection, updateDoc, getDocs, query, where, getDoc, setDoc, onSnapshot, orderBy, limit } from './firebase/firestoreWithTracking';
+import { writeBatch, doc, collection, updateDoc, getDocs, query, where, getDoc, setDoc, onSnapshot, orderBy, limit, runTransaction } from './firebase/firestoreWithTracking';
 import Fuse from 'fuse.js';
 import { db, appId, auth, signOut } from './firebase/config';
 import { useFirestoreData } from './hooks/useFirestoreData';
@@ -21,7 +21,7 @@ import { STANDARD_LENGTHS } from './constants/materials';
 import { buildBuyOrderEmailBody, createSupplierMailtoLink } from './utils/buyOrderUtils';
 import { repairCountIssues } from './utils/countRepair';
 import { buildMaterialIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
-import { localDateInputValue } from './utils/dates';
+import { localDateInputValue, parseLocalDate, startOfDayIso, endOfDayIso } from './utils/dates';
 import { AI_ASSISTANT_ENABLED } from './constants/featureFlags';
 
 // Layout & Common Components
@@ -624,7 +624,7 @@ export default function App() {
                 if (itemsForLog.length > 0) {
                     const logDocRef = doc(usageLogCollectionRef);
                     // Schedule at end-of-day to prevent immediate auto-fulfill for "today"
-                    const scheduledUsedAtIso = new Date(scheduledDate + 'T23:59:59').toISOString();
+                    const scheduledUsedAtIso = endOfDayIso(scheduledDate);
                     const logEntry = {
                         job: resolveUseStockJobLabel(job),
                         customer: job.customer,
@@ -959,17 +959,17 @@ export default function App() {
             const jobName = job.jobName.trim() || 'N/A';
             job.items.forEach(item => {
                 const arrivalDateString = job.useItemArrivalDates ? item.arrivalDate : job.arrivalDate;
-                const localDate = arrivalDateString ? new Date(`${arrivalDateString}T00:00:00`) : null;
 
                 const stockData = {
                     materialType: item.materialType,
                     gauge: getGaugeFromMaterial(item.materialType),
                     supplier: job.supplier,
                     costPerPound: parseFloat(item.costPerPound || 0),
-                    createdAt: (job.createdAt ? new Date(job.createdAt + 'T00:00:00').toISOString() : (isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : new Date().toISOString())),
+                    createdAt: (job.createdAt ? startOfDayIso(job.createdAt) : (isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : new Date().toISOString())),
                     job: jobName,
                     status: job.status,
-                    arrivalDate: job.status === 'Ordered' && localDate ? localDate.toISOString() : null,
+                    // Incoming stock becomes available at the START of its arrival day.
+                    arrivalDate: job.status === 'Ordered' ? startOfDayIso(arrivalDateString) : null,
                     dateReceived: null,
                     createdBy: isEditing ? (originalOrderGroup.createdBy || auditActor()) : auditActor(),
                     ...(isEditing ? { lastEditedBy: auditActor(), lastEditedAt: new Date().toISOString() } : {}),
@@ -1243,12 +1243,15 @@ export default function App() {
                 }
             }
 
-            // Build target date at local midnight to avoid timezone drift
-            const targetDate = new Date(`${newLogData.date}T00:00:00`);
+            // Use the same end-of-day boundary as creation and the auto-fulfiller,
+            // so a given calendar date becomes "due" at the same instant everywhere.
+            // (A bare midnight check fulfilled "today" immediately, unlike creation.)
             const now = new Date();
+            const scheduledUsedAtIso = endOfDayIso(newLogData.date);
+            const dueNow = scheduledUsedAtIso && new Date(scheduledUsedAtIso) <= now;
 
-            // If the scheduled date is today or earlier, fulfill immediately
-            if (targetDate <= now) {
+            // If the scheduled date is fully in the past, fulfill immediately.
+            if (dueNow) {
                 const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
                 const batch = writeBatch(db);
 
@@ -1298,25 +1301,38 @@ export default function App() {
 
                 await batch.commit();
             } else {
-                // Save as scheduled at end-of-day to avoid immediate auto-fulfill
-                const scheduledUsedAtIso = new Date(`${newLogData.date}T23:59:59`).toISOString();
-                await updateDoc(logDocRef, {
-                    job: newLogData.jobName.trim() || 'N/A',
-                    customer: newLogData.customer,
-                    usedAt: scheduledUsedAtIso,
-                    details: newDetails,
-                    qty: -totalItems,
-                    status: 'Scheduled',
-                    fulfilledAt: null,
-                    lastEditedBy: auditActor(),
-                    lastEditedAt: new Date().toISOString(),
+                // Save as scheduled at end-of-day. Use a transaction so the new date
+                // can't be silently lost to a concurrent auto-fulfill: if the log was
+                // already fulfilled between opening the editor and saving, abort with a
+                // clear error instead of writing over (or losing) the user's reschedule.
+                await runTransaction(db, async (tx) => {
+                    const snap = await tx.get(logDocRef);
+                    if (!snap.exists()) {
+                        throw new Error('This scheduled log no longer exists. Reload and try again.');
+                    }
+                    if ((snap.data().status || '') !== 'Scheduled') {
+                        throw new Error('This log was just auto-fulfilled, so it can no longer be rescheduled. Reload to edit the completed log instead.');
+                    }
+                    tx.update(logDocRef, {
+                        job: newLogData.jobName.trim() || 'N/A',
+                        customer: newLogData.customer,
+                        usedAt: scheduledUsedAtIso,
+                        details: newDetails,
+                        qty: -totalItems,
+                        status: 'Scheduled',
+                        fulfilledAt: null,
+                        lastEditedBy: auditActor(),
+                        lastEditedAt: new Date().toISOString(),
+                    });
                 });
             }
         } else {
             // Logic for editing a COMPLETED log
             const now = new Date();
-            // Build target date at local midnight to avoid timezone drift
-            const targetDate = newLogData.date ? new Date(`${newLogData.date}T00:00:00`) : null;
+            // A completed log records the past, so only a date strictly AFTER today
+            // (local midnight) reverts it back to a future scheduled use. Re-dating it
+            // to today/earlier keeps it completed.
+            const targetDate = parseLocalDate(newLogData.date);
             const shouldRevertToScheduled = targetDate && targetDate > now;
 
             if (shouldRevertToScheduled) {
@@ -1387,8 +1403,7 @@ export default function App() {
                 }
 
                 // Schedule at end-of-day to avoid immediate auto-fulfill
-                const localYmd = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
-                const scheduledUsedAtIso = new Date(`${localYmd}T23:59:59`).toISOString();
+                const scheduledUsedAtIso = endOfDayIso(newLogData.date);
                 batch.update(logDocRef, {
                     job: newLogData.jobName.trim() || 'N/A',
                     customer: newLogData.customer,
@@ -1515,7 +1530,7 @@ export default function App() {
                 }
 
                 const usedAtIso = newLogData.date
-                    ? new Date(newLogData.date + 'T00:00:00').toISOString()
+                    ? startOfDayIso(newLogData.date)
                     : (latestLog.usedAt || new Date().toISOString());
                 const usageUpdate = {
                     status: 'Used',
@@ -1762,16 +1777,10 @@ export default function App() {
                 </footer>
             </div>
 
-            {/* Pinned search bar: floats at the bottom. The frosted backdrop is
-                on its own layer faded with a mask gradient (blur + tint together)
-                so the frost dissolves smoothly upward with no hard line. The pill
-                sits on a separate, unmasked layer. pointer-events are limited to
-                the pill so the fade zone doesn't block content above it. */}
+            {/* Pinned search bar: floats at the bottom. No frosted backdrop —
+                just the translucent pill. pointer-events are limited to the pill
+                so the surrounding area doesn't block content above it. */}
             <div className="fixed inset-x-0 bottom-0 z-40 pointer-events-none pt-12 pb-5">
-                <div
-                    aria-hidden
-                    className="absolute inset-0 backdrop-blur-[5px] bg-zinc-900/85 [mask-image:linear-gradient(to_top,black_50%,transparent)] [-webkit-mask-image:linear-gradient(to_top,black_50%,transparent)]"
-                />
                 <div className="container relative mx-auto px-4 md:px-8">
                     <div className="relative pointer-events-auto mx-auto w-full md:w-1/2 lg:w-1/3">
                         {searchResults.length > 0 && (
@@ -1789,7 +1798,7 @@ export default function App() {
                             value={searchQuery}
                             onChange={handleSearchChange}
                             onKeyDown={handleSearchKeyDown}
-                            className="w-full px-5 py-3 bg-zinc-800 border border-zinc-600 text-white rounded-full shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-5 py-3 bg-zinc-800/30 border border-zinc-600/40 text-white rounded-full shadow-lg shadow-black/30 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoComplete="off"
                         />
                     </div>

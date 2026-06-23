@@ -593,21 +593,6 @@ function EconomicsMatrix({ groups }) {
                         </tr>
                     ))}
                 </tbody>
-                {rows.length > 1 && (
-                    <tfoot>
-                        <tr className="border-t border-zinc-700">
-                            <td className="py-1.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Total</td>
-                            {lengths.map((len) => (
-                                <td key={len} className={`${colCls} text-zinc-200 font-semibold`}>
-                                    {colTotals[len] > 0 ? colTotals[len] : <span className="text-zinc-700">·</span>}
-                                </td>
-                            ))}
-                            <td className="pl-2 py-1.5 text-right border-l border-zinc-800 font-mono tabular-nums text-emerald-400 font-semibold whitespace-nowrap text-[11px]">
-                                {formatLineCost(totalCost) ?? <span className="text-zinc-600">—</span>}
-                            </td>
-                        </tr>
-                    </tfoot>
-                )}
             </table>
         </div>
     );

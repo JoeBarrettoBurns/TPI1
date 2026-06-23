@@ -352,29 +352,49 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
     const handleAutoReceive = useCallback((inventoryData) => {
         if (autoReceiveInFlightRef.current) return;
         const now = new Date();
-        const itemsToReceive = inventoryData.filter(
+        const candidates = inventoryData.filter(
             (item) => item.status === 'Ordered' && item.arrivalDate && new Date(item.arrivalDate) <= now
         );
 
-        if (itemsToReceive.length > 0) {
-            autoReceiveInFlightRef.current = true;
-            const batch = writeBatch(db);
-            itemsToReceive.forEach((item) => {
-                const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
-                batch.update(docRef, {
-                    status: 'On Hand',
-                    dateReceived: localDateInputValue(now),
-                    lastEditedBy: autoAuditActor(),
-                    lastEditedAt: now.toISOString(),
-                });
-            });
-            batch
-                .commit()
-                .catch((err) => console.error('Auto-receive failed:', err))
-                .finally(() => {
-                    autoReceiveInFlightRef.current = false;
-                });
-        }
+        if (candidates.length === 0) return;
+
+        autoReceiveInFlightRef.current = true;
+        (async () => {
+            try {
+                // Re-read each candidate before receiving it. The triggering snapshot
+                // can lag an order that was just rescheduled to a later arrival date,
+                // edited, or already received — so only receive items that are still
+                // Ordered and still due against fresh data, mirroring the scheduled-use
+                // guard. This keeps a pushed-back arrival from landing on its old date.
+                const checks = await Promise.all(
+                    candidates.map(async (item) => {
+                        const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
+                        const snap = await getDoc(docRef);
+                        return { docRef, snap };
+                    })
+                );
+
+                const batch = writeBatch(db);
+                let toCommit = 0;
+                for (const { docRef, snap } of checks) {
+                    if (!snap.exists()) continue;
+                    const data = snap.data();
+                    if (data.status !== 'Ordered' || !data.arrivalDate || new Date(data.arrivalDate) > now) continue;
+                    batch.update(docRef, {
+                        status: 'On Hand',
+                        dateReceived: localDateInputValue(now),
+                        lastEditedBy: autoAuditActor(),
+                        lastEditedAt: now.toISOString(),
+                    });
+                    toCommit++;
+                }
+                if (toCommit > 0) await batch.commit();
+            } catch (err) {
+                console.error('Auto-receive failed:', err);
+            } finally {
+                autoReceiveInFlightRef.current = false;
+            }
+        })();
     }, []);
 
     const handleAutoFulfillScheduledUsage = useCallback((usageData, currentInventory) => {
@@ -454,6 +474,18 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                         lastEditedBy: autoAuditActor(),
                         lastEditedAt: usedAtIso,
                     });
+
+                    // Final freshness check before committing. The snapshot/usage ref
+                    // that triggered this pass can lag a just-saved reschedule, so a log
+                    // that was pushed to a future date (or already fulfilled) could still
+                    // look "due" here. Re-read the doc and bail if it's no longer a
+                    // Scheduled log that is due now — this is what stops a pushed-back
+                    // use from running on its old date.
+                    const freshSnap = await getDoc(logDocRef);
+                    const fresh = freshSnap.exists() ? freshSnap.data() : null;
+                    if (!fresh || fresh.status !== 'Scheduled' || new Date(fresh.usedAt) > now) {
+                        return;
+                    }
 
                     await batch.commit();
                 } catch (error) {

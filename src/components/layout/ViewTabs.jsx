@@ -3,8 +3,8 @@ import React from 'react';
 const Tab = ({ label, view, activeView, setActiveView }) => {
     const isActive = activeView === view;
     const classes = isActive
-        ? 'bg-blue-800 text-white'
-        : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-white';
+        ? 'bg-blue-800/60 text-white'
+        : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/80 hover:text-white';
 
     return (
         <button
