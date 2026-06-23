@@ -1,10 +1,10 @@
-// src/utils/materialMigrations.js
+// src/utils/materialMigrations.ts
 
 import { collection, doc, getDocs, getDoc, writeBatch, setDoc, query, where } from 'firebase/firestore';
 
 // Replace every '/' in material IDs and names with '-'.
 // Also updates all references in inventory.materialType and usage_logs[].details[].materialType
-export async function replaceSlashWithDashInMaterialNames(db, appId) {
+export async function replaceSlashWithDashInMaterialNames(db: any, appId: string) {
   const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
   const inventoryRef = collection(db, `artifacts/${appId}/public/data/inventory`);
   const usageLogsRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);

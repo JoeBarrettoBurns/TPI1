@@ -5,7 +5,7 @@ import { STANDARD_LENGTHS } from '../constants/materials';
  * Normalizes line breaks, strips invisible characters, and maps Unicode spaces to ASCII U+0020
  * so plain-text email bodies render with one consistent font (no odd fallback glyphs at line ends).
  */
-export function normalizeEmailPlainText(input) {
+export function normalizeEmailPlainText(input: unknown): string {
     if (input == null || typeof input !== 'string') return '';
     let s = input.replace(/\uFEFF/g, '');
     s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -21,11 +21,11 @@ export function normalizeEmailPlainText(input) {
     return s;
 }
 
-function normalizeSupplierKey(supplier) {
+function normalizeSupplierKey(supplier?: string | null): string {
     return (supplier || '').toUpperCase().replace(/\s+/g, '_');
 }
 
-export function getSupplierEmailInfo(supplier, supplierInfoOverrides) {
+export function getSupplierEmailInfo(supplier?: string | null, supplierInfoOverrides?: Record<string, any> | null) {
     const supplierKey = normalizeSupplierKey(supplier);
     const override = supplierInfoOverrides?.[supplierKey];
     const fallback = SUPPLIER_INFO[supplierKey] || SUPPLIER_INFO.DEFAULT;
@@ -37,8 +37,8 @@ export function getSupplierEmailInfo(supplier, supplierInfoOverrides) {
     };
 }
 
-function formatLineItemSizes(item) {
-    const lines = [];
+function formatLineItemSizes(item: any): string[] {
+    const lines: string[] = [];
 
     [...STANDARD_LENGTHS].sort((a, b) => b - a).forEach((length) => {
         const qty = parseInt(item?.[`qty${length}`] || 0, 10);
@@ -58,7 +58,7 @@ function formatLineItemSizes(item) {
 }
 
 /** Full email body: greeting, standard intro, sheet block, closing. Exported for Manage Suppliers preview. */
-export function formatSupplierEmailBody(info, sheetSectionText) {
+export function formatSupplierEmailBody(info: any, sheetSectionText?: string | null): string {
     const name = (info?.contactName || '').trim();
     const greeting = name ? `Hi ${name}` : 'Hi';
     const sheet = (sheetSectionText || '').trim();
@@ -70,7 +70,7 @@ export function formatSupplierEmailBody(info, sheetSectionText) {
 /** Returned when a buy order has no line items; must not override a saved supplier `emailBody`. */
 export const BUY_ORDER_EMPTY_ITEMS_PLACEHOLDER = '[PLEASE LIST ITEMS]';
 
-export function buildBuyOrderEmailBody(items) {
+export function buildBuyOrderEmailBody(items: any): string {
     const normalizedItems = Array.isArray(items) ? items : [];
     if (normalizedItems.length === 0) {
         return BUY_ORDER_EMPTY_ITEMS_PLACEHOLDER;
@@ -86,7 +86,7 @@ export function buildBuyOrderEmailBody(items) {
     }).join('\n\n').trim();
 }
 
-function buildDefaultItemsBody(info, items) {
+function buildDefaultItemsBody(info: any, items: any): string {
     if (info.bodyMaterial) {
         return (
             `${info.bodyMaterial}\n` +
@@ -100,7 +100,7 @@ function buildDefaultItemsBody(info, items) {
 }
 
 /** Full default email body (greeting + intro + sheet block) when no saved `emailBody` exists. */
-export function getDefaultSupplierEmailBody(info, items = []) {
+export function getDefaultSupplierEmailBody(info: any, items: any = []): string {
     let sheetSection = '';
     if (info.bodyTemplate && info.bodyTemplate.trim().length > 0) {
         sheetSection = info.bodyTemplate.trim();
@@ -116,6 +116,12 @@ export function createSupplierMailtoLink({
     supplierInfoOverrides,
     customBody = '',
     customSubject = '',
+}: {
+    supplier?: string | null;
+    items?: any[];
+    supplierInfoOverrides?: Record<string, any> | null;
+    customBody?: string;
+    customSubject?: string;
 }) {
     const info = getSupplierEmailInfo(supplier, supplierInfoOverrides);
     const resolvedSubject = customSubject && customSubject.trim().length > 0

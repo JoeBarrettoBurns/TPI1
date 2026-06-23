@@ -1,4 +1,4 @@
-// src/utils/countRepair.js
+// src/utils/countRepair.ts
 //
 // Repairs the count issues reported by auditCounts. The decision logic is pure
 // (planCountRepairs) so it can be unit tested; repairCountIssues fetches the
@@ -13,19 +13,19 @@
 
 import { doc, getDoc, writeBatch } from '../firebase/firestoreWithTracking';
 
-const parseLogMs = (log) => {
+const parseLogMs = (log: any): number => {
     const t = new Date(log?.usedAt || log?.createdAt || 0).getTime();
     return Number.isFinite(t) ? t : 0;
 };
 
-/**
- * @param {Array} issues — from auditCounts
- * @param {Array} usageLog — current usage log docs
- * @param {Map<string, {exists: boolean, status?: string, usageLogId?: string|null}>} sheetInfoById
- *        — fresh per-sheet truth fetched from Firestore
- * @returns {{ logUpdates: Array, pointerFixes: Array, unfixable: Array }}
- */
-export function planCountRepairs(issues, usageLog, sheetInfoById) {
+/** Fresh per-sheet truth fetched from Firestore, keyed by sheet id, for repair planning. */
+export interface SheetInfo {
+    exists: boolean;
+    status?: string;
+    usageLogId?: string | null;
+}
+
+export function planCountRepairs(issues: any[], usageLog: any[], sheetInfoById: Map<string, SheetInfo>) {
     const logsById = new Map((usageLog || []).map(l => [l.id, l]));
     const removeByLog = new Map();
     const pointerFixes = [];
@@ -126,12 +126,12 @@ export function planCountRepairs(issues, usageLog, sheetInfoById) {
 const MAX_BATCH_OPS = 400;
 
 /** Fetches sheet truth from Firestore, plans, and applies the repairs. */
-export async function repairCountIssues(db, appId, issues, usageLog, actorLabel) {
+export async function repairCountIssues(db: any, appId: string, issues: any[], usageLog: any[], actorLabel?: string) {
     const inventoryPath = `artifacts/${appId}/public/data/inventory`;
     const usageLogPath = `artifacts/${appId}/public/data/usage_logs`;
 
     const sheetIds = [...new Set(issues.map(i => i.sheetId).filter(Boolean))];
-    const sheetInfoById = new Map();
+    const sheetInfoById = new Map<string, SheetInfo>();
     for (let i = 0; i < sheetIds.length; i += 25) {
         const chunk = sheetIds.slice(i, i + 25);
         const snaps = await Promise.all(chunk.map(id => getDoc(doc(db, inventoryPath, id))));
@@ -145,9 +145,9 @@ export async function repairCountIssues(db, appId, issues, usageLog, actorLabel)
     const plan = planCountRepairs(issues, usageLog, sheetInfoById);
 
     const nowIso = new Date().toISOString();
-    const ops = [];
+    const ops: Array<(batch: any) => void> = [];
     plan.logUpdates.forEach(update => ops.push(batch => {
-        const payload = {
+        const payload: any = {
             qty: update.qty,
             lastEditedBy: actorLabel || 'Count Repair',
             lastEditedAt: nowIso,

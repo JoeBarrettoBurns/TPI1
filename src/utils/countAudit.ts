@@ -1,4 +1,4 @@
-// src/utils/countAudit.js
+// src/utils/countAudit.ts
 //
 // Live count verification. Re-counts every sheet through an independent path
 // (no grouping, no date keys) and cross-checks it against what the Logs view
@@ -7,16 +7,24 @@
 
 import { groupInventoryByJob } from './dataProcessing';
 
-const isManualRemoveLog = (log) =>
+const isManualRemoveLog = (log: any) =>
     log.job === 'MODIFICATION: REMOVE' && log.customer === 'Manual Edit';
 
-const skipDetail = (d) => (d.job || '').startsWith('MODIFICATION') && d.returnedByLogEdit;
+const skipDetail = (d: any) => (d.job || '').startsWith('MODIFICATION') && d.returnedByLogEdit;
 
-/**
- * @returns {{ ok: boolean, issues: Array<object>, stats: object }}
- */
-export function auditCounts(inventory, usageLog) {
-    const issues = [];
+export interface CountAuditResult {
+    ok: boolean;
+    issues: any[];
+    stats: {
+        sheetsChecked: number;
+        incomingGroups: number;
+        usageLogsChecked: number;
+        materialLengthSlots: number;
+    };
+}
+
+export function auditCounts(inventory: any[], usageLog: any[]): CountAuditResult {
+    const issues: any[] = [];
     const liveInventory = inventory || [];
     const logs = (usageLog || []).filter(l => (l.status || '') !== 'Archived');
     const completedLogs = logs.filter(l => (l.status || 'Completed') === 'Completed');

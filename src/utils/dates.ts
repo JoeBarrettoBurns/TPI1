@@ -1,4 +1,7 @@
-// src/utils/dates.js
+// src/utils/dates.ts
+
+/** Any value the date helpers accept: a Date, an ISO/`YYYY-MM-DD` string, an epoch number, or nothing. */
+export type DateLike = Date | string | number | null | undefined;
 
 /**
  * YYYY-MM-DD for a date-like value using LOCAL time (defaults to now).
@@ -7,8 +10,8 @@
  * date — `new Date().toISOString()` flips to tomorrow's date after ~5pm in
  * US timezones.
  */
-export function localDateInputValue(dateLike = new Date()) {
-    const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
+export function localDateInputValue(dateLike: DateLike = new Date()): string {
+    const d = dateLike instanceof Date ? dateLike : new Date(dateLike as any);
     if (Number.isNaN(d.getTime())) return '';
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
@@ -24,7 +27,7 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
  * negative-offset timezones). Anything else (a Date or a full ISO timestamp)
  * is converted to its local calendar date.
  */
-function toLocalYmd(dateLike) {
+function toLocalYmd(dateLike: DateLike): string {
     // Reject null/undefined/empty explicitly: `new Date(null)` is the epoch (a
     // valid date), which would otherwise resolve to 1969/1970 instead of "no date".
     if (!dateLike) return '';
@@ -36,7 +39,7 @@ function toLocalYmd(dateLike) {
  * A Date at LOCAL midnight (start of day) for the given calendar date, or null
  * if the input can't be resolved. Use for "is this day reached yet?" comparisons.
  */
-export function parseLocalDate(dateLike) {
+export function parseLocalDate(dateLike: DateLike): Date | null {
     const ymd = toLocalYmd(dateLike);
     if (!ymd) return null;
     return new Date(`${ymd}T00:00:00`);
@@ -47,7 +50,7 @@ export function parseLocalDate(dateLike) {
  * (00:00:00). This is the boundary used for incoming stock: an order "arriving
  * on the 15th" becomes available at the start of the 15th.
  */
-export function startOfDayIso(dateLike) {
+export function startOfDayIso(dateLike: DateLike): string | null {
     const ymd = toLocalYmd(dateLike);
     if (!ymd) return null;
     return new Date(`${ymd}T00:00:00`).toISOString();
@@ -59,7 +62,7 @@ export function startOfDayIso(dateLike) {
  * "scheduled for the 15th" is fulfilled at the end of the 15th, which also
  * prevents a use created earlier the same day from firing immediately.
  */
-export function endOfDayIso(dateLike) {
+export function endOfDayIso(dateLike: DateLike): string | null {
     const ymd = toLocalYmd(dateLike);
     if (!ymd) return null;
     return new Date(`${ymd}T23:59:59`).toISOString();

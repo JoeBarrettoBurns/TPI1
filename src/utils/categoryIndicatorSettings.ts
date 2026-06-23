@@ -3,12 +3,12 @@ export const DEFAULT_CATEGORY_INDICATOR_SETTINGS = Object.freeze({
     high: 10,
 });
 
-const toFiniteNumber = (value) => {
+const toFiniteNumber = (value: unknown): number | null => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 };
 
-const hasExplicitIndicatorSettings = (settings) => (
+const hasExplicitIndicatorSettings = (settings: any) => (
     settings && (
         Object.prototype.hasOwnProperty.call(settings, 'low') ||
         Object.prototype.hasOwnProperty.call(settings, 'high') ||
@@ -17,7 +17,7 @@ const hasExplicitIndicatorSettings = (settings) => (
     )
 );
 
-export const normalizeCategoryIndicatorSettings = (settings) => {
+export const normalizeCategoryIndicatorSettings = (settings: any): { low: number; high: number } => {
     const fallbackLow = DEFAULT_CATEGORY_INDICATOR_SETTINGS.low;
     const fallbackHigh = DEFAULT_CATEGORY_INDICATOR_SETTINGS.high;
 
@@ -34,8 +34,8 @@ export const normalizeCategoryIndicatorSettings = (settings) => {
     return { low, high };
 };
 
-export const buildMaterialIndicatorSettingsMap = (materials) => {
-    const settingsByMaterial = {};
+export const buildMaterialIndicatorSettingsMap = (materials: any): Record<string, any> => {
+    const settingsByMaterial: Record<string, any> = {};
 
     Object.entries(materials || {}).forEach(([materialName, material]) => {
         settingsByMaterial[materialName] = hasExplicitIndicatorSettings(material)
