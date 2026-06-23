@@ -1,12 +1,22 @@
 import { STANDARD_LENGTHS } from '../constants/materials';
+import type { Sheet, UsageLog, MaterialsMap } from '../types';
 
-export const getGaugeFromMaterial = (materialType) => {
+/**
+ * Processing rows often carry ad-hoc internal/display markers beyond the
+ * persisted Sheet/UsageLog shapes (e.g. `__historyOnly`, `manualEditSessionId`,
+ * `returnedByLogEdit`). These widened aliases keep the domain reference while
+ * tolerating those extra fields during the loose-first migration.
+ */
+type SheetLike = Record<string, any>;
+type LogLike = Record<string, any>;
+
+export const getGaugeFromMaterial = (materialType: string | null | undefined): number | null => {
     if (!materialType) return null;
     const match = materialType.match(/(\d+)\s*ga/i);
     return match ? parseInt(match[1], 10) : null;
 };
 
-export const calculateInventorySummary = (inventory, materialTypes) => {
+export const calculateInventorySummary = (inventory: Sheet[], materialTypes: string[]) => {
     const summary = {};
     materialTypes.forEach(type => {
         summary[type] = {
@@ -29,7 +39,7 @@ export const calculateInventorySummary = (inventory, materialTypes) => {
     return summary;
 };
 
-export const calculateIncomingSummary = (inventory, materialTypes) => {
+export const calculateIncomingSummary = (inventory: Sheet[], materialTypes: string[]) => {
     const summary = {};
     materialTypes.forEach(type => {
         summary[type] = {
@@ -57,7 +67,7 @@ export const calculateIncomingSummary = (inventory, materialTypes) => {
 };
 
 // Summarize scheduled outgoing usage by material and length
-export const calculateScheduledOutgoingSummary = (usageLog, materialTypes) => {
+export const calculateScheduledOutgoingSummary = (usageLog: UsageLog[], materialTypes: string[]) => {
     const summary = {};
     materialTypes.forEach(type => {
         summary[type] = {
@@ -95,7 +105,7 @@ export const calculateScheduledOutgoingSummary = (usageLog, materialTypes) => {
     return summary;
 };
 
-export const calculateSheetCost = (sheet, materials) => {
+export const calculateSheetCost = (sheet: Sheet, materials: MaterialsMap): number => {
     const materialInfo = materials[sheet.materialType];
     if (!materialInfo || !materialInfo.density || !materialInfo.thickness || !sheet.costPerPound) return 0;
     const volume = (sheet.length * (sheet.width || 48) * materialInfo.thickness);
@@ -103,10 +113,10 @@ export const calculateSheetCost = (sheet, materials) => {
     return weight * sheet.costPerPound;
 };
 
-export const calculateMaterialTransactions = (materialTypes, inventory, usageLog) => {
+export const calculateMaterialTransactions = (materialTypes: string[], inventory: Sheet[], usageLog: UsageLog[]) => {
     const allTransactions = {};
     materialTypes.forEach(matType => {
-        const groupedInventory = {};
+        const groupedInventory: Record<string, any> = {};
 
         /** Hide internal/rescheduled rows from per-material timeline; keep manual stock edits visible. */
         const skipInventoryItemInMaterialTimeline = (item) => {
@@ -184,7 +194,7 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
                 });
             });
 
-        const groupedUsage = {};
+        const groupedUsage: Record<string, any> = {};
         (usageLog || []).filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
             const isModification = (log.job || '').startsWith('MODIFICATION');
             if (isModification && log.qty >= 0) return;
@@ -221,7 +231,7 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
         transactions.sort((a, b) => {
             const dateA = a.isAddition ? (a.arrivalDate || a.date) : (a.usedAt || a.date);
             const dateB = b.isAddition ? (b.arrivalDate || b.date) : (b.usedAt || b.date);
-            return new Date(dateB) - new Date(dateA);
+            return new Date(dateB).getTime() - new Date(dateA).getTime();
         });
 
         allTransactions[matType] = transactions;
@@ -229,8 +239,8 @@ export const calculateMaterialTransactions = (materialTypes, inventory, usageLog
     return allTransactions;
 };
 
-export const groupInventoryByJob = (inventory, usageLog = []) => {
-    const grouped = {};
+export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] = []) => {
+    const grouped: Record<string, any> = {};
 
     const getGroupKey = (item) => {
         const createdDate = item.createdAt ? item.createdAt.split('T')[0] : 'unknown-date';
@@ -373,11 +383,11 @@ export const groupInventoryByJob = (inventory, usageLog = []) => {
             ...group,
             sourceLogIds: Array.from(_sourceLogIds || []),
         }))
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 };
 
-export const calculateCostBySupplier = (inventory, materials) => {
-    const costData = {};
+export const calculateCostBySupplier = (inventory: Sheet[], materials: MaterialsMap) => {
+    const costData: Record<string, any> = {};
 
     inventory.forEach(sheet => {
         if (!sheet.supplier || sheet.costPerPound <= 0) return;
@@ -402,7 +412,7 @@ export const calculateCostBySupplier = (inventory, materials) => {
     }));
 };
 
-export const calculateAnalyticsByCategory = (inventory, materials) => {
+export const calculateAnalyticsByCategory = (inventory: Sheet[], materials: MaterialsMap) => {
     const categoryData = {};
 
     inventory.forEach(sheet => {
@@ -433,15 +443,15 @@ export const calculateAnalyticsByCategory = (inventory, materials) => {
     return result;
 };
 
-export const groupLogsByJob = (inventory, usageLog) => {
-    const jobs = {};
+export const groupLogsByJob = (inventory: SheetLike[], usageLog: LogLike[]) => {
+    const jobs: Record<string, any> = {};
 
     const isTrackableJobName = (jobName) => {
         const name = (jobName || '').trim();
         return Boolean(name && name !== 'N/A' && !name.startsWith('MODIFICATION'));
     };
 
-    const ensureJob = (jobName, source = {}) => {
+    const ensureJob = (jobName, source: any = {}) => {
         if (!isTrackableJobName(jobName)) return null;
         const key = jobName;
         if (!jobs[key]) {
@@ -549,10 +559,10 @@ export const groupLogsByJob = (inventory, usageLog) => {
         }
     });
 
-    return Object.values(jobs).sort((a, b) => new Date(b.date) - new Date(a.date));
+    return Object.values(jobs).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 };
 
-function shallowCopyJobMaterials(materials) {
+function shallowCopyJobMaterials(materials: any) {
     if (!materials || typeof materials !== 'object') return {};
     const out = {};
     for (const [type, sheets] of Object.entries(materials)) {
@@ -576,7 +586,7 @@ const CUSTOMER_NAME_TOKEN_CANON = {
     PARTS: 'PART',
 };
 
-function canonicalizeCustomerTokens(upperSpaceSeparated) {
+function canonicalizeCustomerTokens(upperSpaceSeparated: string) {
     return upperSpaceSeparated
         .split(' ')
         .filter(Boolean)
@@ -589,7 +599,7 @@ function canonicalizeCustomerTokens(upperSpaceSeparated) {
  * Uppercase; hyphens/underscores/dots/commas → spaces; & → AND; collapse whitespace;
  * map common plural suffix tokens (SOLUTIONS→SOLUTION).
  */
-export function normalizeCustomerKey(customer) {
+export function normalizeCustomerKey(customer: unknown): string {
     if (customer == null || typeof customer !== 'string') return '';
     let s = customer.trim();
     if (!s) return '';
@@ -608,7 +618,7 @@ export function normalizeCustomerKey(customer) {
  * Supported shapes: `J5851_EXT`, `J5815-2IN-146`, `J5788-REPLACEMENT` (underscore or hyphen after the digits).
  * Names that do not start with `J` + digits stay in one leaf group keyed by uppercase full string.
  */
-export function parseJobPoParts(raw) {
+export function parseJobPoParts(raw: unknown) {
     const full = String(raw ?? '').trim();
     if (!full) return { baseKey: '', displayBase: '', partSuffix: '', full: '' };
     const m = full.match(/^J(\d+)(?:[_-](.+))?$/i);
@@ -626,7 +636,7 @@ export function parseJobPoParts(raw) {
  * Split a stored job string (e.g. legacy usage log `job`) into Job # + Section for editing.
  * `joinWith` is `_` or `-` after the numeric PO when present, so re-saving preserves the original separator.
  */
-export function splitUseStockJobFields(rawJob) {
+export function splitUseStockJobFields(rawJob: unknown) {
     const raw = String(rawJob ?? '').trim();
     if (!raw) return { jobNumber: '', jobSection: '', joinWith: '_' };
 
@@ -649,7 +659,7 @@ export function splitUseStockJobFields(rawJob) {
  * Compose the stored `job` string from separate Job # and Section fields.
  * `joinWith` is `_` (default) or `-` after the PO digits; use {@link splitUseStockJobFields} when editing legacy logs.
  */
-export function formatUseStockJobLabel(jobNumberRaw, jobSectionRaw, joinWith = '_') {
+export function formatUseStockJobLabel(jobNumberRaw: unknown, jobSectionRaw: unknown, joinWith = '_'): string {
     const sep = joinWith === '-' ? '-' : '_';
     const numIn = String(jobNumberRaw ?? '').trim();
     if (!numIn) return '';
@@ -674,14 +684,14 @@ export function formatUseStockJobLabel(jobNumberRaw, jobSectionRaw, joinWith = '
 }
 
 /** Stable id for a customer + job pair derived from usage logs (Use Stock). */
-export const customerJobPairId = (customer, jobName) =>
+export const customerJobPairId = (customer: unknown, jobName?: string | null) =>
     `${normalizeCustomerKey(customer)}::${(jobName || '').trim().toUpperCase()}`;
 
 /**
  * True when the usage-log `customer` field is actually a PO/job placeholder (e.g. `J5639`)
  * matching the job row, instead of a real company name — so we should prefer `allJobs` metadata.
  */
-function usageCustomerLooksLikeJobPo(customerRaw, jobName) {
+function usageCustomerLooksLikeJobPo(customerRaw: unknown, jobName: unknown) {
     const c = String(customerRaw ?? '').trim();
     if (!c) return false;
     const { baseKey } = parseJobPoParts(jobName);
@@ -691,7 +701,7 @@ function usageCustomerLooksLikeJobPo(customerRaw, jobName) {
     return pc.baseKey === baseKey;
 }
 
-function resolveUsageCustomerLabel(customerRaw, jobName, enrich) {
+function resolveUsageCustomerLabel(customerRaw: unknown, jobName: unknown, enrich: any) {
     const trimmed = String(customerRaw ?? '').trim();
     if (!trimmed) return trimmed;
     if (!usageCustomerLooksLikeJobPo(trimmed, jobName) || !enrich) return trimmed;
@@ -705,7 +715,7 @@ function resolveUsageCustomerLabel(customerRaw, jobName, enrich) {
  * Jobs are grouped under that customer. Rows reuse materials from `allJobs` when the job name matches.
  * `orphanJobs` lists jobs from inventory/logs that never appeared on a usage log with a customer (incoming-only POs, etc.).
  */
-export const buildCustomerJobGroups = (usageLog, allJobs = []) => {
+export const buildCustomerJobGroups = (usageLog: LogLike[], allJobs: any[] = []) => {
     const logs = (usageLog || []).filter(log => (log.status || '') !== 'Archived');
 
     const usagePairs = logs.filter(log => {
@@ -782,7 +792,7 @@ export const buildCustomerJobGroups = (usageLog, allJobs = []) => {
             return {
                 customerKey,
                 customer: bestLabel,
-                jobs: g.jobs.sort((a, b) => new Date(b.date) - new Date(a.date)),
+                jobs: g.jobs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
             };
         })
         .sort((a, b) => {
@@ -795,7 +805,7 @@ export const buildCustomerJobGroups = (usageLog, allJobs = []) => {
 
     const orphanJobs = (allJobs || [])
         .filter(j => j.job && !linkedJobNames.has(j.job))
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     return { customerGroups, orphanJobs };
 };
