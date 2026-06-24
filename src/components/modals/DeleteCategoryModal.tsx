@@ -3,7 +3,7 @@ import { BaseModal } from './BaseModal';
 import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 
-export const DeleteCategoryModal = ({ onClose, onConfirm, categoryName, error, isSubmitting = false }) => (
+export const DeleteCategoryModal = ({ onClose, onConfirm, categoryName, error, isSubmitting = false }: any) => (
     <BaseModal onClose={isSubmitting ? () => {} : onClose} title={`Delete Category: ${categoryName}`} zClass="z-[60]">
         <div className="space-y-4">
             <p>Are you sure you want to delete the "{categoryName}" category?</p>

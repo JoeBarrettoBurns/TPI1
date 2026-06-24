@@ -1,9 +1,9 @@
-// src/components/modals/LogDetailModal.jsx
+// src/components/modals/LogDetailModal.tsx
 
 import React, { useMemo } from 'react';
 import { BaseModal } from './BaseModal';
 
-export const groupLogDetailItems = (logEntry) => {
+export const groupLogDetailItems = (logEntry: any) => {
     const sourceDetails = logEntry?.displayDetails || logEntry?.details;
     if (!sourceDetails) return [];
 
@@ -12,8 +12,8 @@ export const groupLogDetailItems = (logEntry) => {
         return sourceDetails.map(d => ({ ...d, count: d.qty }));
     }
 
-    const groups = {};
-    sourceDetails.forEach(item => {
+    const groups: Record<string, any> = {};
+    sourceDetails.forEach((item: any) => {
         // One slot per material + size; sheets with differing cost records stay
         // in the same slot and their costs are aggregated for display.
         const key = `${item.materialType}|${item.width}|${item.length}|${logEntry.isAddition ? (item.arrivalDate || '') : ''}`;
@@ -26,7 +26,7 @@ export const groupLogDetailItems = (logEntry) => {
     return Object.values(groups);
 };
 
-export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
+export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }: any) => {
     const groupedDetails = useMemo(() => groupLogDetailItems(logEntry), [logEntry]);
 
     if (!isOpen || !logEntry) return null;
@@ -39,7 +39,7 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
         return logEntry.usedAt || logEntry.date || logEntry.createdAt;
     })();
 
-    const calculateWeight = (item) => {
+    const calculateWeight = (item: any) => {
         const material = materials[item.materialType];
         if (!material) return 0;
         return (item.width * item.length * material.thickness * material.density);
@@ -71,7 +71,7 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }) => {
                             const totalCost = item.costPerPoundValues
                                 ? weightPerSheet * costValues.reduce((sum, value) => sum + value, 0)
                                 : weightPerSheet * (item.costPerPound || 0) * quantity;
-                            const costLabel = [...new Set(costValues)]
+                            const costLabel = [...new Set<any>(costValues)]
                                 .sort((a, b) => b - a)
                                 .map(value => (value ? `$${value}` : 'N/A'))
                                 .join(' / ');

@@ -1,7 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 
-export const BaseModal = ({ children, onClose, title, maxWidthClass = 'max-w-4xl', zClass = 'z-50' }) => (
+export const BaseModal = ({ children, onClose, title, maxWidthClass = 'max-w-4xl', zClass = 'z-50' }: any) => (
     <div className={`fixed inset-0 bg-zinc-900/80 backdrop-blur-sm flex items-center justify-center ${zClass} p-4`} onClick={onClose}>
         <div className={`bg-zinc-800 border border-zinc-700 rounded-2xl shadow-2xl w-full ${maxWidthClass} transform transition-all`} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-6 border-b border-zinc-700">

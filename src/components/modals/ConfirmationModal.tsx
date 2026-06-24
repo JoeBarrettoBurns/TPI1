@@ -10,7 +10,7 @@ export const ConfirmationModal = ({
     showCancel = true,
     confirmLabel = 'Confirm',
     confirmVariant = 'danger',
-}) => {
+}: any) => {
     if (!isOpen) return null;
 
     return (

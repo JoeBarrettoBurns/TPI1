@@ -3,7 +3,7 @@ import { Mail } from 'lucide-react';
 import { BaseModal } from './BaseModal';
 import { Button } from '../common/Button';
 
-function openMailto(mailto) {
+function openMailto(mailto: any) {
     const link = document.createElement('a');
     link.href = mailto;
     document.body.appendChild(link);
@@ -11,7 +11,7 @@ function openMailto(mailto) {
     link.remove();
 }
 
-export const BuyOrderDraftsModal = ({ onClose, drafts = [] }) => {
+export const BuyOrderDraftsModal = ({ onClose, drafts = [] }: any) => {
     const [remainingDrafts, setRemainingDrafts] = useState(() => drafts.filter((draft) => draft?.mailto));
 
     const handleOpenDraft = (draftToOpen) => {
