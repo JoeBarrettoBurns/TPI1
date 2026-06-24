@@ -1,9 +1,9 @@
-// src/utils/recoveryService.js
+// src/utils/recoveryService.ts
 
 import { collection, getDocs, doc, writeBatch } from '../firebase/firestoreWithTracking';
 import { getGaugeFromMaterial } from './dataProcessing';
 
-function guessCategory(materialType) {
+function guessCategory(materialType?: string | null): string {
   const t = (materialType || '').toUpperCase();
   if (t.includes('GALV')) return 'Galvanized';
   if (t.includes('SATIN')) return 'Satin Coat';
@@ -13,14 +13,14 @@ function guessCategory(materialType) {
   return 'Recovered';
 }
 
-function defaultDensityForCategory(category) {
+function defaultDensityForCategory(category?: string | null): number {
   const c = (category || '').toUpperCase();
   if (c.includes('ALUM')) return 0.0975; // Aluminum ~0.0975 lb/in^3
   // Default to steel density
   return 0.2833;
 }
 
-export async function rebuildMissingMaterialsFromInventory(db, appId, existingMaterialsKeys = []) {
+export async function rebuildMissingMaterialsFromInventory(db: any, appId: string, existingMaterialsKeys: any[] = []) {
   const materialsKeySet = new Set(existingMaterialsKeys);
   const invRef = collection(db, `artifacts/${appId}/public/data/inventory`);
   const invSnap = await getDocs(invRef);
@@ -58,5 +58,3 @@ export async function rebuildMissingMaterialsFromInventory(db, appId, existingMa
   }
   return { created: missing.size };
 }
-
-

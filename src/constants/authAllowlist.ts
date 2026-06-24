@@ -16,9 +16,9 @@ export const FALLBACK_ALLOWED_EMAILS = [
 export const ALLOWED_GOOGLE_EMAILS = FALLBACK_ALLOWED_EMAILS;
 
 /** Ignored while ALLOWED_GOOGLE_EMAILS has at least one entry. */
-export const ALLOWED_GOOGLE_EMAIL_DOMAINS = [];
+export const ALLOWED_GOOGLE_EMAIL_DOMAINS: string[] = [];
 
-export function normalizeEmail(email) {
+export function normalizeEmail(email: unknown): string {
     if (!email || typeof email !== 'string') return '';
     return email.toLowerCase().trim();
 }
@@ -27,14 +27,14 @@ export function normalizeEmail(email) {
  * Firebase Email/Password only accepts real email addresses (not arbitrary usernames).
  * Use this before saving to the allowlist or calling createUserWithEmailAndPassword.
  */
-export function isValidEmailFormat(email) {
+export function isValidEmailFormat(email: unknown): boolean {
     const s = normalizeEmail(email);
     if (!s || s.length > 254) return false;
     return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
 }
 
 /** User-facing copy for common Firebase Auth errors on email/password flows. */
-export function getFirebaseEmailAuthErrorMessage(error) {
+export function getFirebaseEmailAuthErrorMessage(error: any): string {
     const code = error?.code;
     if (code === 'auth/operation-not-allowed') {
         return 'Email/password sign-in is turned off for this Firebase project. Open Firebase Console → Authentication → Sign-in method → enable Email/Password.';
@@ -61,7 +61,7 @@ export function getFirebaseEmailAuthErrorMessage(error) {
  * Gmail and googlemail.com are the same mailbox; allowlist may list either form.
  * @param {string} normalizedLower — output of normalizeEmail()
  */
-function gmailEquivalentAddresses(normalizedLower) {
+function gmailEquivalentAddresses(normalizedLower: string): string[] {
     if (!normalizedLower) return [];
     if (normalizedLower.endsWith('@googlemail.com')) {
         const local = normalizedLower.slice(0, -'@googlemail.com'.length);
@@ -75,7 +75,7 @@ function gmailEquivalentAddresses(normalizedLower) {
 }
 
 /** @param {string[]} allowedLowercased — emails already lowercased */
-export function isEmailAllowed(email, allowedLowercased) {
+export function isEmailAllowed(email: unknown, allowedLowercased: string[]): boolean {
     const lower = normalizeEmail(email);
     if (!lower) return false;
     for (const addr of gmailEquivalentAddresses(lower)) {
@@ -89,7 +89,7 @@ export function isEmailAllowed(email, allowedLowercased) {
  * @param {object | null} user — Firebase User
  * @param {string[]} allowedLowercased
  */
-export function isFirebaseUserAllowed(user, allowedLowercased) {
+export function isFirebaseUserAllowed(user: any, allowedLowercased: string[]): boolean {
     if (!user) return false;
     const candidates = [];
     if (user.email) candidates.push(normalizeEmail(user.email));
@@ -103,6 +103,6 @@ export function isFirebaseUserAllowed(user, allowedLowercased) {
     return false;
 }
 
-export function getUnauthorizedMessage() {
+export function getUnauthorizedMessage(): string {
     return 'This account is not authorized for this app.';
 }

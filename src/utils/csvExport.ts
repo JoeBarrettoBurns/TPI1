@@ -1,6 +1,11 @@
-// src/utils/csvExport.js
+// src/utils/csvExport.ts
 
-function convertToCSV(data, headers) {
+interface CsvHeader {
+    key: string;
+    label: string;
+}
+
+function convertToCSV(data: any[], headers: CsvHeader[]): string {
     const headerRow = headers.map(h => h.label).join(',');
     const bodyRows = data.map(row => {
         return headers.map(header => {
@@ -17,7 +22,7 @@ function convertToCSV(data, headers) {
     return [headerRow, ...bodyRows].join('\n');
 }
 
-export function exportToCSV(data, headers, filename) {
+export function exportToCSV(data: any[], headers: CsvHeader[], filename: string): void {
     if (!data || data.length === 0) {
         alert("No data to export.");
         return;
