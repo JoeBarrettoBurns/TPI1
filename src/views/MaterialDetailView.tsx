@@ -9,7 +9,7 @@ export const MaterialDetailView = ({
     onDeleteLog, onDeleteInventoryGroup, onEditOrder, onReceiveOrder, onFulfillLog,
     scrollToMaterial, onScrollToComplete, materials, materialTypes, searchQuery,
     isEditMode
-}) => {
+}: any) => {
     const stableMaterialsInCategory = useMemo(() => {
         return materialTypes
             .filter(m => materials[m] && materials[m].category === category);
@@ -31,8 +31,8 @@ export const MaterialDetailView = ({
         return orderedMaterials.filter(m => m.toLowerCase().includes(lowercasedQuery));
     }, [orderedMaterials, searchQuery]);
 
-    const [highlightedMaterial, setHighlightedMaterial] = useState(null);
-    const detailRefs = useRef({});
+    const [highlightedMaterial, setHighlightedMaterial] = useState<any>(null);
+    const detailRefs = useRef<any>({});
 
     useEffect(() => {
         if (!scrollToMaterial) return;
@@ -78,7 +78,7 @@ export const MaterialDetailView = ({
                             onFulfillLog={onFulfillLog}
                             materials={materials}
                             isEditMode={isEditMode}
-                            ref={el => detailRefs.current[matType] = { current: el }}
+                            ref={el => { detailRefs.current[matType] = { current: el }; }}
                             highlighted={highlightedMaterial === matType}
                         />
                     ))}

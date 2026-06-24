@@ -1,4 +1,4 @@
-// src/views/SheetCostCalculatorView.jsx
+// src/views/SheetCostCalculatorView.tsx
 
 import React, { useMemo, useState } from 'react';
 import { STANDARD_LENGTHS } from '../constants/materials';
@@ -8,12 +8,12 @@ const DEFAULT_DENSITIES = {
     Aluminum: 0.0975,
 };
 
-function formatCurrency(value) {
+function formatCurrency(value: any) {
     if (Number.isNaN(value) || !Number.isFinite(value)) return '—';
     return value.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 }
 
-function computeSheetCost(thicknessInches, costPerPound, densityLbPerIn3, widthInches, lengthInches) {
+function computeSheetCost(thicknessInches: any, costPerPound: any, densityLbPerIn3: any, widthInches: any, lengthInches: any) {
     const t = parseFloat(thicknessInches);
     const cpp = parseFloat(costPerPound);
     const d = parseFloat(densityLbPerIn3);

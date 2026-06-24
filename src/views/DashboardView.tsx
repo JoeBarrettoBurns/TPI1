@@ -1,4 +1,4 @@
-// src/views/DashboardView.jsx
+// src/views/DashboardView.tsx
 
 import React, { useMemo } from 'react';
 import { DragOverlay } from '@dnd-kit/core';
@@ -19,7 +19,7 @@ export const DashboardView = ({
     categoriesToDelete,
     searchQuery,
     materialIndicatorSettings
-}) => {
+}: any) => {
     const filteredCategories = useMemo(() => {
         if (!searchQuery) return categories;
         const lowercasedQuery = searchQuery.toLowerCase();

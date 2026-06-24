@@ -1,4 +1,4 @@
-// src/views/AuthView.jsx
+// src/views/AuthView.tsx
 //
 // Email/password sign-in follows the Firebase Web modular SDK:
 // https://firebase.google.com/docs/auth/web/password-auth
@@ -18,8 +18,8 @@ export const AuthView = ({
     accessDenied = false,
     deniedDetail = '',
     onClearAccessDenied,
-}) => {
-    const [error, setError] = useState(null);
+}: any) => {
+    const [error, setError] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -51,7 +51,7 @@ export const AuthView = ({
     }, [authReady]);
 
     const handleEmailSignIn = useCallback(
-        async (e) => {
+        async (e: any) => {
             e?.preventDefault?.();
             if (!authReady) return;
             const trimmed = email.trim();
