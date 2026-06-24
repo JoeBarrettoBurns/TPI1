@@ -1,4 +1,4 @@
-// src/views/LogsView.jsx
+// src/views/LogsView.tsx
 
 import React, { useState, useMemo } from 'react';
 import { ArrowDownCircle, ArrowUpCircle, Download, ShieldCheck, ShieldAlert, Wrench } from 'lucide-react';
@@ -44,14 +44,14 @@ const AUDIT_ISSUE_META = {
     },
 };
 
-export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup, materials, onFulfillLog, onReceiveOrder, searchQuery, onRepairCountIssues }) => {
-    const [detailLog, setDetailLog] = useState(null);
-    const [logToDelete, setLogToDelete] = useState(null);
+export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDeleteInventoryGroup, materials, onFulfillLog, onReceiveOrder, searchQuery, onRepairCountIssues }: any) => {
+    const [detailLog, setDetailLog] = useState<any>(null);
+    const [logToDelete, setLogToDelete] = useState<any>(null);
     const [incomingOrdersToShow, setIncomingOrdersToShow] = useState(5);
     const [outgoingOrdersToShow, setOutgoingOrdersToShow] = useState(5);
     const [auditRequested, setAuditRequested] = useState(false);
     const [isRepairing, setIsRepairing] = useState(false);
-    const [repairSummary, setRepairSummary] = useState(null);
+    const [repairSummary, setRepairSummary] = useState<any>(null);
 
     // Recomputes automatically when Firestore pushes fresh data, so after a
     // repair the panel re-verifies itself in front of the user.
@@ -60,7 +60,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
         [auditRequested, inventory, usageLog]
     );
 
-    const logsById = useMemo(() => new Map(usageLog.map(l => [l.id, l])), [usageLog]);
+    const logsById = useMemo(() => new Map<string, any>(usageLog.map((l: any) => [l.id, l])), [usageLog]);
     const logLabel = (id) => {
         const log = logsById.get(id);
         if (!log) return 'a deleted log';
