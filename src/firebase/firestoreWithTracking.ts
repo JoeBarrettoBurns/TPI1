@@ -8,41 +8,41 @@ import { recordRead, recordWrite, recordDelete } from '../utils/firestoreUsageTr
 export * from 'firebase/firestore';
 
 // Tracked getDocs
-export async function getDocs(queryConstraint) {
-    const snap = await firestore.getDocs(queryConstraint);
+export async function getDocs(queryConstraint: any) {
+    const snap: any = await firestore.getDocs(queryConstraint);
     recordRead(snap.size);
     return snap;
 }
 
 // Tracked getDoc
-export async function getDoc(documentRef) {
-    const snap = await firestore.getDoc(documentRef);
+export async function getDoc(documentRef: any) {
+    const snap: any = await firestore.getDoc(documentRef);
     recordRead(snap.exists() ? 1 : 0);
     return snap;
 }
 
 // Tracked getCountFromServer - estimate 1 read per aggregate query
-export async function getCountFromServer(queryConstraint) {
-    const snap = await firestore.getCountFromServer(queryConstraint);
+export async function getCountFromServer(queryConstraint: any) {
+    const snap: any = await firestore.getCountFromServer(queryConstraint);
     recordRead(1);
     return snap;
 }
 
 // Tracked writeBatch - wraps batch to count set/update/delete
-export function writeBatch(db) {
+export function writeBatch(db: any) {
     const batch = firestore.writeBatch(db);
     const counts = { writes: 0, deletes: 0 };
     return {
-        set: (...args) => {
-            batch.set(...args);
+        set: (...args: any[]) => {
+            (batch as any).set(...args);
             counts.writes++;
         },
-        update: (...args) => {
-            batch.update(...args);
+        update: (...args: any[]) => {
+            (batch as any).update(...args);
             counts.writes++;
         },
-        delete: (...args) => {
-            batch.delete(...args);
+        delete: (...args: any[]) => {
+            (batch as any).delete(...args);
             counts.deletes++;
         },
         commit: () =>
@@ -54,9 +54,9 @@ export function writeBatch(db) {
 }
 
 // Tracked runTransaction - wraps transaction to count get/set/update/delete
-export function runTransaction(db, updateFunction) {
+export function runTransaction(db: any, updateFunction: any) {
     const counts = { reads: 0, writes: 0, deletes: 0 };
-    const wrappedUpdate = async (transaction) => {
+    const wrappedUpdate = async (transaction: any) => {
         const wrappedTx = {
             get: async (ref) => {
                 const snap = await transaction.get(ref);
@@ -87,24 +87,24 @@ export function runTransaction(db, updateFunction) {
 }
 
 // Tracked updateDoc - single write
-export async function updateDoc(documentRef, data) {
+export async function updateDoc(documentRef: any, data: any) {
     const result = await firestore.updateDoc(documentRef, data);
     recordWrite(1);
     return result;
 }
 
 // Tracked setDoc - single write
-export async function setDoc(documentRef, data, options) {
+export async function setDoc(documentRef: any, data?: any, options?: any) {
     const result = await firestore.setDoc(documentRef, data, options);
     recordWrite(1);
     return result;
 }
 
 // Tracked onSnapshot - each snapshot callback = docs.length reads
-export function onSnapshot(refOrQuery, onNext, onError, onCompletion) {
+export function onSnapshot(refOrQuery: any, onNext: any, onError?: any, onCompletion?: any) {
     return firestore.onSnapshot(
         refOrQuery,
-        (snap) => {
+        (snap: any) => {
             recordRead(snap.size);
             onNext(snap);
         },

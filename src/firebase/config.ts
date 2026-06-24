@@ -28,6 +28,7 @@ const firebaseConfig = {
   };
 
 // This is a placeholder for the app ID, which is often provided in a specific environment.
+declare const __app_id: string | undefined;
 export const appId = typeof __app_id !== 'undefined' ? __app_id : 'tecnopan-inventory-app';
 
 // Initialize Firebase services
