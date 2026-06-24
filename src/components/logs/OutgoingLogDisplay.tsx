@@ -1,11 +1,11 @@
-// src/components/logs/OutgoingLogDisplay.jsx
+// src/components/logs/OutgoingLogDisplay.tsx
 
 import React, { useMemo } from 'react';
 import { Edit, Trash2, CalendarClock, Truck } from 'lucide-react';
 import { groupDetailsByMaterial, orderLengthLabels } from './LogItemSummary';
 import { AuditTag } from '../common/AuditTag';
 
-export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, onEdit, onFulfillLog, ordersToShow }) => {
+export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, onEdit, onFulfillLog, ordersToShow }: any) => {
     const outgoingItems = useMemo(() => {
         return usageLog
             .filter(item => {
@@ -19,7 +19,7 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
                 materialRows: groupDetailsByMaterial(item.details),
                 customer: item.customer || 'N/A'
             }))
-            .sort((a, b) => new Date(b.usedAt) - new Date(a.usedAt));
+            .sort((a, b) => new Date(b.usedAt).getTime() - new Date(a.usedAt).getTime());
     }, [usageLog]);
 
     const visibleItems = outgoingItems.slice(0, ordersToShow);
@@ -77,7 +77,7 @@ export const OutgoingLogDisplay = ({ usageLog, materials, onRowClick, onDelete, 
                                         <>
                                             <td rowSpan={span} className="px-3 py-2 align-top text-zinc-300 whitespace-nowrap">
                                                 <div className="flex items-center justify-center gap-2">
-                                                    {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" title="Scheduled" />}
+                                                    {item.status === 'Scheduled' && <CalendarClock size={16} className="text-purple-400 shrink-0" {...({ title: 'Scheduled' } as any)} />}
                                                     <span>{new Date(item.usedAt || item.createdAt).toLocaleDateString()}</span>
                                                 </div>
                                                 <div className="mt-1 flex justify-center">

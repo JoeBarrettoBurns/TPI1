@@ -1,4 +1,4 @@
-// src/components/layout/Header.jsx
+// src/components/layout/Header.tsx
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart, Shield, Settings } from 'lucide-react';
@@ -15,12 +15,12 @@ export const Header = ({
     onOpenBackup,
     onOpenAuthentication,
     onSignOut
-}) => {
+}: any) => {
     const [moreOpen, setMoreOpen] = useState(false);
-    const moreMenuRef = useRef(null);
+    const moreMenuRef = useRef<any>(null);
 
     useEffect(() => {
-        const handleDocPointerDown = (event) => {
+        const handleDocPointerDown = (event: any) => {
             if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
                 setMoreOpen(false);
             }

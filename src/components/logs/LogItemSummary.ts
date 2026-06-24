@@ -1,6 +1,6 @@
 import { STANDARD_LENGTHS } from '../../constants/materials';
 
-const formatMeasurement = (value) => {
+const formatMeasurement = (value: any) => {
     const number = Number(value);
     if (!Number.isFinite(number)) return null;
 
@@ -9,15 +9,15 @@ const formatMeasurement = (value) => {
         : number.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
 };
 
-const getLength = (item) => {
+const getLength = (item: any) => {
     const length = formatMeasurement(item.length);
     return length ? `${length}"` : null;
 };
 
-export const summarizeDetails = (details) => {
+export const summarizeDetails = (details: any) => {
     if (!Array.isArray(details) || details.length === 0) return [];
 
-    const groups = details.reduce((acc, item) => {
+    const groups: Record<string, any> = details.reduce((acc: Record<string, any>, item: any) => {
         const materialType = item.materialType || 'Unknown Material';
         const length = getLength(item);
         const key = `${materialType}|${length || ''}`;
@@ -44,7 +44,7 @@ export const STANDARD_LENGTH_LABELS = STANDARD_LENGTHS.map((len) => `${len}"`);
 
 // One entry per material with a per-length-label count map, e.g.
 // [{ materialType: '2x2x14GA GALV', counts: { '96"': 5, '120"': 2 } }]
-export const groupDetailsByMaterial = (details) => {
+export const groupDetailsByMaterial = (details: any) => {
     const byMaterial = new Map();
     summarizeDetails(details).forEach(({ materialType, length, quantity }) => {
         const label = length || 'N/A';
@@ -59,7 +59,7 @@ export const groupDetailsByMaterial = (details) => {
 // Ordered length columns to render: the standard lengths always (like the
 // Categories view), then any non-standard lengths actually present
 // (custom-cut sheets), with 'N/A' last.
-export const orderLengthLabels = (labels) => {
+export const orderLengthLabels = (labels: any[]) => {
     const present = new Set(labels);
     const extras = [...present]
         .filter((label) => label && label !== 'N/A' && !STANDARD_LENGTH_LABELS.includes(label))

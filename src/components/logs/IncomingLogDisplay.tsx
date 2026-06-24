@@ -1,11 +1,11 @@
-// src/components/logs/IncomingLogDisplay.jsx
+// src/components/logs/IncomingLogDisplay.tsx
 
 import React, { useMemo } from 'react';
 import { Edit, Trash2, Truck } from 'lucide-react';
 import { groupDetailsByMaterial, orderLengthLabels } from './LogItemSummary';
 import { AuditTag } from '../common/AuditTag';
 
-export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }) => {
+export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }: any) => {
     const processedItems = useMemo(() => {
         return incomingItems.map(item => {
             const displayDetails = item.displayDetails || item.details || [];

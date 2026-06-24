@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Tab = ({ label, view, activeView, setActiveView }) => {
+const Tab = ({ label, view, activeView, setActiveView }: any) => {
     const isActive = activeView === view;
     const classes = isActive
         ? 'bg-blue-800/60 text-white'
@@ -17,7 +17,7 @@ const Tab = ({ label, view, activeView, setActiveView }) => {
     );
 };
 
-export const ViewTabs = ({ activeView, setActiveView, categories }) => {
+export const ViewTabs = ({ activeView, setActiveView, categories }: any) => {
     const mainViews = [
         { label: 'Dashboard', view: 'dashboard' },
         { label: 'Jobs', view: 'jobs' },
