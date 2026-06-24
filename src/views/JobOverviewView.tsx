@@ -86,7 +86,7 @@ function groupJobsByPoNumber(jobs) {
     }
     const groups = [...map.values()].map((g) => ({
         ...g,
-        parts: [...g.parts].sort((a, b) => new Date(b.date) - new Date(a.date)),
+        parts: [...g.parts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     }));
     groups.sort((a, b) => {
         const na = sortKeyFromPoGroup(a);
@@ -364,7 +364,7 @@ function CustomerColumn({ options, selectedKey, onSelectKey }) {
 
 // ─── Column 2: PO job list ────────────────────────────────────────────────────
 
-function PoJobCard({ group, selected, onSelect, jobEconIndex, materials, showArchiveBtn, showRestoreBtn, onArchive, onRestore, archiveReady, isArchived }) {
+function PoJobCard({ group, selected, onSelect, jobEconIndex, materials, showArchiveBtn, showRestoreBtn, onArchive, onRestore, archiveReady, isArchived }: any) {
     const multi = group.parts.length > 1;
     const rollup = multi
         ? rollupGroupEconomics(group.parts, jobEconIndex, materials)
@@ -517,7 +517,7 @@ function lengthColLabel(len) {
 
 /** Pivot flat economics rows into a material(×bucket) × length grid for tabular display. */
 function buildEconomicsMatrix(groups) {
-    const lengthSet = new Set();
+    const lengthSet = new Set<any>();
     const rowMap = new Map();
     for (const g of groups || []) {
         lengthSet.add(g.length);
