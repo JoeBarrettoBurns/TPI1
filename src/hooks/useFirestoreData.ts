@@ -23,6 +23,8 @@ import {
     normalizeEmail,
 } from '../constants/authAllowlist';
 
+declare const __initial_auth_token: string | undefined;
+
 const ACCESS_ALLOWLIST_DOC = () => doc(db, `artifacts/${appId}/config/access_allowlist`);
 const ALLOWLIST_CACHE_KEY = `access_allowlist_cache_${appId}`;
 
@@ -433,7 +435,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
                         const availableSheets = currentInventory
                             .filter((i) => i.materialType === materialType && i.length === length && i.status === 'On Hand' && !claimedSheetIds.has(i.id))
-                            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
                         if (availableSheets.length < qty) {
                             canFulfill = false;
@@ -682,7 +684,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                 ...orderedSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
             ];
             const deduped = Array.from(new Map(merged.map((item) => [item.id, item])).values()).sort(
-                (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+                (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
             );
 
             if (!isActive) return;
@@ -702,7 +704,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         const mergeSnapshotsAndApply = () => {
             const merged = [...onHandRef.current, ...orderedRef.current];
             const deduped = Array.from(new Map(merged.map((item) => [item.id, item])).values()).sort(
-                (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+                (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
             );
             if (!isActive) return;
             setInventory(deduped);

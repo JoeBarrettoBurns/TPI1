@@ -2,22 +2,22 @@ import { useState, useCallback } from 'react';
 import { STANDARD_LENGTHS } from '../constants/materials';
 import { localDateInputValue } from '../utils/dates';
 
-function toInputDate(value) {
+function toInputDate(value: any): string {
     if (!value) return '';
     return localDateInputValue(value);
 }
 
-export function useOrderForm(initialData, materialTypes, suppliers, prefill = null, options = {}) {
+export function useOrderForm(initialData: any, materialTypes: string[], suppliers: string[], prefill: any = null, options: { multiSupplier?: boolean } = {}) {
     const { multiSupplier = false } = options;
 
-    const getDefaultSupplier = useCallback((preferredSupplier) => {
+    const getDefaultSupplier = useCallback((preferredSupplier?: any) => {
         if (preferredSupplier && suppliers.includes(preferredSupplier)) {
             return preferredSupplier;
         }
         return suppliers[0] || '';
     }, [suppliers]);
 
-    const getDefaultSuppliers = useCallback((preferredSuppliers = [], preferredSupplier = '') => {
+    const getDefaultSuppliers = useCallback((preferredSuppliers: any = [], preferredSupplier = '') => {
         const normalizedPreferred = Array.isArray(preferredSuppliers)
             ? preferredSuppliers.filter((supplier) => suppliers.includes(supplier))
             : [];
@@ -29,7 +29,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
         return fallbackSupplier ? [fallbackSupplier] : [];
     }, [getDefaultSupplier, suppliers]);
 
-    const createNewItem = useCallback((materialTypeOverride, itemOverride = {}, defaultArrivalDate = '') => ({
+    const createNewItem = useCallback((materialTypeOverride?: any, itemOverride: any = {}, defaultArrivalDate: any = '') => ({
         materialType: materialTypeOverride || itemOverride.materialType || (materialTypes && materialTypes.length > 0 ? materialTypes[0] : ''),
         qty96: itemOverride.qty96 ?? '',
         qty120: itemOverride.qty120 ?? '',
@@ -41,7 +41,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
         arrivalDate: toInputDate(itemOverride.arrivalDate) || defaultArrivalDate || ''
     }), [materialTypes]);
 
-    const createNewJob = useCallback((jobOverride = {}) => {
+    const createNewJob = useCallback((jobOverride: any = {}) => {
         const normalizedJobArrivalDate = toInputDate(jobOverride.arrivalDate ?? prefill?.arrivalDate);
         const distinctItemArrivalDates = Array.from(
             new Set(
@@ -77,14 +77,14 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
         };
     }, [createNewItem, getDefaultSupplier, getDefaultSuppliers, multiSupplier, prefill]);
 
-    const transformInitialData = useCallback((data) => {
+    const transformInitialData = useCallback((data: any) => {
         if (!data) return null;
 
         const sharedArrivalDate = toInputDate(data.arrivalDate || data.details?.[0]?.arrivalDate);
         const distinctItemArrivalDates = Array.from(
             new Set((data.details || []).map((item) => toInputDate(item.arrivalDate)).filter(Boolean))
         );
-        const jobData = {
+        const jobData: any = {
             jobName: data.job || data.jobName || '',
             customer: data.customer || '',
             supplier: data.supplier || data.customer || suppliers[0] || '',
@@ -97,7 +97,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
             items: []
         };
 
-        const itemsByKey = {};
+        const itemsByKey: Record<string, any> = {};
         (data.details || []).forEach(item => {
             const isStandardLength = STANDARD_LENGTHS.includes(item.length);
             const itemArrivalDate = toInputDate(item.arrivalDate);
@@ -133,7 +133,7 @@ export function useOrderForm(initialData, materialTypes, suppliers, prefill = nu
         return [createNewJob(jobData)];
     }, [createNewJob, suppliers]);
 
-    const transformPrefill = useCallback((data) => {
+    const transformPrefill = useCallback((data: any) => {
         if (!data) return null;
 
         const items = Array.isArray(data.items) && data.items.length > 0
