@@ -1,7 +1,7 @@
 import React, { useRef, useCallback } from 'react';
 
-export const FormInput = ({ label, name, type = "text", value, onChange, required = false, as = "input", children, ...props }) => {
-    const inputRef = useRef(null);
+export const FormInput = ({ label, name, type = "text", value, onChange, required = false, as = "input", children, ...props }: any) => {
+    const inputRef = useRef<any>(null);
 
     const handleDateFieldMouseDown = useCallback((e) => {
         if (as !== 'input' || type !== 'date') return;

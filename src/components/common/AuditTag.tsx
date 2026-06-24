@@ -1,10 +1,10 @@
-// src/components/common/AuditTag.jsx
+// src/components/common/AuditTag.tsx
 
 import React from 'react';
 import { UserRound, Pencil } from 'lucide-react';
 
 /** Compact account label: local part of the email, full value in the tooltip. */
-const shortAccountLabel = (value) => {
+const shortAccountLabel = (value: any) => {
     const s = String(value || '').trim();
     if (!s) return '';
     const at = s.indexOf('@');
@@ -15,7 +15,7 @@ const shortAccountLabel = (value) => {
  * Small audit badge for log rows: who created the entry and, when applicable,
  * who last edited it. Entries from before audit stamping render nothing.
  */
-export const AuditTag = ({ createdBy, lastEditedBy }) => {
+export const AuditTag = ({ createdBy, lastEditedBy }: { createdBy?: any; lastEditedBy?: any }) => {
     if (!createdBy && !lastEditedBy) return null;
 
     return (

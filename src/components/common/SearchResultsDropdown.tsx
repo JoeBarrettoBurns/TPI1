@@ -1,9 +1,9 @@
-// src/components/common/SearchResultsDropdown.jsx
+// src/components/common/SearchResultsDropdown.tsx
 
 import React from 'react';
 import { Command, Compass, HardHat, Tag, Layers } from 'lucide-react';
 
-const TypeIcon = ({ type }) => {
+const TypeIcon = ({ type }: { type?: string }) => {
     switch (type) {
         case 'command':
             return <Command className="w-4 h-4 mr-3 text-zinc-400" />;
@@ -20,7 +20,7 @@ const TypeIcon = ({ type }) => {
     }
 };
 
-export const SearchResultsDropdown = ({ results, onSelect, activeIndex, setActiveIndex }) => {
+export const SearchResultsDropdown = ({ results, onSelect, activeIndex, setActiveIndex }: any) => {
     if (results.length === 0) {
         return null;
     }
