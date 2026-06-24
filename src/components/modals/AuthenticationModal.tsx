@@ -23,7 +23,7 @@ import { Mail, Shield, Trash2, UserPlus } from 'lucide-react';
 
 const ALLOWLIST_REF = doc(db, `artifacts/${appId}/config/access_allowlist`);
 
-function buildMergedAllowlistRows(firestoreEmails) {
+function buildMergedAllowlistRows(firestoreEmails: any) {
     const map = new Map();
     for (const raw of FALLBACK_ALLOWED_EMAILS) {
         const k = normalizeEmail(raw);
@@ -43,12 +43,12 @@ function buildMergedAllowlistRows(firestoreEmails) {
     return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
 }
 
-export const AuthenticationModal = ({ onClose }) => {
-    const [emails, setEmails] = useState([]);
+export const AuthenticationModal = ({ onClose }: any) => {
+    const [emails, setEmails] = useState<any[]>([]);
     const [loadingList, setLoadingList] = useState(true);
     const [newEmail, setNewEmail] = useState('');
     const [error, setError] = useState('');
-    const [loadError, setLoadError] = useState(null);
+    const [loadError, setLoadError] = useState<any>(null);
     const [saving, setSaving] = useState(false);
 
     const [pwEmail, setPwEmail] = useState('');
@@ -56,7 +56,7 @@ export const AuthenticationModal = ({ onClose }) => {
     const [pwConfirm, setPwConfirm] = useState('');
     const [creatingPw, setCreatingPw] = useState(false);
 
-    const [methodsByEmail, setMethodsByEmail] = useState({});
+    const [methodsByEmail, setMethodsByEmail] = useState<Record<string, any>>({});
     const [methodsLoading, setMethodsLoading] = useState(false);
 
     const mergedAllowlistRows = useMemo(() => buildMergedAllowlistRows(emails), [emails]);
@@ -124,7 +124,7 @@ export const AuthenticationModal = ({ onClose }) => {
         let cancelled = false;
         setMethodsLoading(true);
         (async () => {
-            const next = {};
+            const next: Record<string, any> = {};
             for (const row of mergedAllowlistRows) {
                 const key = row.key;
                 try {
@@ -145,7 +145,7 @@ export const AuthenticationModal = ({ onClose }) => {
         };
     }, [mergedAllowlistRows]);
 
-    const persistEmails = useCallback(async (nextList) => {
+    const persistEmails = useCallback(async (nextList: any) => {
         const normalized = [...new Set(nextList.map((e) => normalizeEmail(String(e))).filter(Boolean))];
         setSaving(true);
         setError('');

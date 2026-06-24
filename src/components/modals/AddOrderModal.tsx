@@ -1,4 +1,4 @@
-// src/components/modals/AddOrderModal.jsx
+// src/components/modals/AddOrderModal.tsx
 
 import React, { useMemo, useState } from 'react';
 import { X, Check, Calendar, Mail } from 'lucide-react';
@@ -9,7 +9,7 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { calculateSheetCost } from '../../utils/dataProcessing';
 
-function formatSheetPriceLabel(length, item, materials) {
+function formatSheetPriceLabel(length: any, item: any, materials: any) {
     const sheetPrice = calculateSheetCost(
         {
             materialType: item.materialType,
@@ -26,7 +26,7 @@ function formatSheetPriceLabel(length, item, materials) {
     return `${baseLabel} ($${sheetPrice.toFixed(2)}/sheet)`;
 }
 
-function formatCustomSheetPriceLabel(item, materials) {
+function formatCustomSheetPriceLabel(item: any, materials: any) {
     const customWidth = parseFloat(item.customWidth || 0);
     const customLength = parseFloat(item.customLength || 0);
 
@@ -61,7 +61,7 @@ export const AddOrderModal = ({
     prefill,
     mode = 'inventory',
     variant = 'modal',
-}) => {
+}: any) => {
     const { jobs, setJobs, setJobField, setItemField, addMaterial, removeMaterial } = useOrderForm(
         initialData,
         materialTypes,
@@ -71,7 +71,7 @@ export const AddOrderModal = ({
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
-    const categories = useMemo(() => [...new Set(Object.values(materials || {}).map(m => m.category))], [materials]);
+    const categories = useMemo(() => [...new Set(Object.values(materials || {}).map((m: any) => m.category))], [materials]);
     const submitLabel = mode === 'buy' ? 'Open Email' : 'Submit Order';
     const isManualEditOrder = Boolean(
         initialData &&
@@ -131,7 +131,7 @@ export const AddOrderModal = ({
         }));
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: any) => {
         e.preventDefault();
 
         for (const job of jobs) {

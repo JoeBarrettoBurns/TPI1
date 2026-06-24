@@ -105,7 +105,7 @@ export const calculateScheduledOutgoingSummary = (usageLog: UsageLog[], material
     return summary;
 };
 
-export const calculateSheetCost = (sheet: Sheet, materials: MaterialsMap): number => {
+export const calculateSheetCost = (sheet: Partial<Sheet>, materials: MaterialsMap): number => {
     const materialInfo = materials[sheet.materialType];
     if (!materialInfo || !materialInfo.density || !materialInfo.thickness || !sheet.costPerPound) return 0;
     const volume = (sheet.length * (sheet.width || 48) * materialInfo.thickness);
