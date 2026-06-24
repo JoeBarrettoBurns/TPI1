@@ -1,9 +1,9 @@
-// src/hooks/usePersistentState.js
+// src/hooks/usePersistentState.ts
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Dispatch, SetStateAction } from 'react';
 
-export function usePersistentState(key, defaultValue) {
-    const [state, setState] = useState(() => {
+export function usePersistentState<T = any>(key: string, defaultValue: T): [T, Dispatch<SetStateAction<T>>] {
+    const [state, setState] = useState<T>(() => {
         try {
             const storedValue = localStorage.getItem(key);
             if (storedValue) {

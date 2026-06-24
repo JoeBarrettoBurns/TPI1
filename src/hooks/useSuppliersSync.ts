@@ -1,4 +1,4 @@
-// src/hooks/useSuppliersSync.js
+// src/hooks/useSuppliersSync.ts
 // Keeps supplier list + autofill in sync via Firestore (shared across devices) with localStorage as cache.
 
 import { useState, useEffect, useRef } from 'react';
@@ -13,7 +13,7 @@ function supplierSettingsDocRef() {
     return doc(db, `artifacts/${appId}/public/data/supplier_settings`, 'default');
 }
 
-function readLocalSuppliers() {
+function readLocalSuppliers(): string[] {
     try {
         const raw = localStorage.getItem(SUPPLIERS_LOCAL_KEY);
         if (raw) return JSON.parse(raw);
@@ -23,7 +23,7 @@ function readLocalSuppliers() {
     return INITIAL_SUPPLIERS;
 }
 
-function readLocalSupplierInfo() {
+function readLocalSupplierInfo(): Record<string, any> {
     try {
         const raw = localStorage.getItem(SUPPLIER_INFO_LOCAL_KEY);
         if (raw) return JSON.parse(raw);
@@ -33,7 +33,7 @@ function readLocalSupplierInfo() {
     return {};
 }
 
-function persistLocal(suppliers, supplierInfo) {
+function persistLocal(suppliers: any, supplierInfo: any) {
     try {
         localStorage.setItem(SUPPLIERS_LOCAL_KEY, JSON.stringify(suppliers));
         localStorage.setItem(SUPPLIER_INFO_LOCAL_KEY, JSON.stringify(supplierInfo));
@@ -43,12 +43,12 @@ function persistLocal(suppliers, supplierInfo) {
 }
 
 /** Firestore rejects undefined; strip recursively for maps of supplier rows. */
-function sanitizeSupplierInfo(info) {
+function sanitizeSupplierInfo(info: any): Record<string, any> {
     if (!info || typeof info !== 'object') return {};
-    const out = {};
+    const out: Record<string, any> = {};
     for (const [key, val] of Object.entries(info)) {
         if (!val || typeof val !== 'object') continue;
-        const row = {};
+        const row: Record<string, any> = {};
         for (const [k, v] of Object.entries(val)) {
             if (v !== undefined) row[k] = v;
         }
@@ -57,11 +57,11 @@ function sanitizeSupplierInfo(info) {
     return out;
 }
 
-export function useSuppliersSync(userId) {
+export function useSuppliersSync(userId: string | null | undefined) {
     const [suppliers, setSuppliers] = useState(readLocalSuppliers);
     const [supplierInfo, setSupplierInfo] = useState(readLocalSupplierInfo);
     const [syncReady, setSyncReady] = useState(false);
-    const debounceTimerRef = useRef(null);
+    const debounceTimerRef = useRef<any>(null);
     /** When true, next state change came from Firestore — do not write back (avoids echo loop / 1 write per second). */
     const skipNextPersistRef = useRef(false);
 

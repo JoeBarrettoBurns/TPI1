@@ -1,10 +1,10 @@
-// src/utils/backupService.js
+// src/utils/backupService.ts
 
 import { collection, doc, getDocs, writeBatch, setDoc, getDoc, collectionGroup } from '../firebase/firestoreWithTracking';
 
-export function generateBackupId(date = new Date()) {
+export function generateBackupId(date: Date = new Date()): string {
   // YYYY-MM-DDTHH-mm-ss
-  const pad = (n) => String(n).padStart(2, '0');
+  const pad = (n: number) => String(n).padStart(2, '0');
   const yyyy = date.getFullYear();
   const mm = pad(date.getMonth() + 1);
   const dd = pad(date.getDate());
@@ -14,7 +14,7 @@ export function generateBackupId(date = new Date()) {
   return `${yyyy}-${mm}-${dd}T${HH}-${MM}-${SS}`;
 }
 
-export async function backupCollections(db, appId, collectionsToBackup) {
+export async function backupCollections(db: any, appId: string, collectionsToBackup: string[]) {
   const backupId = generateBackupId();
   // Store backups under public/data to match existing structure and permissions
   const rootPath = `artifacts/${appId}/public/data/backups/${backupId}`;
@@ -57,7 +57,7 @@ export async function backupCollections(db, appId, collectionsToBackup) {
   return { backupId, totalDocs };
 }
 
-export async function getLatestBackupInfo(db, appId) {
+export async function getLatestBackupInfo(db: any, appId: string) {
   // Single canonical location under public/data
   const ref = doc(db, 'artifacts', appId, 'public', 'data', 'backups_meta', 'latest');
   const snap = await getDoc(ref);
@@ -65,7 +65,7 @@ export async function getLatestBackupInfo(db, appId) {
   return snap.data();
 }
 
-export async function restoreCollectionsFromBackup(db, appId, backupId, collectionsToRestore, onProgress) {
+export async function restoreCollectionsFromBackup(db: any, appId: string, backupId: string, collectionsToRestore: string[], onProgress?: (info: any) => void) {
   const rootPath = `artifacts/${appId}/public/data/backups/${backupId}`;
   let restored = 0;
 
@@ -116,13 +116,13 @@ export async function restoreCollectionsFromBackup(db, appId, backupId, collecti
   return { restored };
 }
 
-export async function repairInventoryMaterialKeys(db, appId, materialsKeys) {
+export async function repairInventoryMaterialKeys(db: any, appId: string, materialsKeys: any[]) {
   // Normalize inventory.materialType to one of materialsKeys using hyphen/slash variants
   const srcRef = collection(db, `artifacts/${appId}/public/data/inventory`);
   const snap = await getDocs(srcRef);
 
   const keys = new Set(materialsKeys);
-  const makeVariants = (k) => Array.from(new Set([k, k.replace(/\//g, '-'), k.replace(/-/g, '/')]));
+  const makeVariants = (k: string) => Array.from(new Set([k, k.replace(/\//g, '-'), k.replace(/-/g, '/')]));
 
   let updated = 0;
   let batch = writeBatch(db);
@@ -150,7 +150,7 @@ export async function repairInventoryMaterialKeys(db, appId, materialsKeys) {
   return { updated };
 }
 
-export async function listBackups(db, appId) {
+export async function listBackups(db: any, appId: string) {
   // Query the canonical backups collection under public/data
   const all = [];
   try {
@@ -187,8 +187,8 @@ export async function listBackups(db, appId) {
     }
   }
 
-  const dedup = Object.values(
-    all.reduce((acc, item) => {
+  const dedup: any[] = Object.values(
+    all.reduce((acc: Record<string, any>, item: any) => {
       acc[item.id] = { ...(acc[item.id] || {}), ...item };
       return acc;
     }, {})
@@ -197,7 +197,7 @@ export async function listBackups(db, appId) {
   return dedup.sort((a, b) => (a.id < b.id ? 1 : -1));
 }
 
-export async function backfillBackupIndex(db, appId) {
+export async function backfillBackupIndex(db: any, appId: string) {
   // Ensure there are listing docs under public/data/backups for discovered backup IDs
   let discovered = await listBackups(db, appId);
   // If nothing discovered, at least ensure the latest meta id is indexed

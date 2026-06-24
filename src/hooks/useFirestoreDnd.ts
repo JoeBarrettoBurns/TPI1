@@ -1,12 +1,12 @@
-// src/hooks/useFirestoreDnd.js
+// src/hooks/useFirestoreDnd.ts
 import { useState, useEffect, useCallback } from 'react';
 import { doc, writeBatch } from '../firebase/firestoreWithTracking';
 import { arrayMove } from '@dnd-kit/sortable';
 import { db, appId } from '../firebase/config';
 
-export function useFirestoreDnd(initialItems, materials) {
-    const [orderedItems, setOrderedItems] = useState([]);
-    const [activeItem, setActiveItem] = useState(null);
+export function useFirestoreDnd(initialItems: string[], materials: Record<string, any>) {
+    const [orderedItems, setOrderedItems] = useState<string[]>([]);
+    const [activeItem, setActiveItem] = useState<any>(null);
 
     useEffect(() => {
         // Sort initial items based on the 'order' field from Firestore
@@ -27,11 +27,11 @@ export function useFirestoreDnd(initialItems, materials) {
         }
     }, [initialItems, materials, orderedItems]);
 
-    const handleDragStart = (event) => {
+    const handleDragStart = (event: any) => {
         setActiveItem(event.active.id);
     };
 
-    const handleDragEnd = useCallback(async (event) => {
+    const handleDragEnd = useCallback(async (event: any) => {
         const { active, over } = event;
         if (over && active.id !== over.id) {
             const oldIndex = orderedItems.indexOf(active.id);

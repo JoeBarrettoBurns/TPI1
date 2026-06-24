@@ -4,8 +4,8 @@ import { db, appId } from '../firebase/config';
 
 const archiveDocRef = () => doc(db, 'artifacts', appId, 'public', 'data', 'job_overview_archive', 'settings');
 
-export function useJobOverviewArchive(userId) {
-    const [archivedBaseKeys, setArchivedBaseKeys] = useState(() => new Set());
+export function useJobOverviewArchive(userId: string | null | undefined) {
+    const [archivedBaseKeys, setArchivedBaseKeys] = useState<Set<string>>(() => new Set());
     const [ready, setReady] = useState(false);
 
     useEffect(() => {
@@ -35,7 +35,7 @@ export function useJobOverviewArchive(userId) {
         return () => unsub();
     }, [userId]);
 
-    const archivePoBase = useCallback(async (baseKeyRaw) => {
+    const archivePoBase = useCallback(async (baseKeyRaw: any) => {
         const k = String(baseKeyRaw ?? '').trim().toUpperCase();
         if (!k) return;
         const ref = archiveDocRef();
@@ -49,7 +49,7 @@ export function useJobOverviewArchive(userId) {
         );
     }, []);
 
-    const restorePoBase = useCallback(async (baseKeyRaw) => {
+    const restorePoBase = useCallback(async (baseKeyRaw: any) => {
         const k = String(baseKeyRaw ?? '').trim().toUpperCase();
         if (!k) return;
         const ref = archiveDocRef();
