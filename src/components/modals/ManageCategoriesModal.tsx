@@ -1,4 +1,4 @@
-// src/components/modals/ManageCategoriesModal.jsx
+// src/components/modals/ManageCategoriesModal.tsx
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
 import { FormInput } from '../common/FormInput';
@@ -22,15 +22,15 @@ function createEmptyMaterialRow() {
 	};
 }
 
-export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categories, materials, refetchMaterials, materialIndicatorSettings }) => {
+export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categories, materials, refetchMaterials, materialIndicatorSettings }: any) => {
 	const [mode, setMode] = useState('edit'); // 'edit' or 'add'
 	const [selectedCategory, setSelectedCategory] = useState(categories[0] || '');
 	const [newCategoryName, setNewCategoryName] = useState('');
-	const [categoryMaterials, setCategoryMaterials] = useState([]);
+	const [categoryMaterials, setCategoryMaterials] = useState<any[]>([]);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState('');
 	const [busyMsg, setBusyMsg] = useState('');
-	const [categoryPendingDelete, setCategoryPendingDelete] = useState(null);
+	const [categoryPendingDelete, setCategoryPendingDelete] = useState<any>(null);
 	const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 	const [deleteError, setDeleteError] = useState('');
 
@@ -49,7 +49,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 			setCategoryMaterials([]);
 			return;
 		}
-		const materialsInCategory = Object.entries(materials)
+		const materialsInCategory = Object.entries<any>(materials)
 			.filter(([, material]) => material.category === selectedCategory)
 			.map(([id, material]) => {
 				const settings = normalizeCategoryIndicatorSettings(materialIndicatorSettings?.[id] || material);
@@ -83,7 +83,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 		setCategoryMaterials(newMaterials);
 	};
 
-	const handleSubmit = async (e) => {
+	const handleSubmit = async (e: any) => {
 		e.preventDefault();
 		const finalCategoryName = mode === 'add' ? newCategoryName.trim() : selectedCategory;
 		if (!finalCategoryName) {

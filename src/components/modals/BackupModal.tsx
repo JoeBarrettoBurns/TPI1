@@ -1,4 +1,4 @@
-// src/components/modals/BackupModal.jsx
+// src/components/modals/BackupModal.tsx
 
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
@@ -10,11 +10,11 @@ import { exportToCSV } from '../../utils/csvExport';
 import { collection, onSnapshot } from '../../firebase/firestoreWithTracking';
 import { db, appId, auth, onAuthStateChanged } from '../../firebase/config';
 
-export const BackupModal = ({ onClose }) => {
+export const BackupModal = ({ onClose }: any) => {
   const [busyMsg, setBusyMsg] = useState('');
   const [error, setError] = useState('');
-  const [latest, setLatest] = useState(null);
-  const [backups, setBackups] = useState([]);
+  const [latest, setLatest] = useState<any>(null);
+  const [backups, setBackups] = useState<any[]>([]);
   const [selectedBackupId, setSelectedBackupId] = useState('');
   const [progress, setProgress] = useState(0);
 
