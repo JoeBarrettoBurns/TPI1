@@ -17,7 +17,7 @@ const hasExplicitIndicatorSettings = (settings: any) => (
     )
 );
 
-export const normalizeCategoryIndicatorSettings = (settings: any): { low: number; high: number } => {
+export const normalizeCategoryIndicatorSettings = (settings?: any): { low: number; high: number } => {
     const fallbackLow = DEFAULT_CATEGORY_INDICATOR_SETTINGS.low;
     const fallbackHigh = DEFAULT_CATEGORY_INDICATOR_SETTINGS.high;
 

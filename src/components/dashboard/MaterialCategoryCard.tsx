@@ -1,4 +1,4 @@
-// src/components/dashboard/MaterialCategoryCard.jsx
+// src/components/dashboard/MaterialCategoryCard.tsx
 
 import React, { useState, useMemo, useRef } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
@@ -9,7 +9,7 @@ import { GripVertical, Trash2, RotateCcw, Pencil } from 'lucide-react';
 import { useFirestoreDnd } from '../../hooks/useFirestoreDnd';
 import { normalizeCategoryIndicatorSettings } from '../../utils/categoryIndicatorSettings';
 
-export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingSummary, scheduledOutgoingSummary, isEditMode, onSave, onMaterialClick, materials, isDragging, onDeleteCategory, isMarkedForDeletion, materialIndicatorSettings }) => {
+export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingSummary, scheduledOutgoingSummary, isEditMode, onSave, onMaterialClick, materials, isDragging, onDeleteCategory, isMarkedForDeletion, materialIndicatorSettings }: any) => {
     const {
         attributes,
         listeners,
@@ -63,7 +63,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         handleDragCancel,
     } = useFirestoreDnd(orderedMaterialsInCategory, safeMaterials);
 
-    const [editingCell, setEditingCell] = useState(null);
+    const [editingCell, setEditingCell] = useState<any>(null);
     const [editValue, setEditValue] = useState('');
     const saveInFlightRef = useRef(false);
     const normalizedIndicatorSettingsByMaterial = useMemo(
@@ -98,7 +98,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         setEditingCell(null);
     };
 
-    const getStockStyle = (count, matType) => {
+    const getStockStyle = (count: any, matType: any) => {
         const { low: lowThreshold, high: highThreshold } = normalizedIndicatorSettingsByMaterial[matType] || normalizeCategoryIndicatorSettings();
         const fillPercent = Math.min((count / highThreshold) * 100, 100);
 
@@ -226,7 +226,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
     );
 };
 
-function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, inventorySummary, incomingSummary, scheduledOutgoingSummary, editingCell, setEditingCell, editValue, setEditValue, handleEditSave, getStockStyle, displayLengths }) {
+function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, inventorySummary, incomingSummary, scheduledOutgoingSummary, editingCell, setEditingCell, editValue, setEditValue, handleEditSave, getStockStyle, displayLengths }: any) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !isEditMode });
 
     const style = {

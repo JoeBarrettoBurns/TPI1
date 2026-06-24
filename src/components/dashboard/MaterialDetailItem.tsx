@@ -1,4 +1,4 @@
-// src/components/dashboard/MaterialDetailItem.jsx
+// src/components/dashboard/MaterialDetailItem.tsx
 
 import React, { useState, useMemo, forwardRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
@@ -27,8 +27,8 @@ export const MaterialDetailItem = forwardRef(
       isDragging,
       highlighted,
       isEditMode,
-    },
-    ref,
+    }: any,
+    ref: any,
   ) => {
     const {
       attributes,
@@ -52,8 +52,8 @@ export const MaterialDetailItem = forwardRef(
       [matType, inventory, usageLog],
     );
 
-    const [detailLog, setDetailLog] = useState(null);
-    const [logToDelete, setLogToDelete] = useState(null);
+    const [detailLog, setDetailLog] = useState<any>(null);
+    const [logToDelete, setLogToDelete] = useState<any>(null);
     const [numToShow, setNumToShow] = useState(5);
 
     const matTransactions = (transactions[matType] || []).filter((t) => {
