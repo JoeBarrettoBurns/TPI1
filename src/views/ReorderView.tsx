@@ -1,4 +1,4 @@
-// src/views/ReorderView.jsx
+// src/views/ReorderView.tsx
 
 import React, { useMemo } from 'react';
 import { PlusCircle, Mail, Inbox, Trash2 } from 'lucide-react';
@@ -176,7 +176,7 @@ const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders
     </div>
 );
 
-export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders = [], onAddBuyOrderToInventory, onClearAllBuyOrders, onDeleteBuyOrder, searchQuery, inventory, suppliers, supplierInfoOverrides }) => {
+export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders = [], onAddBuyOrderToInventory, onClearAllBuyOrders, onDeleteBuyOrder, searchQuery, inventory, suppliers, supplierInfoOverrides }: any) => {
     const lowStockItems = useMemo(() => {
         const items = [];
         for (const materialType in inventorySummary) {
@@ -188,7 +188,7 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders 
                 if (count > 0 && count < 5) {
                     const mostRecentPurchase = inventory
                         .filter(item => item.materialType === materialType && item.supplier)
-                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
                     const supplier = mostRecentPurchase ? mostRecentPurchase.supplier : 'Unknown';
 
                     items.push({

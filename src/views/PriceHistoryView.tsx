@@ -1,4 +1,4 @@
-// src/views/PriceHistoryView.jsx
+// src/views/PriceHistoryView.tsx
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Download, ChevronDown, Check } from 'lucide-react';
@@ -6,7 +6,7 @@ import { Button } from '../components/common/Button';
 import { exportToCSV } from '../utils/csvExport';
 import { calculateSheetCost } from '../utils/dataProcessing';
 
-export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
+export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => {
     // State to hold the selected material type for filtering
     const [selectedMaterialType, setSelectedMaterialType] = useState('All');
 
@@ -60,7 +60,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
 
         // Sort the final list by date
         return Array.from(uniquePricePoints.values())
-            .sort((a, b) => new Date(b.dateReceived) - new Date(a.dateReceived));
+            .sort((a, b) => new Date(b.dateReceived).getTime() - new Date(a.dateReceived).getTime());
 
     }, [inventory, materials, selectedMaterialType, searchQuery]);
 
@@ -89,10 +89,10 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }) => {
 
 
     // Lightweight custom select to have full control over menu size and styling
-    const CompactSelect = ({ value, onChange, options, className = '' }) => {
+    const CompactSelect = ({ value, onChange, options, className = '' }: any) => {
         const [isOpen, setIsOpen] = useState(false);
         const [highlightIndex, setHighlightIndex] = useState(() => Math.max(0, options.indexOf(value)));
-        const containerRef = useRef(null);
+        const containerRef = useRef<any>(null);
 
         useEffect(() => {
             const handleClickOutside = (event) => {

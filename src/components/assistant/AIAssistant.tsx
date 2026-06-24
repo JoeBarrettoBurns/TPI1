@@ -8,12 +8,12 @@ import { Bot, User, CornerDownLeft, Loader, X, PlusCircle } from 'lucide-react';
 import { Button } from '../common/Button';
 import { AI_ASSISTANT_ENABLED } from '../../constants/featureFlags';
 
-export const AIAssistant = ({ isVisible, onClose, inventory, materials, suppliers, usageLog, onExecuteOrder, onOpenModal }) => {
-    const [messages, setMessages] = useState([]);
+export const AIAssistant = ({ isVisible, onClose, inventory, materials, suppliers, usageLog, onExecuteOrder, onOpenModal }: any) => {
+    const [messages, setMessages] = useState<any[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [orderToConfirm, setOrderToConfirm] = useState(null);
-    const messagesEndRef = useRef(null);
+    const [orderToConfirm, setOrderToConfirm] = useState<any>(null);
+    const messagesEndRef = useRef<any>(null);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
