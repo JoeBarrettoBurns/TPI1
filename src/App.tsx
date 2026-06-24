@@ -111,7 +111,7 @@ export default function App() {
     }, []);
 
     const [activeView, setActiveView] = useState('dashboard');
-    const [modal, setModal] = useState({ type: null, data: null, error: null });
+    const [modal, setModal] = useState<any>({ type: null, data: null, error: null });
     const [isEditMode, setIsEditMode] = useState(false);
     const [manualEditSessionId, setManualEditSessionId] = useState(null);
     const [scrollToMaterial, setScrollToMaterial] = useState(null);
@@ -205,7 +205,7 @@ export default function App() {
 
     // Removed global "type to focus search" behavior; users must click the search bar to type
 
-    const initialCategories = useMemo(() => [...new Set(Object.values(materials).map(m => m.category))], [materials]);
+    const initialCategories = useMemo(() => [...new Set(Object.values<any>(materials).map(m => m.category))], [materials]);
     const [categories, setCategories] = usePersistentState('dashboard-category-order', initialCategories);
     const manageCategoriesCategoryOptions = useMemo(() => {
         const seen = new Set();
@@ -401,7 +401,7 @@ export default function App() {
 
         const matchingPurchases = inventory
             .filter((inventoryItem) => inventoryItem.materialType === item.materialType)
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         const recentFromSupplier = item.supplier
             ? matchingPurchases.find((inventoryItem) => inventoryItem.supplier === item.supplier)
@@ -525,7 +525,7 @@ export default function App() {
 
     const handleDeleteSingleCategory = useCallback(async (categoryName) => {
         try {
-            const materialsToDelete = Object.values(materials).filter(m => m.category === categoryName);
+            const materialsToDelete = Object.values<any>(materials).filter(m => m.category === categoryName);
             const materialIdsToDelete = materialsToDelete.map(m => m.id);
             const inventoryToDelete = inventory.filter(item => materialIdsToDelete.includes(item.materialType));
 
@@ -553,7 +553,7 @@ export default function App() {
     const handleConfirmDeleteCategories = async () => {
         try {
             const toRemove = categoriesToDelete;
-            const materialsToDelete = Object.values(materials).filter(m => toRemove.includes(m.category));
+            const materialsToDelete = Object.values<any>(materials).filter(m => toRemove.includes(m.category));
             const materialIdsToDelete = materialsToDelete.map(m => m.id);
             const inventoryToDelete = inventory.filter(item => materialIdsToDelete.includes(item.materialType));
 
@@ -657,7 +657,7 @@ export default function App() {
 
                     const matchingSheets = inventory
                         .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !allocatedSheetIds.has(i.id))
-                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
                     if (matchingSheets.length < qty) {
                         throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
@@ -701,7 +701,7 @@ export default function App() {
     const handleFulfillScheduledLog = async (logToFulfill) => {
         try {
             const batch = writeBatch(db);
-            const itemsNeeded = logToFulfill.details.reduce((acc, item) => {
+            const itemsNeeded: Record<string, number> = logToFulfill.details.reduce((acc: Record<string, number>, item: any) => {
                 const key = `${item.materialType}|${item.length}`;
                 acc[key] = (acc[key] || 0) + 1;
                 return acc;
@@ -715,7 +715,7 @@ export default function App() {
 
                 const availableSheets = inventory
                     .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
-                    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
                 if (availableSheets.length < qty) {
                     throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
@@ -794,7 +794,7 @@ export default function App() {
 
             // Edit existing category materials
             const originalById = Object.fromEntries(
-                Object.entries(allMaterials)
+                Object.entries<any>(allMaterials)
                     .filter(([id, m]) => m.category === categoryName)
                     .map(([id, m]) => [id, { ...m, name: id }])
             );
@@ -939,7 +939,7 @@ export default function App() {
         setSupplierInfo((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), ...info } }));
     };
 
-    const handleAddOrEditOrder = async (jobs, originalOrderGroup = null, options = {}) => {
+    const handleAddOrEditOrder = async (jobs, originalOrderGroup = null, options: any = {}) => {
         const isEditing = !!originalOrderGroup;
         const batch = writeBatch(db);
 
@@ -1177,7 +1177,7 @@ export default function App() {
                         item.length === length &&
                         item.status === 'On Hand'
                 )
-                .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
             if (availableSheets.length < sheetsToRemove) {
                 throw new Error(`Cannot remove ${sheetsToRemove} sheets. Only ${availableSheets.length} available.`);
@@ -1256,7 +1256,7 @@ export default function App() {
                 const batch = writeBatch(db);
 
                 // Determine items needed by type/length
-                const itemsNeeded = newDetails.reduce((acc, d) => {
+                const itemsNeeded: Record<string, number> = newDetails.reduce((acc: Record<string, number>, d: any) => {
                     const key = `${d.materialType}|${d.length}`;
                     acc[key] = (acc[key] || 0) + 1;
                     return acc;
@@ -1268,7 +1268,7 @@ export default function App() {
                     const length = parseInt(lengthStr, 10);
                     const availableSheets = inventory
                         .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
-                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                     if (availableSheets.length < qty) {
                         throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                     }
@@ -1477,9 +1477,9 @@ export default function App() {
                 });
 
                 const keptOriginalDetails = [];
-                const returnDetailIds = new Set();
+                const returnDetailIds = new Set<any>();
 
-                Object.entries(originalItemsByKey).forEach(([key, details]) => {
+                Object.entries<any>(originalItemsByKey).forEach(([key, details]) => {
                     // The edit form only exposes standard lengths; custom-length sheets
                     // stay on the log untouched instead of being silently returned.
                     const lengthFromKey = parseInt(key.split('|')[1], 10);
@@ -1498,7 +1498,7 @@ export default function App() {
 
                 // Only allocate additional stock for the deficit after reusing matching sheets already on this log.
                 const plannedNewRefs = [];
-                Object.entries(desiredCounts).forEach(([key, desiredQty]) => {
+                Object.entries<any>(desiredCounts).forEach(([key, desiredQty]) => {
                     const keptCount = keptOriginalDetails.filter(detail => `${detail.materialType}|${detail.length}` === key).length;
                     const neededQty = desiredQty - keptCount;
                     if (neededQty <= 0) return;
@@ -1507,7 +1507,7 @@ export default function App() {
                     const len = parseInt(lengthStr, 10);
                     const matchingSheets = inventory
                         .filter(i => i.materialType === materialType && i.length === len && i.status === 'On Hand' && !originalItemIds.includes(i.id))
-                        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
                     const sheetsToUse = matchingSheets.slice(0, neededQty);
                     if (sheetsToUse.length < neededQty) {
