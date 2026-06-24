@@ -10,8 +10,8 @@ import { getDefaultSupplierEmailBody, normalizeEmailPlainText } from '../../util
 const EMAIL_BODY_TEXTAREA_CLASS =
     'w-full mt-1 p-2 bg-zinc-700 border border-zinc-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-sans text-sm leading-relaxed';
 
-function buildEditsMap(suppliersList, supplierInfoMap) {
-    const next = {};
+function buildEditsMap(suppliersList: any, supplierInfoMap: any) {
+    const next: Record<string, any> = {};
     suppliersList.forEach((name) => {
         const key = (name || '').toUpperCase().replace(/\s+/g, '_');
         const effective = supplierInfoMap?.[key] || DEFAULT_SUPPLIER_INFO[key] || DEFAULT_SUPPLIER_INFO.DEFAULT;
@@ -24,7 +24,7 @@ function buildEditsMap(suppliersList, supplierInfoMap) {
     return next;
 }
 
-export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSupplier, onDeleteSupplier, onUpdateSupplierInfo }) => {
+export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSupplier, onDeleteSupplier, onUpdateSupplierInfo }: any) => {
     const [newSupplier, setNewSupplier] = useState('');
     const [newInfo, setNewInfo] = useState({ email: '', subject: '', contactName: '', bodyMaterial: '', emailBody: '', ccEmail: CC_EMAIL });
     const [error, setError] = useState('');

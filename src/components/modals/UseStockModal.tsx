@@ -1,4 +1,4 @@
-// src/components/modals/UseStockModal.jsx
+// src/components/modals/UseStockModal.tsx
 
 import React, { useMemo, useState } from 'react';
 import { useOrderForm } from '../../hooks/useOrderForm';
@@ -10,7 +10,7 @@ import { Button } from '../common/Button';
 import { ErrorMessage } from '../common/ErrorMessage';
 import { X, Calendar, Minus } from 'lucide-react';
 
-export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inventorySummary, incomingSummary, suppliers }) => {
+export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inventorySummary, incomingSummary, suppliers }: any) => {
     const {
         jobs,
         setJobField,
@@ -21,15 +21,15 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
-    const [scheduleSuggestion, setScheduleSuggestion] = useState(null);
-    const categories = useMemo(() => [...new Set(Object.values(materials || {}).map(m => m.category))], [materials]);
+    const [scheduleSuggestion, setScheduleSuggestion] = useState<any>(null);
+    const categories = useMemo(() => [...new Set(Object.values(materials || {}).map((m: any) => m.category))], [materials]);
 
     const clearError = () => {
         setError('');
         setScheduleSuggestion(null);
     }
 
-    const submitForm = async (overrideOptions = {}) => {
+    const submitForm = async (overrideOptions: any = {}) => {
         if (jobs.some((j) => !j.customer.trim())) {
             setError('A Customer name is required for all jobs.');
             return;
@@ -74,7 +74,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
         }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = (e: any) => {
         e.preventDefault();
         submitForm();
     };

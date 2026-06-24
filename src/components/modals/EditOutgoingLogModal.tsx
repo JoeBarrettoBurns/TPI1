@@ -1,4 +1,4 @@
-// src/components/modals/EditOutgoingLogModal.jsx
+// src/components/modals/EditOutgoingLogModal.tsx
 
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
@@ -9,8 +9,8 @@ import { STANDARD_LENGTHS } from '../../constants/materials';
 import { splitUseStockJobFields, formatUseStockJobLabel } from '../../utils/dataProcessing';
 import { localDateInputValue } from '../../utils/dates';
 
-export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory, materialTypes }) => {
-    const [jobData, setJobData] = useState({
+export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, inventory, materialTypes }: any) => {
+    const [jobData, setJobData] = useState<any>({
         jobNumber: '',
         jobSection: '',
         joinWith: '_',
@@ -60,7 +60,7 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
         setJobData(prev => ({ ...prev, items: newItems }));
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: any) => {
         e.preventDefault();
         setIsSubmitting(true);
         setError('');
