@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { STANDARD_LENGTHS } from '../constants/materials';
 
-const DEFAULT_DENSITIES = {
+const DEFAULT_DENSITIES: Record<string, number> = {
     Steel: 0.2833, // lb/in^3
     Aluminum: 0.0975,
 };

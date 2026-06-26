@@ -42,7 +42,7 @@ export const ViewTabs = ({ activeView, setActiveView, categories }: any) => {
                 <span className="text-zinc-400 font-semibold mr-2 shrink-0">Categories:</span>
                 <div className="relative min-w-0 flex-1">
                     <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin] [-ms-overflow-style:auto]">
-                        {categoryViews.map(cat =>
+                        {categoryViews.map((cat: string) =>
                             <Tab key={cat} label={cat} view={cat} activeView={activeView} setActiveView={setActiveView} />
                         )}
                     </div>

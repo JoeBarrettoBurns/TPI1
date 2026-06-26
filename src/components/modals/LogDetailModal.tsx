@@ -8,8 +8,8 @@ export const groupLogDetailItems = (logEntry: any) => {
     if (!sourceDetails) return [];
 
     const isModificationOrDeletion = logEntry.job && (logEntry.job.startsWith('MODIFICATION') || logEntry.job.startsWith('DELETION'));
-    if (isModificationOrDeletion && sourceDetails.some(d => typeof d.qty === 'number')) {
-        return sourceDetails.map(d => ({ ...d, count: d.qty }));
+    if (isModificationOrDeletion && sourceDetails.some((d: any) => typeof d.qty === 'number')) {
+        return sourceDetails.map((d: any) => ({ ...d, count: d.qty }));
     }
 
     const groups: Record<string, any> = {};
@@ -63,13 +63,13 @@ export const LogDetailModal = ({ isOpen, onClose, logEntry, materials }: any) =>
                 <div className="mt-4 border-t border-slate-700 pt-4">
                     <h4 className="text-lg font-bold text-white mb-2">Items:</h4>
                     <div className="space-y-2">
-                        {groupedDetails.map((item, index) => {
+                        {groupedDetails.map((item: any, index: any) => {
                             const quantity = item.count || 1;
                             const weightPerSheet = calculateWeight(item);
                             const totalWeight = weightPerSheet * quantity;
                             const costValues = item.costPerPoundValues || [item.costPerPound || 0];
                             const totalCost = item.costPerPoundValues
-                                ? weightPerSheet * costValues.reduce((sum, value) => sum + value, 0)
+                                ? weightPerSheet * costValues.reduce((sum: any, value: any) => sum + value, 0)
                                 : weightPerSheet * (item.costPerPound || 0) * quantity;
                             const costLabel = [...new Set<any>(costValues)]
                                 .sort((a, b) => b - a)

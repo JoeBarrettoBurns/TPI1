@@ -11,7 +11,7 @@
 // A sheet listed twice on the *same* log keeps only its first copy, and a log
 // left with no items at all is deleted outright.
 
-import { doc, getDoc, writeBatch } from '../firebase/firestoreWithTracking';
+import { collection, doc, getDoc, writeBatch } from '../firebase/firestoreWithTracking';
 
 const parseLogMs = (log: any): number => {
     const t = new Date(log?.usedAt || log?.createdAt || 0).getTime();
@@ -26,21 +26,21 @@ export interface SheetInfo {
 }
 
 export function planCountRepairs(issues: any[], usageLog: any[], sheetInfoById: Map<string, SheetInfo>) {
-    const logsById = new Map((usageLog || []).map(l => [l.id, l]));
-    const removeByLog = new Map();
-    const pointerFixes = [];
-    const unfixable = [];
+    const logsById = new Map((usageLog || []).map((l: any) => [l.id, l]));
+    const removeByLog = new Map<string, Set<string>>();
+    const pointerFixes: Array<{ sheetId: string; usageLogId: string | null }> = [];
+    const unfixable: any[] = [];
 
-    const markRemoval = (logId, sheetId) => {
-        if (!removeByLog.has(logId)) removeByLog.set(logId, new Set());
-        removeByLog.get(logId).add(sheetId);
+    const markRemoval = (logId: string, sheetId: string) => {
+        if (!removeByLog.has(logId)) removeByLog.set(logId, new Set<string>());
+        removeByLog.get(logId)!.add(sheetId);
     };
 
     // Sheets claimed by multiple logs → exactly one keeper.
-    const claims = new Map();
+    const claims = new Map<string, Set<string>>();
     issues.filter(i => i.type === 'sheet-in-two-logs').forEach(i => {
-        if (!claims.has(i.sheetId)) claims.set(i.sheetId, new Set());
-        (i.logIds || []).forEach(id => claims.get(i.sheetId).add(id));
+        if (!claims.has(i.sheetId)) claims.set(i.sheetId, new Set<string>());
+        (i.logIds || []).forEach((id: string) => claims.get(i.sheetId)!.add(id));
     });
 
     claims.forEach((logIdSet, sheetId) => {
@@ -77,20 +77,20 @@ export function planCountRepairs(issues: any[], usageLog: any[], sheetInfoById: 
 
     // Logs that list the same sheet more than once in their own details: the
     // extra copies are dropped (the first occurrence is kept).
-    const dedupeLogs = new Set();
+    const dedupeLogs = new Set<string>();
     issues.filter(i => i.type === 'sheet-duplicated-in-log').forEach(i => {
         if (logsById.has(i.logId)) dedupeLogs.add(i.logId);
     });
 
-    const logUpdates = [];
-    const logDeletes = [];
-    const touchedLogs = new Set();
+    const logUpdates: Array<{ logId: string; details?: any[]; qty: number; removed: number }> = [];
+    const logDeletes: Array<{ logId: string; removed: number }> = [];
+    const touchedLogs = new Set<string>();
     const logsToRewrite = new Set([...removeByLog.keys(), ...dedupeLogs]);
     logsToRewrite.forEach(logId => {
         const log = logsById.get(logId);
         const dropIds = removeByLog.get(logId) || new Set();
         const seenIds = new Set();
-        const details = (log.details || []).filter(d => {
+        const details = (log.details || []).filter((d: any) => {
             if (!d.id) return true; // legacy snapshots are never touched here
             if (dropIds.has(d.id)) return false;
             if (seenIds.has(d.id)) return false; // extra copy of the same sheet
@@ -143,6 +143,25 @@ export async function repairCountIssues(db: any, appId: string, issues: any[], u
     }
 
     const plan = planCountRepairs(issues, usageLog, sheetInfoById);
+    const logsById = new Map((usageLog || []).map((l: any) => [l.id, l]));
+
+    // Every sheet whose claim is being dropped — the repair corrects the count
+    // downward, so these are recorded as a single COUNT REPAIR removal in the
+    // Outgoing Stock Log (see below).
+    const removedSheets: Array<{ materialType: any; length: any }> = [];
+    plan.logUpdates.forEach(update => {
+        const original: any[] = logsById.get(update.logId)?.details || [];
+        const keptIds = new Set((update.details || []).map((d: any) => d.id).filter(Boolean));
+        original.forEach((d: any) => {
+            if (d.id && !keptIds.has(d.id)) removedSheets.push({ materialType: d.materialType, length: d.length });
+        });
+    });
+    plan.logDeletes.forEach(del => {
+        const original: any[] = logsById.get(del.logId)?.details || [];
+        original.forEach((d: any) => {
+            if (d.id) removedSheets.push({ materialType: d.materialType, length: d.length });
+        });
+    });
 
     const nowIso = new Date().toISOString();
     const ops: Array<(batch: any) => void> = [];
@@ -161,6 +180,25 @@ export async function repairCountIssues(db: any, appId: string, issues: any[], u
     plan.pointerFixes.forEach(fix => ops.push(batch => {
         batch.update(doc(db, inventoryPath, fix.sheetId), { usageLogId: fix.usageLogId });
     }));
+
+    // Record the correction as a COUNT REPAIR entry in the Outgoing Stock Log so
+    // there is a visible trail of what the repair removed. Sheet ids are
+    // intentionally omitted from the snapshots: the entry is informational only,
+    // and keeping ids would make the audit re-flag these sheets as a fresh claim.
+    if (removedSheets.length > 0) {
+        ops.push(batch => {
+            batch.set(doc(collection(db, usageLogPath)), {
+                job: 'COUNT REPAIR',
+                customer: 'Count Repair',
+                usedAt: nowIso,
+                createdAt: nowIso,
+                status: 'Completed',
+                details: removedSheets.map(s => ({ materialType: s.materialType, length: s.length })),
+                qty: -removedSheets.length,
+                createdBy: actorLabel || 'Count Repair',
+            });
+        });
+    }
 
     for (let i = 0; i < ops.length; i += MAX_BATCH_OPS) {
         const batch = writeBatch(db);

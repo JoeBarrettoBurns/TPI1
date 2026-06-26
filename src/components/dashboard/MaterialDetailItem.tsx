@@ -67,15 +67,15 @@ export const MaterialDetailItem = forwardRef(
 
     // Compute FUTURE USE (scheduled) summary for this material
     const futureUseByLength = useMemo(() => {
-      const totals = { 96: 0, 120: 0, 144: 0 };
+      const totals: Record<number, number> = { 96: 0, 120: 0, 144: 0 };
       (usageLog || [])
         .filter(
-          (log) =>
+          (log: any) =>
             (log.status || "Completed") === "Scheduled" &&
             Array.isArray(log.details),
         )
-        .forEach((log) => {
-          log.details.forEach((d) => {
+        .forEach((log: any) => {
+          log.details.forEach((d: any) => {
             if (
               d.materialType === matType &&
               STANDARD_LENGTHS.includes(d.length)
@@ -95,17 +95,17 @@ export const MaterialDetailItem = forwardRef(
     const projectionCompleteDate = useMemo(() => {
       const dates = (usageLog || [])
         .filter(
-          (log) =>
+          (log: any) =>
             (log.status || "Completed") === "Scheduled" &&
             Array.isArray(log.details) &&
-            log.details.some((d) => d.materialType === matType),
+            log.details.some((d: any) => d.materialType === matType),
         )
-        .map((log) => log.usedAt)
+        .map((log: any) => log.usedAt)
         .filter(Boolean)
-        .map((d) => new Date(d));
+        .map((d: any) => new Date(d));
       if (latestArrival) dates.push(new Date(latestArrival));
       if (dates.length === 0) return null;
-      return new Date(Math.max(...dates.map((d) => d.getTime())));
+      return new Date(Math.max(...dates.map((d: Date) => d.getTime())));
     }, [usageLog, matType, latestArrival]);
 
     const handleConfirmDelete = () => {
@@ -119,7 +119,7 @@ export const MaterialDetailItem = forwardRef(
     };
 
     // Correctly combine the ref from dnd-kit and the parent component's ref
-    const combinedRef = (node) => {
+    const combinedRef = (node: any) => {
       setNodeRef(node);
       if (typeof ref === "function") {
         ref(node);

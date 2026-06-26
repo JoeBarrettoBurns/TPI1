@@ -16,12 +16,21 @@ import {
 import { db, appId, auth, onAuthStateChanged, signInWithCustomToken, signOut } from '../firebase/config';
 import { STANDARD_LENGTHS } from '../constants/materials';
 import { localDateInputValue } from '../utils/dates';
+import { resolveUsageLogs, AMENDMENTS_COLLECTION, type LogAmendment } from '../utils/logLedger';
 import {
     getUnauthorizedMessage,
     isFirebaseUserAllowed,
     FALLBACK_ALLOWED_EMAILS,
     normalizeEmail,
 } from '../constants/authAllowlist';
+import type { Sheet, UsageLog, MaterialsMap } from '../types';
+
+/** Minimal account info kept in state once an allowed user signs in. */
+interface AuthUser {
+    uid: string;
+    email: string | null;
+    displayName: string | null;
+}
 
 declare const __initial_auth_token: string | undefined;
 
@@ -45,7 +54,7 @@ function readCachedAllowlist() {
     }
 }
 
-function writeCachedAllowlist(emails) {
+function writeCachedAllowlist(emails: string[]) {
     try {
         localStorage.setItem(ALLOWLIST_CACHE_KEY, JSON.stringify(emails));
     } catch {
@@ -95,7 +104,7 @@ async function fetchAllowedEmailsLowercased() {
 }
 
 /** Sort usage log docs by createdAt (Firestore Timestamp, Date, or string). */
-function parseCreatedAtMs(log) {
+function parseCreatedAtMs(log: any) {
     const c = log?.createdAt;
     if (c && typeof c.toDate === 'function') return c.toDate().getTime();
     if (c && typeof c.seconds === 'number') return c.seconds * 1000;
@@ -111,9 +120,9 @@ const INVENTORY_CACHE_TTL_MS = 10 * 60 * 1000;
 const SUMMARY_CACHE_KEY = `inventory_summary_cache_${appId}`;
 const SUMMARY_CACHE_TTL_MS = 10 * 60 * 1000;
 
-function buildEmptySummaries(materialIds) {
-    const inventorySummary = {};
-    const incomingSummary = {};
+function buildEmptySummaries(materialIds: string[]) {
+    const inventorySummary: Record<string, any> = {};
+    const incomingSummary: Record<string, any> = {};
 
     materialIds.forEach((type) => {
         inventorySummary[type] = {
@@ -144,7 +153,7 @@ function readInventoryCache() {
     }
 }
 
-function writeInventoryCache(data) {
+function writeInventoryCache(data: any) {
     try {
         sessionStorage.setItem(
             INVENTORY_CACHE_KEY,
@@ -168,7 +177,7 @@ function readSummaryCache() {
     }
 }
 
-function writeSummaryCache(inventorySummary, incomingSummary) {
+function writeSummaryCache(inventorySummary: any, incomingSummary: any) {
     try {
         localStorage.setItem(
             SUMMARY_CACHE_KEY,
@@ -179,16 +188,16 @@ function writeSummaryCache(inventorySummary, incomingSummary) {
     }
 }
 
-function getMaterialIdsForSummary(inventoryItems, materialsMap) {
+function getMaterialIdsForSummary(inventoryItems: any[], materialsMap: MaterialsMap) {
     const materialKeys = Object.keys(materialsMap || {});
     if (materialKeys.length > 0) return materialKeys;
-    return Array.from(new Set((inventoryItems || []).map((item) => item.materialType).filter(Boolean)));
+    return Array.from(new Set((inventoryItems || []).map((item: any) => item.materialType).filter(Boolean)));
 }
 
-function buildSummariesFromInventory(items, materialIds) {
+function buildSummariesFromInventory(items: any[], materialIds: string[]) {
     const { inventorySummary, incomingSummary } = buildEmptySummaries(materialIds);
 
-    (items || []).forEach((item) => {
+    (items || []).forEach((item: any) => {
         if (!item?.materialType) return;
         const mat = item.materialType;
 
@@ -221,16 +230,16 @@ function buildSummariesFromInventory(items, materialIds) {
 }
 
 export function useFirestoreData({ loadInventoryDetails = true } = {}) {
-    const [inventory, setInventory] = useState([]);
-    const [usageLog, setUsageLog] = useState([]);
-    const [materials, setMaterials] = useState({});
-    const [inventorySummaryData, setInventorySummaryData] = useState({});
-    const [incomingSummaryData, setIncomingSummaryData] = useState({});
+    const [inventory, setInventory] = useState<Sheet[]>([]);
+    const [usageLog, setUsageLog] = useState<UsageLog[]>([]);
+    const [materials, setMaterials] = useState<MaterialsMap>({});
+    const [inventorySummaryData, setInventorySummaryData] = useState<Record<string, any>>({});
+    const [incomingSummaryData, setIncomingSummaryData] = useState<Record<string, any>>({});
     const [inventoryReady, setInventoryReady] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [userId, setUserId] = useState(null);
-    const [authUser, setAuthUser] = useState(null);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [authUser, setAuthUser] = useState<AuthUser | null>(null);
     const [authReady, setAuthReady] = useState(false);
     const [authAccessDenied, setAuthAccessDenied] = useState(false);
     const [authDeniedDetail, setAuthDeniedDetail] = useState('');
@@ -240,18 +249,21 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         setAuthDeniedDetail('');
     }, []);
 
-    const inventoryRef = useRef([]);
-    const usageLogDataRef = useRef([]);
+    const inventoryRef = useRef<Sheet[]>([]);
+    const usageLogDataRef = useRef<UsageLog[]>([]);
+    /** Raw immutable base logs and their amendments, kept separate so we can re-resolve when either stream updates. */
+    const baseLogsRef = useRef<any[]>([]);
+    const amendmentsRef = useRef<LogAmendment[]>([]);
     const autoReceiveInFlightRef = useRef(false);
-    const scheduledFulfillInFlightRef = useRef(new Set());
+    const scheduledFulfillInFlightRef = useRef<Set<string>>(new Set());
     /** Sheets selected by an in-flight auto-fulfill; later logs in the same pass must not claim them too. */
-    const autoFulfillClaimedSheetIdsRef = useRef(new Set());
-    const inventoryUnsubRef = useRef(null);
+    const autoFulfillClaimedSheetIdsRef = useRef<Set<string>>(new Set());
+    const inventoryUnsubRef = useRef<(() => void) | null>(null);
     const inventoryDetailsEnabledRef = useRef(false);
-    const materialsSnapshotRef = useRef({});
+    const materialsSnapshotRef = useRef<MaterialsMap>({});
 
     useEffect(() => {
-        const denyAccess = async (user) => {
+        const denyAccess = async (user: any) => {
             try {
                 await signOut(auth);
             } catch (e) {
@@ -260,9 +272,9 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             setAuthAccessDenied(true);
             const primary = user.email || '(no email on account)';
             const fromProviders = (user.providerData || [])
-                .map((p) => p?.email)
+                .map((p: any) => p?.email)
                 .filter(Boolean)
-                .filter((e) => normalizeEmail(e) !== normalizeEmail(user.email || ''));
+                .filter((e: any) => normalizeEmail(e) !== normalizeEmail(user.email || ''));
             const extra =
                 fromProviders.length > 0
                     ? ` Provider emails: ${fromProviders.join(', ')}.`
@@ -276,7 +288,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             setLoading(false);
         };
 
-        const grantAccess = (user) => {
+        const grantAccess = (user: any) => {
             setAuthAccessDenied(false);
             setAuthDeniedDetail('');
             setUserId(user.uid);
@@ -316,7 +328,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                         return;
                     }
                     grantAccess(user);
-                } catch (error) {
+                } catch (error: any) {
                     console.error('Auth evaluation failed:', error);
                     setError(error?.message || 'Authentication failed.');
                     setUserId(null);
@@ -351,11 +363,11 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         materialsSnapshotRef.current = materials;
     }, [materials]);
 
-    const handleAutoReceive = useCallback((inventoryData) => {
+    const handleAutoReceive = useCallback((inventoryData: any[]) => {
         if (autoReceiveInFlightRef.current) return;
         const now = new Date();
         const candidates = inventoryData.filter(
-            (item) => item.status === 'Ordered' && item.arrivalDate && new Date(item.arrivalDate) <= now
+            (item: any) => item.status === 'Ordered' && item.arrivalDate && new Date(item.arrivalDate) <= now
         );
 
         if (candidates.length === 0) return;
@@ -369,7 +381,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                 // Ordered and still due against fresh data, mirroring the scheduled-use
                 // guard. This keeps a pushed-back arrival from landing on its old date.
                 const checks = await Promise.all(
-                    candidates.map(async (item) => {
+                    candidates.map(async (item: any) => {
                         const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
                         const snap = await getDoc(docRef);
                         return { docRef, snap };
@@ -399,10 +411,10 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         })();
     }, []);
 
-    const handleAutoFulfillScheduledUsage = useCallback((usageData, currentInventory) => {
+    const handleAutoFulfillScheduledUsage = useCallback((usageData: any[], currentInventory: any[]) => {
         const now = new Date();
         const logsToFulfill = usageData.filter(
-            (log) =>
+            (log: any) =>
                 log.status === 'Scheduled' &&
                 new Date(log.usedAt) <= now &&
                 !scheduledFulfillInFlightRef.current.has(log.id)
@@ -416,15 +428,15 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             // write from a previous pass) must not be selected again, or two
             // logs would consume the same physical sheet.
             const claimedSheetIds = autoFulfillClaimedSheetIdsRef.current;
-            const sheetIdsForThisLog = [];
+            const sheetIdsForThisLog: string[] = [];
             (async () => {
                 try {
                     const batch = writeBatch(db);
-                    const itemsNeeded = log.details.reduce((acc, item) => {
+                    const itemsNeeded: Record<string, number> = log.details.reduce((acc: Record<string, number>, item: any) => {
                         const key = `${item.materialType}|${item.length}`;
                         acc[key] = (acc[key] || 0) + 1;
                         return acc;
-                    }, {});
+                    }, {} as Record<string, number>);
 
                     let canFulfill = true;
                     const selectedSheets = [];
@@ -434,8 +446,8 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                         const length = parseInt(lengthStr, 10);
 
                         const availableSheets = currentInventory
-                            .filter((i) => i.materialType === materialType && i.length === length && i.status === 'On Hand' && !claimedSheetIds.has(i.id))
-                            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                            .filter((i: any) => i.materialType === materialType && i.length === length && i.status === 'On Hand' && !claimedSheetIds.has(i.id))
+                            .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
                         if (availableSheets.length < qty) {
                             canFulfill = false;
@@ -512,7 +524,22 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
         const usageLogRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
         const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
+        const amendmentsRef_ = collection(db, `artifacts/${appId}/public/data/${AMENDMENTS_COLLECTION}`);
         const qUsageLog = query(usageLogRef, orderBy('createdAt', 'desc'));
+
+        // Fold immutable base logs with their amendments into the EFFECTIVE logs the
+        // rest of the app consumes, then re-run auto-fulfill against the result.
+        // Both the base-log and amendment listeners call this so a change to either
+        // stream re-resolves. With no amendments present this returns the base logs
+        // unchanged, so legacy data behaves exactly as before.
+        const applyResolvedLogs = () => {
+            const resolved = resolveUsageLogs(baseLogsRef.current, amendmentsRef.current) as unknown as UsageLog[];
+            usageLogDataRef.current = resolved;
+            if (isActive) setUsageLog(resolved);
+            if (inventoryDetailsEnabledRef.current) {
+                handleAutoFulfillScheduledUsage(resolved, inventoryRef.current);
+            }
+        };
 
         // Usage logs intentionally do NOT gate first paint: the collection holds
         // the full history (with per-sheet snapshots) and is the largest payload.
@@ -530,7 +557,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         // for On Hand and Ordered). The cache only seeds the dashboard instantly
         // on repeat visits — no per-material count queries; those cost hundreds of
         // sequential round trips and dominated first-load time.
-        const applyCachedSummaries = (materialIds) => {
+        const applyCachedSummaries = (materialIds: string[]) => {
             if (!materialIds.length) {
                 setInventorySummaryData({});
                 setIncomingSummaryData({});
@@ -541,9 +568,9 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             if (!cachedSummary?.inventorySummary || !cachedSummary?.incomingSummary) return;
 
             const empty = buildEmptySummaries(materialIds);
-            const mergedInventory = { ...empty.inventorySummary };
-            const mergedIncoming = { ...empty.incomingSummary };
-            materialIds.forEach((id) => {
+            const mergedInventory: Record<string, any> = { ...empty.inventorySummary };
+            const mergedIncoming: Record<string, any> = { ...empty.incomingSummary };
+            materialIds.forEach((id: string) => {
                 if (cachedSummary.inventorySummary[id]) {
                     mergedInventory[id] = {
                         ...mergedInventory[id],
@@ -573,32 +600,24 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                 );
             }
             return snap.docs
-                .map((d) => ({ id: d.id, ...d.data() }))
-                .sort((a, b) => parseCreatedAtMs(b) - parseCreatedAtMs(a));
+                .map((d: any) => ({ id: d.id, ...d.data() }))
+                .sort((a: any, b: any) => parseCreatedAtMs(b) - parseCreatedAtMs(a));
         };
 
         const unsubUsageLog = onSnapshot(
             qUsageLog,
-            (snap) => {
-                const usageData = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-                usageLogDataRef.current = usageData;
-                setUsageLog(usageData);
-
-                if (inventoryDetailsEnabledRef.current) {
-                    handleAutoFulfillScheduledUsage(usageData, inventoryRef.current);
-                }
+            (snap: any) => {
+                baseLogsRef.current = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+                applyResolvedLogs();
             },
-            (err) => {
+            (err: any) => {
                 console.error('usage_logs snapshot error:', err);
                 (async () => {
                     try {
                         const usageData = await loadUsageLogsViaFullRead();
                         if (!isActive) return;
-                        usageLogDataRef.current = usageData;
-                        setUsageLog(usageData);
-                        if (inventoryDetailsEnabledRef.current) {
-                            handleAutoFulfillScheduledUsage(usageData, inventoryRef.current);
-                        }
+                        baseLogsRef.current = usageData;
+                        applyResolvedLogs();
                         if (err?.code === 'failed-precondition') {
                             setError('');
                         } else {
@@ -606,7 +625,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                                 `Usage logs: real-time listener failed (${err?.code || 'error'}). Loaded ${usageData.length} entries via full read (fallback). If this persists, check the browser console and Firebase → Firestore → Indexes.`
                             );
                         }
-                    } catch (fallbackErr) {
+                    } catch (fallbackErr: any) {
                         console.error('usage_logs fallback failed:', fallbackErr);
                         if (!isActive) return;
                         const detail = [err?.code, err?.message, fallbackErr?.message].filter(Boolean).join(' — ');
@@ -616,14 +635,29 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             }
         );
 
+        // Immutable-ledger amendments. Each is a sub-record pointing at a base log
+        // via baseLogId; resolveUsageLogs folds them into the effective logs above.
+        // Errors here are non-fatal: with no amendments the resolver just returns
+        // the base logs unchanged.
+        const unsubAmendments = onSnapshot(
+            amendmentsRef_,
+            (snap: any) => {
+                amendmentsRef.current = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+                applyResolvedLogs();
+            },
+            (err: any) => {
+                console.warn('usage_log_amendments snapshot error (continuing without amendments):', err);
+            }
+        );
+
         // Live materials listener: with the persistent cache this paints from
         // IndexedDB immediately on repeat visits (getDocs would wait on the
         // server), and category/material edits sync across devices for free.
         const unsubMaterials = onSnapshot(
             materialsRef,
-            (snap) => {
-                const materialsData = {};
-                snap.docs.forEach((d) => {
+            (snap: any) => {
+                const materialsData: Record<string, any> = {};
+                snap.docs.forEach((d: any) => {
                     const name = d.id;
                     materialsData[name] = { id: d.id, name, ...d.data() };
                 });
@@ -635,7 +669,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                 }
                 markReady();
             },
-            (err) => {
+            (err: any) => {
                 console.error('Failed to load materials:', err);
                 setError('Failed to load materials.');
                 hasMaterials = true;
@@ -647,6 +681,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         return () => {
             isActive = false;
             unsubUsageLog();
+            unsubAmendments();
             unsubMaterials();
         };
     }, [userId, handleAutoFulfillScheduledUsage]);
@@ -670,8 +705,8 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         const qOrdered = query(inventoryCollectionRef, where('status', '==', 'Ordered'));
         let isActive = true;
 
-        const onHandRef = { current: [] };
-        const orderedRef = { current: [] };
+        const onHandRef: { current: any[] } = { current: [] };
+        const orderedRef: { current: any[] } = { current: [] };
 
         const loadInventoryFallback = async () => {
             const [onHandSnap, orderedSnap] = await Promise.all([
@@ -680,10 +715,10 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             ]);
 
             const merged = [
-                ...onHandSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-                ...orderedSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+                ...onHandSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })),
+                ...orderedSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })),
             ];
-            const deduped = Array.from(new Map(merged.map((item) => [item.id, item])).values()).sort(
+            const deduped = Array.from(new Map(merged.map((item: any) => [item.id, item])).values()).sort(
                 (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
             );
 
@@ -703,7 +738,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
         const mergeSnapshotsAndApply = () => {
             const merged = [...onHandRef.current, ...orderedRef.current];
-            const deduped = Array.from(new Map(merged.map((item) => [item.id, item])).values()).sort(
+            const deduped = Array.from(new Map(merged.map((item: any) => [item.id, item])).values()).sort(
                 (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
             );
             if (!isActive) return;
@@ -726,7 +761,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         let unsubOnHand = () => {};
         let unsubOrdered = () => {};
 
-        const handleInventorySnapshotError = async (err) => {
+        const handleInventorySnapshotError = async (err: any) => {
             if (snapshotErrorHandled || !isActive) return;
             snapshotErrorHandled = true;
             console.error('Inventory snapshot error:', err);
@@ -734,7 +769,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             unsubOrdered();
             try {
                 await loadInventoryFallback();
-            } catch (fallbackErr) {
+            } catch (fallbackErr: any) {
                 console.error('Inventory load fallback failed:', fallbackErr);
                 const primary = [err?.code, err?.message].filter(Boolean).join(': ');
                 const fb = [fallbackErr?.code, fallbackErr?.message].filter(Boolean).join(': ');
@@ -746,8 +781,8 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
         unsubOnHand = onSnapshot(
             qOnHand,
-            (snap) => {
-                onHandRef.current = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            (snap: any) => {
+                onHandRef.current = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
                 mergeSnapshotsAndApply();
             },
             handleInventorySnapshotError
@@ -755,8 +790,8 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
         unsubOrdered = onSnapshot(
             qOrdered,
-            (snap) => {
-                orderedRef.current = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            (snap: any) => {
+                orderedRef.current = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
                 mergeSnapshotsAndApply();
             },
             handleInventorySnapshotError
@@ -782,8 +817,8 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         const materialsRef = collection(db, `artifacts/${appId}/public/data/materials`);
         try {
             const snap = await getDocs(materialsRef);
-            const materialsData = {};
-            snap.docs.forEach((d) => {
+            const materialsData: Record<string, any> = {};
+            snap.docs.forEach((d: any) => {
                 const name = d.id;
                 materialsData[name] = { id: d.id, name, ...d.data() };
             });

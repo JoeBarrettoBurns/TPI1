@@ -28,7 +28,7 @@ export const SearchResultsDropdown = ({ results, onSelect, activeIndex, setActiv
     return (
         <div className="absolute bottom-full mb-2 w-full bg-zinc-800 border border-zinc-700 rounded-2xl shadow-lg z-50 max-h-96 overflow-y-auto">
             <ul className="divide-y divide-zinc-700">
-                {results.map((result, index) => (
+                {results.map((result: any, index: number) => (
                     <li
                         key={`${result.item.type}-${result.item.name}-${result.refIndex}`}
                         onClick={() => onSelect(result)}

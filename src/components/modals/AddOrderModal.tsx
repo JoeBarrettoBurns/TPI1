@@ -78,28 +78,28 @@ export const AddOrderModal = ({
         ((initialData.job || '').startsWith('MODIFICATION') || initialData.supplier === 'Manual Edit')
     );
     const shouldShowCustomSheets = mode === 'buy' || jobs.some((currentJob) =>
-        currentJob.items.some((item) => item.customWidth || item.customLength || item.customQty)
+        currentJob.items.some((item: any) => item.customWidth || item.customLength || item.customQty)
     );
 
     // Since we are only allowing one job group, we can reference it directly.
     const jobIndex = 0;
     const job = jobs[0];
 
-    const toggleSupplierSelection = (supplierName) => {
+    const toggleSupplierSelection = (supplierName: any) => {
         const selectedSuppliers = Array.isArray(job.suppliers) ? job.suppliers : [];
         const nextSuppliers = selectedSuppliers.includes(supplierName)
             ? selectedSuppliers.filter((supplier) => supplier !== supplierName)
             : [...selectedSuppliers, supplierName];
-        const orderedSuppliers = suppliers.filter((supplier) => nextSuppliers.includes(supplier));
+        const orderedSuppliers = suppliers.filter((supplier: any) => nextSuppliers.includes(supplier));
         setJobField(jobIndex, 'suppliers', orderedSuppliers);
         setJobField(jobIndex, 'supplier', orderedSuppliers[0] || '');
     };
 
-    const handleStatusChange = (nextStatus) => {
+    const handleStatusChange = (nextStatus: any) => {
         setJobField(jobIndex, 'status', nextStatus);
     };
 
-    const handleSharedArrivalDateChange = (value) => {
+    const handleSharedArrivalDateChange = (value: any) => {
         setJobs((currentJobs) => currentJobs.map((currentJob, index) => {
             if (index !== jobIndex) return currentJob;
             return {
@@ -107,23 +107,23 @@ export const AddOrderModal = ({
                 arrivalDate: value,
                 items: currentJob.useItemArrivalDates
                     ? currentJob.items
-                    : currentJob.items.map((item) => ({ ...item, arrivalDate: value })),
+                    : currentJob.items.map((item: any) => ({ ...item, arrivalDate: value })),
             };
         }));
     };
 
-    const handleMultipleArrivalDateToggle = (enabled) => {
+    const handleMultipleArrivalDateToggle = (enabled: any) => {
         setJobs((currentJobs) => currentJobs.map((currentJob, index) => {
             if (index !== jobIndex) return currentJob;
 
-            const firstItemArrivalDate = currentJob.items.find((item) => item.arrivalDate)?.arrivalDate || '';
+            const firstItemArrivalDate = currentJob.items.find((item: any) => item.arrivalDate)?.arrivalDate || '';
             const nextSharedArrivalDate = currentJob.arrivalDate || firstItemArrivalDate;
 
             return {
                 ...currentJob,
                 useItemArrivalDates: enabled,
                 arrivalDate: enabled ? currentJob.arrivalDate : nextSharedArrivalDate,
-                items: currentJob.items.map((item) => ({
+                items: currentJob.items.map((item: any) => ({
                     ...item,
                     arrivalDate: item.arrivalDate || nextSharedArrivalDate || '',
                 })),
@@ -199,7 +199,7 @@ export const AddOrderModal = ({
             if (mode !== 'buy' || result?.closeModalOnSuccess !== false) {
                 onClose();
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Submission error:", err);
             setError(err.message || "An error occurred during submission.");
         } finally {
@@ -220,7 +220,7 @@ export const AddOrderModal = ({
                             className={`grid grid-cols-1 ${mode === 'buy' ? 'md:grid-cols-2 md:items-start' : 'md:grid-cols-3'} gap-4`}
                         >
                             {mode !== 'buy' && (
-                                <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
+                                <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e: any) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
                             )}
                             {mode === 'buy' ? (
                                 <div className="md:col-span-1 min-w-0">
@@ -238,7 +238,7 @@ export const AddOrderModal = ({
                                         aria-label="Supplier selection"
                                     >
                                         <div className="flex flex-col gap-1">
-                                            {suppliers.map((supplierName) => {
+                                            {suppliers.map((supplierName: any) => {
                                                 const isSelected = (job.suppliers || []).includes(supplierName);
                                                 return (
                                                     <label
@@ -284,7 +284,7 @@ export const AddOrderModal = ({
                                     </p>
                                 </div>
                             ) : (
-                                <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map(s => <option key={s}>{s}</option>)}</FormInput>
+                                <FormInput label="Supplier" name="supplier" value={job.supplier} onChange={(e: any) => setJobField(jobIndex, 'supplier', e.target.value)} as="select">{suppliers.map((s: any) => <option key={s}>{s}</option>)}</FormInput>
                             )}
                             {mode === 'buy' ? (
                                 <div className="md:col-span-1 min-w-0 flex flex-col">
@@ -315,7 +315,7 @@ export const AddOrderModal = ({
                         </div>
                         {mode !== 'buy' && (
                             <>
-                                <FormInput label="Date Ordered" name="createdAt" type="date" value={job.createdAt || ''} onChange={(e) => setJobField(jobIndex, 'createdAt', e.target.value)} />
+                                <FormInput label="Date Ordered" name="createdAt" type="date" value={job.createdAt || ''} onChange={(e: any) => setJobField(jobIndex, 'createdAt', e.target.value)} />
                                 {job.status === 'Ordered' && (
                                     <div className="space-y-3">
                                         <div className="flex flex-col gap-3 rounded-lg border border-zinc-700 bg-zinc-800/70 p-3 md:flex-row md:items-center md:justify-between">
@@ -339,7 +339,7 @@ export const AddOrderModal = ({
                                                 name="arrivalDate"
                                                 type="date"
                                                 value={job.arrivalDate}
-                                                onChange={(e) => handleSharedArrivalDateChange(e.target.value)}
+                                                onChange={(e: any) => handleSharedArrivalDateChange(e.target.value)}
                                             />
                                         )}
                                     </div>
@@ -347,7 +347,7 @@ export const AddOrderModal = ({
                             </>
                         )}
 
-                        {job.items.map((item, itemIndex) => (
+                        {job.items.map((item: any, itemIndex: any) => (
                             <div key={itemIndex} className="border border-zinc-700 p-4 rounded-lg bg-zinc-800 relative">
                                 {!initialData && job.items.length > 1 && (
                                     <button type="button" onClick={() => removeMaterial(jobIndex, itemIndex)} className="absolute top-2 right-2 text-red-400 hover:text-red-300"><X size={18} /></button>
@@ -357,9 +357,9 @@ export const AddOrderModal = ({
                                         label={`Category #${itemIndex + 1}`}
                                         name={`category-${itemIndex}`}
                                         value={materials[item.materialType]?.category || categories[0] || ''}
-                                        onChange={(e) => {
+                                        onChange={(e: any) => {
                                             const newCategory = e.target.value;
-                                            const firstInCat = materialTypes.find(t => (materials[t]?.category) === newCategory) || '';
+                                            const firstInCat = materialTypes.find((t: any) => (materials[t]?.category) === newCategory) || '';
                                             setItemField(jobIndex, itemIndex, 'materialType', firstInCat);
                                         }}
                                         as="select"
@@ -370,19 +370,19 @@ export const AddOrderModal = ({
                                         label={`Material Type`}
                                         name={`materialType-${itemIndex}`}
                                         value={item.materialType}
-                                        onChange={(e) => setItemField(jobIndex, itemIndex, 'materialType', e.target.value)}
+                                        onChange={(e: any) => setItemField(jobIndex, itemIndex, 'materialType', e.target.value)}
                                         as="select"
                                     >
                                         {materialTypes
-                                            .filter(t => (materials[t]?.category) === (materials[item.materialType]?.category || categories[0]))
-                                            .map(type => <option key={type} value={type}>{type}</option>)}
+                                            .filter((t: any) => (materials[t]?.category) === (materials[item.materialType]?.category || categories[0]))
+                                            .map((type: any) => <option key={type} value={type}>{type}</option>)}
                                     </FormInput>
                                 </div>
                                 <p className="text-sm font-medium text-zinc-300 mt-2">Standard Quantities:</p>
                                 <div className="grid grid-cols-3 gap-2">
-                                    <FormInput label={mode === 'buy' ? '96"x48"' : formatSheetPriceLabel(96, item, materials)} name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty96', e.target.value)} />
-                                    <FormInput label={mode === 'buy' ? '120"x48"' : formatSheetPriceLabel(120, item, materials)} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty120', e.target.value)} />
-                                    <FormInput label={mode === 'buy' ? '144"x48"' : formatSheetPriceLabel(144, item, materials)} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e) => setItemField(jobIndex, itemIndex, 'qty144', e.target.value)} />
+                                    <FormInput label={mode === 'buy' ? '96"x48"' : formatSheetPriceLabel(96, item, materials)} name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e: any) => setItemField(jobIndex, itemIndex, 'qty96', e.target.value)} />
+                                    <FormInput label={mode === 'buy' ? '120"x48"' : formatSheetPriceLabel(120, item, materials)} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e: any) => setItemField(jobIndex, itemIndex, 'qty120', e.target.value)} />
+                                    <FormInput label={mode === 'buy' ? '144"x48"' : formatSheetPriceLabel(144, item, materials)} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e: any) => setItemField(jobIndex, itemIndex, 'qty144', e.target.value)} />
                                 </div>
                                 {shouldShowCustomSheets && (
                                     <>
@@ -402,9 +402,9 @@ export const AddOrderModal = ({
                                                     : 'grid grid-cols-1 gap-2 md:grid-cols-3'
                                             }
                                         >
-                                            <FormInput label="Custom Width" name={`customWidth-${itemIndex}`} type="number" placeholder='48' value={item.customWidth} onChange={(e) => setItemField(jobIndex, itemIndex, 'customWidth', e.target.value)} />
-                                            <FormInput label="Custom Length" name={`customLength-${itemIndex}`} type="number" placeholder='96' value={item.customLength} onChange={(e) => setItemField(jobIndex, itemIndex, 'customLength', e.target.value)} />
-                                            <FormInput label={mode === 'buy' ? 'Custom Quantity' : formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
+                                            <FormInput label="Custom Width" name={`customWidth-${itemIndex}`} type="number" placeholder='48' value={item.customWidth} onChange={(e: any) => setItemField(jobIndex, itemIndex, 'customWidth', e.target.value)} />
+                                            <FormInput label="Custom Length" name={`customLength-${itemIndex}`} type="number" placeholder='96' value={item.customLength} onChange={(e: any) => setItemField(jobIndex, itemIndex, 'customLength', e.target.value)} />
+                                            <FormInput label={mode === 'buy' ? 'Custom Quantity' : formatCustomSheetPriceLabel(item, materials)} name={`customQty-${itemIndex}`} type="number" placeholder="0" value={item.customQty} onChange={(e: any) => setItemField(jobIndex, itemIndex, 'customQty', e.target.value)} />
                                         </div>
                                     </>
                                 )}
@@ -414,11 +414,11 @@ export const AddOrderModal = ({
                                         name={`arrivalDate-${itemIndex}`}
                                         type="date"
                                         value={item.arrivalDate || ''}
-                                        onChange={(e) => setItemField(jobIndex, itemIndex, 'arrivalDate', e.target.value)}
+                                        onChange={(e: any) => setItemField(jobIndex, itemIndex, 'arrivalDate', e.target.value)}
                                     />
                                 )}
                                 {mode !== 'buy' && (
-                                    <FormInput label="Cost per Pound ($)" name="costPerPound" type="number" value={item.costPerPound} onChange={(e) => setItemField(jobIndex, itemIndex, 'costPerPound', e.target.value)} step="0.01" required={!isManualEditOrder} />
+                                    <FormInput label="Cost per Pound ($)" name="costPerPound" type="number" value={item.costPerPound} onChange={(e: any) => setItemField(jobIndex, itemIndex, 'costPerPound', e.target.value)} step="0.01" required={!isManualEditOrder} />
                                 )}
                             </div>
                         ))}

@@ -3,7 +3,7 @@ import React, { useRef, useCallback } from 'react';
 export const FormInput = ({ label, name, type = "text", value, onChange, required = false, as = "input", children, ...props }: any) => {
     const inputRef = useRef<any>(null);
 
-    const handleDateFieldMouseDown = useCallback((e) => {
+    const handleDateFieldMouseDown = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
         if (as !== 'input' || type !== 'date') return;
         // Only act on genuine primary-button user clicks.
         if (!e.isTrusted || e.button !== 0) return;

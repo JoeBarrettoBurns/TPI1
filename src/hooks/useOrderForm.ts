@@ -46,7 +46,7 @@ export function useOrderForm(initialData: any, materialTypes: string[], supplier
         const distinctItemArrivalDates = Array.from(
             new Set(
                 (Array.isArray(jobOverride.items) ? jobOverride.items : [])
-                    .map((item) => toInputDate(item.arrivalDate))
+                    .map((item: any) => toInputDate(item.arrivalDate))
                     .filter(Boolean)
             )
         );
@@ -55,7 +55,7 @@ export function useOrderForm(initialData: any, materialTypes: string[], supplier
             ?? distinctItemArrivalDates.length > 1;
         const defaultItemArrivalDate = normalizedJobArrivalDate || distinctItemArrivalDates[0] || '';
         const items = Array.isArray(jobOverride.items) && jobOverride.items.length > 0
-            ? jobOverride.items.map((item) => createNewItem(item.materialType, item, defaultItemArrivalDate))
+            ? jobOverride.items.map((item: any) => createNewItem(item.materialType, item, defaultItemArrivalDate))
             : [createNewItem(prefill?.materialType || jobOverride.materialType, {}, defaultItemArrivalDate)];
 
         return {
@@ -82,7 +82,7 @@ export function useOrderForm(initialData: any, materialTypes: string[], supplier
 
         const sharedArrivalDate = toInputDate(data.arrivalDate || data.details?.[0]?.arrivalDate);
         const distinctItemArrivalDates = Array.from(
-            new Set((data.details || []).map((item) => toInputDate(item.arrivalDate)).filter(Boolean))
+            new Set((data.details || []).map((item: any) => toInputDate(item.arrivalDate)).filter(Boolean))
         );
         const jobData: any = {
             jobName: data.job || data.jobName || '',
@@ -98,7 +98,7 @@ export function useOrderForm(initialData: any, materialTypes: string[], supplier
         };
 
         const itemsByKey: Record<string, any> = {};
-        (data.details || []).forEach(item => {
+        (data.details || []).forEach((item: any) => {
             const isStandardLength = STANDARD_LENGTHS.includes(item.length);
             const itemArrivalDate = toInputDate(item.arrivalDate);
             const key = isStandardLength
@@ -137,7 +137,7 @@ export function useOrderForm(initialData: any, materialTypes: string[], supplier
         if (!data) return null;
 
         const items = Array.isArray(data.items) && data.items.length > 0
-            ? data.items.map((item) => ({
+            ? data.items.map((item: any) => ({
                 ...item,
                 qty96: item.qty96 ?? '',
                 qty120: item.qty120 ?? '',
@@ -169,29 +169,29 @@ export function useOrderForm(initialData: any, materialTypes: string[], supplier
         setJobs([createNewJob()]);
     }, [createNewJob]);
 
-    const setJobField = (jobIndex, field, value) => {
+    const setJobField = (jobIndex: number, field: string, value: any) => {
         const newJobs = [...jobs];
-        newJobs[jobIndex][field] = value;
+        (newJobs[jobIndex] as any)[field] = value;
         setJobs(newJobs);
     };
 
-    const setItemField = (jobIndex, itemIndex, field, value) => {
+    const setItemField = (jobIndex: number, itemIndex: number, field: string, value: any) => {
         const newJobs = [...jobs];
         newJobs[jobIndex].items[itemIndex][field] = value;
         setJobs(newJobs);
     };
 
     const addJob = () => setJobs([...jobs, createNewJob()]);
-    const removeJob = (jobIndex) => setJobs(jobs.filter((_, i) => i !== jobIndex));
+    const removeJob = (jobIndex: number) => setJobs(jobs.filter((_, i) => i !== jobIndex));
 
-    const addMaterial = (jobIndex) => {
+    const addMaterial = (jobIndex: number) => {
         const newJobs = [...jobs];
         const defaultArrivalDate = newJobs[jobIndex].items[0]?.arrivalDate || newJobs[jobIndex].arrivalDate || '';
         newJobs[jobIndex].items.push(createNewItem(null, {}, defaultArrivalDate));
         setJobs(newJobs);
     };
 
-    const removeMaterial = (jobIndex, itemIndex) => {
+    const removeMaterial = (jobIndex: number, itemIndex: number) => {
         const newJobs = [...jobs];
         newJobs[jobIndex].items.splice(itemIndex, 1);
         setJobs(newJobs);

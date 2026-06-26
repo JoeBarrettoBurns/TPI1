@@ -23,10 +23,10 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
 
     useEffect(() => {
         if (logEntry) {
-            const itemsByMaterial = {};
+            const itemsByMaterial: Record<string, any> = {};
             const details = logEntry.details || [];
 
-            details.forEach(item => {
+            details.forEach((item: any) => {
                 const key = item.materialType;
                 if (!itemsByMaterial[key]) {
                     itemsByMaterial[key] = { materialType: item.materialType, qty96: 0, qty120: 0, qty144: 0 };
@@ -54,10 +54,10 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
 
     if (!isOpen) return null;
 
-    const handleItemChange = (itemIndex, field, value) => {
+    const handleItemChange = (itemIndex: any, field: any, value: any) => {
         const newItems = [...jobData.items];
         newItems[itemIndex][field] = value;
-        setJobData(prev => ({ ...prev, items: newItems }));
+        setJobData((prev: any) => ({ ...prev, items: newItems }));
     };
 
     const handleSubmit = async (e: any) => {
@@ -71,7 +71,7 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                 || 'N/A';
             await onSave(logEntry, { ...jobData, jobName: resolvedJobName }, inventory);
             onClose();
-        } catch (err) {
+        } catch (err: any) {
             console.error("Failed to save log:", err);
             setError(err.message || "An error occurred while saving.");
         } finally {
@@ -88,14 +88,14 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                             label="Job #"
                             name="jobNumber"
                             value={jobData.jobNumber}
-                            onChange={(e) => setJobData(prev => ({ ...prev, jobNumber: (e.target.value || '').toUpperCase() }))}
+                            onChange={(e: any) => setJobData((prev: any) => ({ ...prev, jobNumber: (e.target.value || '').toUpperCase() }))}
                             style={{ textTransform: 'uppercase' }}
                         />
                         <FormInput
                             label="Section"
                             name="jobSection"
                             value={jobData.jobSection}
-                            onChange={(e) => setJobData(prev => ({ ...prev, jobSection: (e.target.value || '').toUpperCase() }))}
+                            onChange={(e: any) => setJobData((prev: any) => ({ ...prev, jobSection: (e.target.value || '').toUpperCase() }))}
                             style={{ textTransform: 'uppercase' }}
                             placeholder="Optional"
                         />
@@ -104,7 +104,7 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                                 label="Customer"
                                 name="customer"
                                 value={jobData.customer}
-                                onChange={(e) => setJobData(prev => ({ ...prev, customer: (e.target.value || '').toUpperCase() }))}
+                                onChange={(e: any) => setJobData((prev: any) => ({ ...prev, customer: (e.target.value || '').toUpperCase() }))}
                                 required
                                 style={{ textTransform: 'uppercase' }}
                             />
@@ -116,17 +116,17 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
                         name={logEntry.status === 'Scheduled' ? 'scheduledDate' : 'usedDate'}
                         type="date"
                         value={jobData.date}
-                        onChange={(e) => setJobData(prev => ({ ...prev, date: e.target.value }))}
+                        onChange={(e: any) => setJobData((prev: any) => ({ ...prev, date: e.target.value }))}
                         required
                     />
 
-                    {jobData.items.map((item, itemIndex) => (
+                    {jobData.items.map((item: any, itemIndex: any) => (
                         <div key={itemIndex} className="border border-slate-700 p-4 rounded-lg bg-slate-800">
-                            <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} as="select" disabled>{materialTypes.map(type => <option key={type}>{type}</option>)}</FormInput>
+                            <FormInput label={`Material Type #${itemIndex + 1}`} name="materialType" value={item.materialType} as="select" disabled>{materialTypes.map((type: any) => <option key={type}>{type}</option>)}</FormInput>
                             <div className="grid grid-cols-3 gap-2 mt-2">
-                                <FormInput label='96"x48" Qty' name="qty96" type="number" value={item.qty96} onChange={(e) => handleItemChange(itemIndex, 'qty96', e.target.value)} />
-                                <FormInput label='120"x48" Qty' name="qty120" type="number" value={item.qty120} onChange={(e) => handleItemChange(itemIndex, 'qty120', e.target.value)} />
-                                <FormInput label='144"x48" Qty' name="qty144" type="number" value={item.qty144} onChange={(e) => handleItemChange(itemIndex, 'qty144', e.target.value)} />
+                                <FormInput label='96"x48" Qty' name="qty96" type="number" value={item.qty96} onChange={(e: any) => handleItemChange(itemIndex, 'qty96', e.target.value)} />
+                                <FormInput label='120"x48" Qty' name="qty120" type="number" value={item.qty120} onChange={(e: any) => handleItemChange(itemIndex, 'qty120', e.target.value)} />
+                                <FormInput label='144"x48" Qty' name="qty144" type="number" value={item.qty144} onChange={(e: any) => handleItemChange(itemIndex, 'qty144', e.target.value)} />
                             </div>
                         </div>
                     ))}

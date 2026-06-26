@@ -38,7 +38,7 @@ export const AuthView = ({
 
         try {
             await signInWithPopup(auth, provider);
-        } catch (err) {
+        } catch (err: any) {
             if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
                 setError(null);
             } else {
@@ -64,7 +64,7 @@ export const AuthView = ({
             try {
                 await signInWithEmailAndPassword(auth, trimmed, password);
                 setPassword('');
-            } catch (error) {
+            } catch (error: any) {
                 const errorCode = error.code;
                 const errorMessage = error.message;
                 console.error('signInWithEmailAndPassword:', errorCode, errorMessage);
@@ -153,7 +153,7 @@ export const AuthView = ({
                                         type="email"
                                         autoComplete="email"
                                         value={email}
-                                        onChange={(ev) => setEmail(ev.target.value)}
+                                        onChange={(ev: any) => setEmail(ev.target.value)}
                                         disabled={loading || !authReady}
                                     />
                                     <FormInput
@@ -162,7 +162,7 @@ export const AuthView = ({
                                         type="password"
                                         autoComplete="current-password"
                                         value={password}
-                                        onChange={(ev) => setPassword(ev.target.value)}
+                                        onChange={(ev: any) => setPassword(ev.target.value)}
                                         disabled={loading || !authReady}
                                     />
                                     <Button

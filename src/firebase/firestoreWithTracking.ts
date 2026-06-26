@@ -58,20 +58,20 @@ export function runTransaction(db: any, updateFunction: any) {
     const counts = { reads: 0, writes: 0, deletes: 0 };
     const wrappedUpdate = async (transaction: any) => {
         const wrappedTx = {
-            get: async (ref) => {
+            get: async (ref: any) => {
                 const snap = await transaction.get(ref);
                 counts.reads += snap.exists() ? 1 : 0;
                 return snap;
             },
-            set: (ref, data, options) => {
+            set: (ref: any, data: any, options: any) => {
                 transaction.set(ref, data, options);
                 counts.writes++;
             },
-            update: (ref, data) => {
+            update: (ref: any, data: any) => {
                 transaction.update(ref, data);
                 counts.writes++;
             },
-            delete: (ref) => {
+            delete: (ref: any) => {
                 transaction.delete(ref);
                 counts.deletes++;
             },

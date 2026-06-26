@@ -156,7 +156,7 @@ export async function listBackups(db: any, appId: string) {
   try {
     const ref = collection(db, `artifacts/${appId}/public/data/backups`);
     const snap = await getDocs(ref);
-    all.push(...snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })));
+    all.push(...snap.docs.map((d: any) => ({ id: d.id, ...(d.data() || {}) })));
   } catch (e) {
     // If this fails due to missing list docs, fall back to collectionGroup scan below
   }
@@ -169,7 +169,7 @@ export async function listBackups(db: any, appId: string) {
       // Use collection group to find subcollections and extract backupId from path
       for (const sub of subNames) {
         const cg = await getDocs(collectionGroup(db, sub));
-        cg.docs.forEach((d) => {
+        cg.docs.forEach((d: any) => {
           const path = d.ref.path;
           // Look for the canonical root only
           const marker = `/artifacts/${appId}/public/data/backups/`;

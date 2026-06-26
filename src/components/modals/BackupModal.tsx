@@ -37,14 +37,14 @@ export const BackupModal = ({ onClose }: any) => {
 
     // Live updates from current backups location
     const currRef = collection(db, `artifacts/${appId}/public/data/backups`);
-    const unsubCurr = onSnapshot(currRef, (snap) => {
-      const live = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+    const unsubCurr = onSnapshot(currRef, (snap: any) => {
+      const live = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() || {}) }));
       setBackups((prev) => {
         const combined = new Map(prev.map((b) => [b.id, b]));
-        live.forEach((b) => combined.set(b.id, b));
+        live.forEach((b: any) => combined.set(b.id, b));
         return Array.from(combined.values()).sort((a, b) => (a.id < b.id ? 1 : -1));
       });
-    }, (err) => {
+    }, (err: any) => {
       setError(err?.message || 'Failed to read backups');
     });
 
@@ -80,7 +80,7 @@ export const BackupModal = ({ onClose }: any) => {
       setBusyMsg(`Backup created: ${res.backupId} (${res.totalDocs} docs)`);
       setSelectedBackupId(res.backupId);
       setLatest({ id: res.backupId, createdAt: new Date().toISOString(), totalDocs: res.totalDocs });
-    } catch (e) {
+    } catch (e: any) {
       setBusyMsg('');
       setError(e.message || 'Backup failed');
     } finally {
@@ -100,14 +100,14 @@ export const BackupModal = ({ onClose }: any) => {
         if (p.phase?.includes('progress')) setBusyMsg(`Restoring ${p.collection}...`);
         if (p.phase === 'collection-complete') setBusyMsg(`Finished ${p.collection}...`);
         // Simple staged progress: 3 collections → ~33% per collection
-        const stageIndex = { materials: 0, inventory: 1, usage_logs: 2 }[p.collection] ?? 0;
+        const stageIndex = ({ materials: 0, inventory: 1, usage_logs: 2 } as Record<string, number>)[p.collection] ?? 0;
         const base = stageIndex * 33.34; // 0, 33.34, 66.68
         const bump = p.phase === 'collection-complete' ? 33.34 : (p.phase?.includes('progress') ? 16.67 : 8);
         setProgress((prev) => Math.min(100, Math.max(prev, Math.floor(base + bump))));
       });
       setProgress(100);
       setBusyMsg(`Restore complete from ${latest.id}`);
-    } catch (e) {
+    } catch (e: any) {
       setBusyMsg('');
       setError(e.message || 'Restore failed');
     } finally {
@@ -126,14 +126,14 @@ export const BackupModal = ({ onClose }: any) => {
         if (p.phase === 'read') setBusyMsg(`Restoring ${p.collection}: found ${p.count} docs...`);
         if (p.phase?.includes('progress')) setBusyMsg(`Restoring ${p.collection}...`);
         if (p.phase === 'collection-complete') setBusyMsg(`Finished ${p.collection}...`);
-        const stageIndex = { materials: 0, inventory: 1, usage_logs: 2 }[p.collection] ?? 0;
+        const stageIndex = ({ materials: 0, inventory: 1, usage_logs: 2 } as Record<string, number>)[p.collection] ?? 0;
         const base = stageIndex * 33.34;
         const bump = p.phase === 'collection-complete' ? 33.34 : (p.phase?.includes('progress') ? 16.67 : 8);
         setProgress((prev) => Math.min(100, Math.max(prev, Math.floor(base + bump))));
       });
       setProgress(100);
       setBusyMsg(`Restore complete from ${selectedBackupId}`);
-    } catch (e) {
+    } catch (e: any) {
       setBusyMsg('');
       setError(e.message || 'Restore failed');
     } finally {
@@ -148,7 +148,7 @@ export const BackupModal = ({ onClose }: any) => {
       if (all && all.length > 0) {
         await backfillBackupIndex(db, appId);
       }
-    } catch (e) {
+    } catch (e: any) {
       setError(e?.message || 'Failed to refresh backups');
     }
   };
@@ -170,9 +170,9 @@ export const BackupModal = ({ onClose }: any) => {
         getDocs(logsRef),
       ]);
 
-      const materialsData = materialsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const inventoryData = inventorySnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const logsData = logsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const materialsData = materialsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      const inventoryData = inventorySnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      const logsData = logsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 
       // 1) System backup JSON (for restore)
       const backupJson = {
@@ -195,7 +195,7 @@ export const BackupModal = ({ onClose }: any) => {
       URL.revokeObjectURL(jsonUrl);
 
       // 2) Easy-to-read inventory-only CSV (for humans)
-      const inventoryRows = inventoryData.map((item) => ({
+      const inventoryRows = inventoryData.map((item: any) => ({
         id: item.id,
         materialType: item.materialType ?? '',
         length: item.length ?? '',
@@ -228,7 +228,7 @@ export const BackupModal = ({ onClose }: any) => {
       }
 
       setBusyMsg('Local backup saved (JSON + CSV)');
-    } catch (e) {
+    } catch (e: any) {
       setBusyMsg('');
       setError(e.message || 'Export failed');
     } finally {
@@ -237,7 +237,7 @@ export const BackupModal = ({ onClose }: any) => {
   };
 
   // Local import: user selects a JSON file to restore
-  const handleImportLocal = async (file) => {
+  const handleImportLocal = async (file: any) => {
     try {
       setBusyMsg('Importing local backup...');
       const text = await file.text();
@@ -249,7 +249,7 @@ export const BackupModal = ({ onClose }: any) => {
       for (const coll of collections) {
         const batch = writeBatch(db);
         const items = parsed.data[coll] || [];
-        items.forEach((item) => {
+        items.forEach((item: any) => {
           const id = item.id;
           const { id: _omit, ...rest } = item;
           batch.set(doc(db, `artifacts/${appId}/public/data/${coll}`, id), rest);
@@ -258,7 +258,7 @@ export const BackupModal = ({ onClose }: any) => {
         total += items.length;
       }
       setBusyMsg(`Imported ${total} docs from local backup.`);
-    } catch (e) {
+    } catch (e: any) {
       setBusyMsg('');
       setError(e.message || 'Import failed');
     } finally {

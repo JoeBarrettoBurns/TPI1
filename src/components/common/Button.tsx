@@ -1,6 +1,6 @@
 import React from 'react';
 
-const VARIANTS = {
+const VARIANTS: Record<string, string> = {
     primary: 'bg-blue-800 hover:bg-blue-700',
     secondary: 'bg-zinc-700 hover:bg-zinc-600',
     warning: 'bg-amber-600 hover:bg-amber-500',

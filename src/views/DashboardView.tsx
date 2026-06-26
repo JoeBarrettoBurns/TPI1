@@ -28,7 +28,7 @@ export const DashboardView = ({
         const matchingMaterials = materialTypes.filter(m => m.toLowerCase().includes(lowercasedQuery));
         const categoriesWithMatchingMaterials = new Set(matchingMaterials.map(m => materials[m].category));
 
-        return categories.filter(c =>
+        return categories.filter((c: any) =>
             c.toLowerCase().includes(lowercasedQuery) ||
             categoriesWithMatchingMaterials.has(c)
         );
@@ -37,7 +37,7 @@ export const DashboardView = ({
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <SortableContext items={filteredCategories} strategy={rectSortingStrategy}>
-                {filteredCategories.map(category => (
+                {filteredCategories.map((category: any) => (
                     <MaterialCategoryCard
                         key={category}
                         id={category}

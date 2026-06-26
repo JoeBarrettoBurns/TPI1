@@ -6,11 +6,11 @@ import { STANDARD_LENGTHS } from '../constants/materials';
 import { Button } from '../components/common/Button';
 import { createSupplierMailtoLink } from '../utils/buyOrderUtils';
 
-const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoOverrides }) => (
+const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoOverrides }: any) => (
     <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
         <h2 className="text-2xl font-bold text-white mb-4">Email Suppliers</h2>
         <div className="space-y-4">
-            {allSuppliers.map((supplier) => {
+            {allSuppliers.map((supplier: any) => {
                 const items = lowStockItemsBySupplier[supplier] || [];
                 return (
                     <div key={supplier} className="bg-zinc-900/50 rounded-xl border border-zinc-700 p-4 flex justify-between items-center">
@@ -35,7 +35,7 @@ const EmailSupplierBox = ({ allSuppliers, lowStockItemsBySupplier, supplierInfoO
     </div>
 );
 
-function getLatestBuyOrderSizeBubbles(item) {
+function getLatestBuyOrderSizeBubbles(item: any) {
     const sizes = [];
 
     STANDARD_LENGTHS.forEach((length) => {
@@ -61,7 +61,7 @@ function getLatestBuyOrderSizeBubbles(item) {
     return sizes;
 }
 
-function getBuyOrderSuppliers(buyOrder) {
+function getBuyOrderSuppliers(buyOrder: any) {
     if (Array.isArray(buyOrder?.suppliers) && buyOrder.suppliers.length > 0) {
         return buyOrder.suppliers.filter(Boolean);
     }
@@ -69,11 +69,11 @@ function getBuyOrderSuppliers(buyOrder) {
     return buyOrder?.supplier ? [buyOrder.supplier] : [];
 }
 
-function getBuyOrderSubject(buyOrder) {
+function getBuyOrderSubject(buyOrder: any) {
     return (buyOrder?.requestedEmailSubject || '').trim();
 }
 
-const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders, onDeleteBuyOrder }) => (
+const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders, onDeleteBuyOrder }: any) => (
     <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-2xl font-bold text-white">Buy Orders</h2>
@@ -91,7 +91,7 @@ const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders
             <p className="text-zinc-400">No emailed buy orders are waiting to be added into inventory.</p>
         ) : (
             <div className="space-y-5">
-                {buyOrders.map((buyOrder) => {
+                {buyOrders.map((buyOrder: any) => {
                     const orderSuppliers = getBuyOrderSuppliers(buyOrder);
                     const orderSubject = getBuyOrderSubject(buyOrder);
 
@@ -131,7 +131,7 @@ const BuyOrdersBox = ({ buyOrders, onAddBuyOrderToInventory, onClearAllBuyOrders
                             </Button>
                         </div>
                         <div className="mt-5 grid grid-cols-1 gap-4">
-                            {(buyOrder.items || []).map((item, index) => {
+                            {(buyOrder.items || []).map((item: any, index: any) => {
                                 const sizeBubbles = getLatestBuyOrderSizeBubbles(item);
 
                                 return (
@@ -187,8 +187,8 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders 
                 const count = summary[length] || 0;
                 if (count > 0 && count < 5) {
                     const mostRecentPurchase = inventory
-                        .filter(item => item.materialType === materialType && item.supplier)
-                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+                        .filter((item: any) => item.materialType === materialType && item.supplier)
+                        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
                     const supplier = mostRecentPurchase ? mostRecentPurchase.supplier : 'Unknown';
 
                     items.push({
@@ -215,8 +215,8 @@ export const ReorderView = ({ inventorySummary, materials, onRestock, buyOrders 
     }, [inventorySummary, materials, searchQuery, inventory]);
 
     const lowStockItemsBySupplier = useMemo(() => {
-        const lowStockBySupplier = {};
-        lowStockItems.forEach(item => {
+        const lowStockBySupplier: Record<string, any[]> = {};
+        lowStockItems.forEach((item: any) => {
             if (!lowStockBySupplier[item.supplier]) {
                 lowStockBySupplier[item.supplier] = [];
             }

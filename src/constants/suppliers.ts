@@ -1,6 +1,15 @@
 // src/constants/suppliers.js
 
-export const SUPPLIER_INFO = {
+export interface SupplierContact {
+    email: string;
+    subject: string;
+    contactName: string;
+    bodyMaterial: string;
+    /** Optional override CC address; absent on the canonical entries. */
+    ccEmail?: string;
+}
+
+export const SUPPLIER_INFO: Record<string, SupplierContact> & { DEFAULT: SupplierContact } = {
     RYERSON: {
         email: 'Jay.Park@ryerson.com;zsofia.buda@ryerson.com',
         subject: '16GA-GALV',

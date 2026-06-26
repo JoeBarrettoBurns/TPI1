@@ -1,8 +1,16 @@
 // src/components/layout/Header.tsx
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart, Shield, Settings } from 'lucide-react';
+import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart, Shield, Settings, FlaskConical } from 'lucide-react';
 import { Button } from '../common/Button';
+
+// Experimental Features toggle. This is the TypeScript build.
+// Flipping the toggle sends the user to the JavaScript build:
+//  - local dev: the JS dev server on the other port (:3001)
+//  - deployed (Netlify): the URL in REACT_APP_OTHER_VERSION_URL (the JS site)
+const IS_TS = true;
+const OTHER_VERSION_PORT = '3001';
+const OTHER_VERSION_URL = process.env.REACT_APP_OTHER_VERSION_URL || '';
 
 export const Header = ({
     onAdd,
@@ -30,7 +38,7 @@ export const Header = ({
     }, []);
 
     useEffect(() => {
-        const handleEscape = (event) => {
+        const handleEscape = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 setMoreOpen(false);
             }
@@ -44,6 +52,16 @@ export const Header = ({
 
     const menuItemClass =
         'w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm text-zinc-200 hover:bg-zinc-700 transition-colors';
+
+    const switchVersion = () => {
+        setMoreOpen(false);
+        const { protocol, hostname } = window.location;
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+        const target = (!isLocalhost && OTHER_VERSION_URL)
+            ? OTHER_VERSION_URL
+            : `${protocol}//${hostname}:${OTHER_VERSION_PORT}`;
+        window.location.href = target;
+    };
 
     return (
         // Just the buttons row. The parent sticky wrapper (in App.jsx) provides
@@ -94,6 +112,28 @@ export const Header = ({
                             <button type="button" role="menuitem" className={menuItemClass} onClick={() => { onOpenBackup(); setMoreOpen(false); }}>
                                 <Database size={18} className="shrink-0 text-zinc-400" />
                                 <span>Backups</span>
+                            </button>
+                            <div className="my-1 border-t border-zinc-700" role="separator" />
+                            <button
+                                type="button"
+                                role="menuitemcheckbox"
+                                aria-checked={IS_TS}
+                                className={`${menuItemClass} justify-between`}
+                                onClick={switchVersion}
+                            >
+                                <span className="flex items-center gap-2">
+                                    <FlaskConical size={18} className="shrink-0 text-zinc-400" />
+                                    <span className="flex flex-col">
+                                        <span>Experimental Features</span>
+                                        <span className="text-xs text-zinc-500">{IS_TS ? 'On · TypeScript build' : 'Off · JavaScript build'}</span>
+                                    </span>
+                                </span>
+                                <span
+                                    aria-hidden="true"
+                                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${IS_TS ? 'bg-blue-600' : 'bg-zinc-600'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${IS_TS ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                                </span>
                             </button>
                             <div className="my-1 border-t border-zinc-700" role="separator" />
                             <button type="button" role="menuitem" className={`${menuItemClass} text-red-300 hover:bg-red-950/50`} onClick={() => { onSignOut(); setMoreOpen(false); }}>

@@ -11,7 +11,7 @@ import { exportToCSV } from '../utils/csvExport';
 import { groupInventoryByJob } from '../utils/dataProcessing';
 import { auditCounts } from '../utils/countAudit';
 
-const AUDIT_ISSUE_META = {
+const AUDIT_ISSUE_META: Record<string, { title: string; reason: string; fixable: boolean }> = {
     'sheet-in-two-logs': {
         title: 'Sheets counted by two usage logs',
         reason: 'An older version of the app could leave a sheet on a previous log after that log was edited or its sheets were re-used, so two outgoing entries each count the same physical sheet. The fix keeps the sheet on the log that the inventory record itself points to and removes the stale duplicate from the other.',
@@ -61,7 +61,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
     );
 
     const logsById = useMemo(() => new Map<string, any>(usageLog.map((l: any) => [l.id, l])), [usageLog]);
-    const logLabel = (id) => {
+    const logLabel = (id: any) => {
         const log = logsById.get(id);
         if (!log) return 'a deleted log';
         const date = new Date(log.usedAt || log.createdAt).toLocaleDateString();
@@ -84,7 +84,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
             if (type === 'sheet-in-two-logs') {
                 // Collapse per-sheet noise into one line per pair of logs.
                 const pairs = new Map();
-                issues.forEach(i => {
+                issues.forEach((i: any) => {
                     const key = (i.logIds || []).join('|');
                     if (!pairs.has(key)) pairs.set(key, { logIds: i.logIds || [], materials: new Map() });
                     const pair = pairs.get(key);
@@ -99,7 +99,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
             } else if (type === 'sheet-duplicated-in-log') {
                 // One line per log with a material breakdown of the extra copies.
                 const byLog = new Map();
-                issues.forEach(i => {
+                issues.forEach((i: any) => {
                     if (!byLog.has(i.logId)) byLog.set(i.logId, new Map());
                     const mats = byLog.get(i.logId);
                     const matKey = `${i.materialType} @ ${i.length}"`;
@@ -111,15 +111,24 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                     return `${total} extra cop${total === 1 ? 'y' : 'ies'} (${breakdown}) listed on ${logLabel(logId)}`;
                 });
             } else if (type === 'sheet-live-and-used') {
-                lines = issues.map(i => `${i.materialType} @ ${i.length}" sheet is in stock but still claimed by ${logLabel(i.logId)}`);
+                // Collapse sheets with the same material/length/log into one line with a count.
+                const groups = new Map<string, { materialType: string; length: number; logId: string; count: number }>();
+                issues.forEach((i: any) => {
+                    const key = `${i.logId}|${i.materialType}|${i.length}`;
+                    if (!groups.has(key)) groups.set(key, { materialType: i.materialType, length: i.length, logId: i.logId, count: 0 });
+                    groups.get(key)!.count++;
+                });
+                lines = [...groups.values()].map(g =>
+                    `${g.count > 1 ? `${g.count}× ` : ''}${g.materialType} @ ${g.length}" sheet${g.count > 1 ? 's are' : ' is'} in stock but still claimed by ${logLabel(g.logId)}`
+                );
             } else if (type === 'log-qty-mismatch') {
-                lines = issues.map(i => `${logLabel(i.logId)} shows a total of ${i.stored} but lists ${i.snapshots} item${i.snapshots === 1 ? '' : 's'}`);
+                lines = issues.map((i: any) => `${logLabel(i.logId)} shows a total of ${i.stored} but lists ${i.snapshots} item${i.snapshots === 1 ? '' : 's'}`);
             } else if (type === 'details-missing-ids') {
-                lines = issues.map(i => `${logLabel(i.logId)} has ${i.count} item${i.count === 1 ? '' : 's'} that cannot be traced to a sheet`);
+                lines = issues.map((i: any) => `${logLabel(i.logId)} has ${i.count} item${i.count === 1 ? '' : 's'} that cannot be traced to a sheet`);
             } else if (type === 'display-recount-mismatch') {
-                lines = issues.map(i => `${i.materialType} @ ${i.length}": recount finds ${i.raw} sheet${i.raw === 1 ? '' : 's'} but the view displays ${i.displayed}`);
+                lines = issues.map((i: any) => `${i.materialType} @ ${i.length}": recount finds ${i.raw} sheet${i.raw === 1 ? '' : 's'} but the view displays ${i.displayed}`);
             } else {
-                lines = issues.map(i => i.message);
+                lines = issues.map((i: any) => i.message);
             }
 
             return { type, meta, count: issues.length, lines };
@@ -149,7 +158,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                 (result.pointerFixes ? `, relinked ${result.pointerFixes} sheet(s)` : '') +
                 (result.unfixable ? `. ${result.unfixable} legacy entr${result.unfixable === 1 ? 'y' : 'ies'} need manual review.` : '. Re-verifying below with the fresh data.')
             );
-        } catch (err) {
+        } catch (err: any) {
             console.error('Count repair failed:', err);
             setRepairSummary(`Repair failed: ${err?.message || 'unknown error'}`);
         } finally {
@@ -164,18 +173,18 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
         return grouped.filter(group =>
             (group.job || '').toLowerCase().includes(lowercasedQuery) ||
             (group.supplier || '').toLowerCase().includes(lowercasedQuery) ||
-            (group.displayDetails || group.details || []).some(d => (d.materialType || '').toLowerCase().includes(lowercasedQuery))
+            (group.displayDetails || group.details || []).some((d: any) => (d.materialType || '').toLowerCase().includes(lowercasedQuery))
         );
     }, [inventory, usageLog, searchQuery]);
 
     const filteredUsageLog = useMemo(() => {
-        const filtered = usageLog.filter(log => log.status !== 'Archived');
+        const filtered = usageLog.filter((log: any) => log.status !== 'Archived');
         if (!searchQuery) return filtered;
         const lowercasedQuery = (searchQuery || '').toLowerCase();
-        return filtered.filter(log =>
+        return filtered.filter((log: any) =>
             (log.job || '').toLowerCase().includes(lowercasedQuery) ||
             (log.customer || '').toLowerCase().includes(lowercasedQuery) ||
-            (log.details || []).some(d => (d.materialType || '').toLowerCase().includes(lowercasedQuery))
+            (log.details || []).some((d: any) => (d.materialType || '').toLowerCase().includes(lowercasedQuery))
         );
     }, [usageLog, searchQuery]);
 
@@ -205,15 +214,15 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
             const displayDetails = group.displayDetails || group.details || [];
             const dateIncoming = group.isFuture
                 ? displayDetails.reduce(
-                    (latest, curr) => !latest || (curr.arrivalDate && new Date(curr.arrivalDate) > new Date(latest)) ? curr.arrivalDate : latest,
+                    (latest: any, curr: any) => !latest || (curr.arrivalDate && new Date(curr.arrivalDate) > new Date(latest)) ? curr.arrivalDate : latest,
                     null
                 )
                 : displayDetails.reduce(
-                    (latest, curr) => !latest || (curr.dateReceived && new Date(curr.dateReceived) > new Date(latest)) ? curr.dateReceived : latest,
+                    (latest: any, curr: any) => !latest || (curr.dateReceived && new Date(curr.dateReceived) > new Date(latest)) ? curr.dateReceived : latest,
                     null
                 );
 
-            return displayDetails.map(item => ({
+            return displayDetails.map((item: any) => ({
                 dateOrdered: new Date(group.date).toLocaleDateString(),
                 dateIncoming: dateIncoming ? new Date(dateIncoming).toLocaleDateString() : 'N/A',
                 job: group.job,
@@ -238,8 +247,8 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
             { label: 'Status', key: 'status' },
         ];
 
-        const dataToExport = filteredUsageLog.flatMap(log =>
-            (log.details && log.details.length > 0) ? log.details.map(item => ({
+        const dataToExport = filteredUsageLog.flatMap((log: any) =>
+            (log.details && log.details.length > 0) ? log.details.map((item: any) => ({
                 date: new Date(log.usedAt || log.createdAt).toLocaleDateString(),
                 job: log.job,
                 customer: log.customer,
@@ -293,7 +302,7 @@ export const LogsView = ({ usageLog, inventory, onEditOrder, onDeleteLog, onDele
                                     </div>
                                     <p className="mt-1 text-xs leading-relaxed text-red-200/70">{group.meta.reason}</p>
                                     <ul className="mt-2 list-disc space-y-1 pl-5 text-red-100/90">
-                                        {group.lines.slice(0, 8).map((line, i) => <li key={i}>{line}</li>)}
+                                        {group.lines.slice(0, 8).map((line: any, i: any) => <li key={i}>{line}</li>)}
                                         {group.lines.length > 8 && <li>…and {group.lines.length - 8} more.</li>}
                                     </ul>
                                 </div>

@@ -74,7 +74,7 @@ export function useSuppliersSync(userId: string | null | undefined) {
         const docRef = supplierSettingsDocRef();
         const unsub = onSnapshot(
             docRef,
-            async (snap) => {
+            async (snap: any) => {
                 if (!snap.exists()) {
                     const s = readLocalSuppliers();
                     const si = readLocalSupplierInfo();
@@ -104,7 +104,7 @@ export function useSuppliersSync(userId: string | null | undefined) {
                 setSupplierInfo(nextInfo);
                 setSyncReady(true);
             },
-            (err) => {
+            (err: any) => {
                 console.error('Supplier settings sync failed:', err);
                 setSyncReady(true);
             }

@@ -247,7 +247,7 @@ function SortableMaterialRow({ id, isEditMode, matType, onMaterialClick, invento
                     <span onClick={() => onMaterialClick(matType)} className="cursor-pointer hover:text-blue-400">{matType}</span>
                 </div>
             </td>
-            {displayLengths.map(len => {
+            {displayLengths.map((len: any) => {
                 const isCustom = len === 'custom';
                 const isEditingCell = isEditMode && editingCell?.matType === matType && editingCell?.len === len;
                 

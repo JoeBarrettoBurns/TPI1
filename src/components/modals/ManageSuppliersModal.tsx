@@ -12,7 +12,7 @@ const EMAIL_BODY_TEXTAREA_CLASS =
 
 function buildEditsMap(suppliersList: any, supplierInfoMap: any) {
     const next: Record<string, any> = {};
-    suppliersList.forEach((name) => {
+    suppliersList.forEach((name: any) => {
         const key = (name || '').toUpperCase().replace(/\s+/g, '_');
         const effective = supplierInfoMap?.[key] || DEFAULT_SUPPLIER_INFO[key] || DEFAULT_SUPPLIER_INFO.DEFAULT;
         const saved = effective.emailBody;
@@ -36,7 +36,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
         setEdits(buildEditsMap(suppliers, supplierInfo));
     }, [suppliers, supplierInfo]);
 
-    const buildDefaultBodyTemplate = (material) => {
+    const buildDefaultBodyTemplate = (material: any) => {
         const mat = (material || '').trim();
         if (!mat) return '';
         return (
@@ -47,7 +47,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
         );
     };
 
-    const buildMailtoLink = (name) => {
+    const buildMailtoLink = (name: any) => {
         const data = edits[name] || {};
         // Recipients pass through exactly as saved — no encoding/splitting.
         const to = data.email || '';
@@ -85,7 +85,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
         setNewInfo({ email: '', subject: '', contactName: '', bodyMaterial: '', emailBody: '', ccEmail: CC_EMAIL });
     };
 
-    const handleEditChange = (supplierName, field, value) => {
+    const handleEditChange = (supplierName: any, field: any, value: any) => {
         setEdits(prev => ({
             ...prev,
             [supplierName]: {
@@ -95,7 +95,7 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
         }));
     };
 
-    const handleSaveEdit = (supplierName) => {
+    const handleSaveEdit = (supplierName: any) => {
         setError('');
         const data = edits[supplierName] || {};
         const { email, subject, contactName, bodyMaterial, bodyTemplate, ccEmail, emailBody } = data;
@@ -124,12 +124,12 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
                         <div className="bg-zinc-800/60 rounded-lg border border-zinc-700 p-3">
                             <h4 className="text-lg font-semibold text-white">Add Supplier</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                                <FormInput name="newSupplier" value={newSupplier} onChange={(e) => setNewSupplier(e.target.value)} placeholder="New supplier name" label="Supplier Name" />
-                                <FormInput name="newEmail" value={newInfo.email} onChange={(e) => setNewInfo({ ...newInfo, email: e.target.value })} placeholder="email@example.com" label="Email" />
-                                <FormInput name="newSubject" value={newInfo.subject} onChange={(e) => setNewInfo({ ...newInfo, subject: e.target.value })} placeholder="Email subject" label="Subject" />
-                                <FormInput name="newContactName" value={newInfo.contactName} onChange={(e) => setNewInfo({ ...newInfo, contactName: e.target.value })} placeholder="Contact name" label="Contact Name" />
-                                    <FormInput name="newBodyMaterial" value={newInfo.bodyMaterial} onChange={(e) => setNewInfo({ ...newInfo, bodyMaterial: e.target.value })} placeholder="Default material line" label="Default Material" />
-                                    <FormInput name="newCc" value={newInfo.ccEmail} onChange={(e) => setNewInfo({ ...newInfo, ccEmail: e.target.value })} placeholder={CC_EMAIL} label="Cc" />
+                                <FormInput name="newSupplier" value={newSupplier} onChange={(e: any) => setNewSupplier(e.target.value)} placeholder="New supplier name" label="Supplier Name" />
+                                <FormInput name="newEmail" value={newInfo.email} onChange={(e: any) => setNewInfo({ ...newInfo, email: e.target.value })} placeholder="email@example.com" label="Email" />
+                                <FormInput name="newSubject" value={newInfo.subject} onChange={(e: any) => setNewInfo({ ...newInfo, subject: e.target.value })} placeholder="Email subject" label="Subject" />
+                                <FormInput name="newContactName" value={newInfo.contactName} onChange={(e: any) => setNewInfo({ ...newInfo, contactName: e.target.value })} placeholder="Contact name" label="Contact Name" />
+                                    <FormInput name="newBodyMaterial" value={newInfo.bodyMaterial} onChange={(e: any) => setNewInfo({ ...newInfo, bodyMaterial: e.target.value })} placeholder="Default material line" label="Default Material" />
+                                    <FormInput name="newCc" value={newInfo.ccEmail} onChange={(e: any) => setNewInfo({ ...newInfo, ccEmail: e.target.value })} placeholder={CC_EMAIL} label="Cc" />
                                     <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-zinc-300">Email body (full message)</label>
                                     <p className="text-xs text-zinc-500 mt-0.5">Edit the entire message; it is saved to your account and syncs across devices when signed in.</p>
@@ -144,10 +144,10 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
                         <div className="bg-zinc-800/60 rounded-lg border border-zinc-700 p-3">
                             <h4 className="text-lg font-semibold text-white">Suppliers</h4>
                             <div className="mt-2">
-                                <FormInput name="filter" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search suppliers..." />
+                                <FormInput name="filter" value={filter} onChange={(e: any) => setFilter(e.target.value)} placeholder="Search suppliers..." />
                             </div>
                             <ul className="space-y-2 mt-2 max-h-[46vh] overflow-y-auto pr-1">
-                                {suppliers.filter(s => s.toLowerCase().includes((filter || '').toLowerCase())).map(supplier => {
+                                {suppliers.filter((s: any) => s.toLowerCase().includes((filter || '').toLowerCase())).map((supplier: any) => {
                                     const isSelected = selected === supplier;
                                     return (
                                         <li key={supplier} className={`flex items-center justify-between p-2 rounded cursor-pointer ${isSelected ? 'bg-blue-900/40 border border-blue-700' : 'bg-slate-700 hover:bg-slate-600'}`} onClick={() => setSelected(supplier)}>
@@ -171,11 +171,11 @@ export const ManageSuppliersModal = ({ onClose, suppliers, supplierInfo, onAddSu
                                 <p className="text-zinc-400 mt-2">Select a supplier on the left to edit details.</p>
                             ) : (
                                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <FormInput label="Email" name={`email_${selected}`} value={edits[selected]?.email || ''} onChange={(e) => handleEditChange(selected, 'email', e.target.value)} placeholder="email@example.com" />
-                                    <FormInput label="Subject" name={`subject_${selected}`} value={edits[selected]?.subject || ''} onChange={(e) => handleEditChange(selected, 'subject', e.target.value)} placeholder="Email subject" />
-                                    <FormInput label="Contact Name" name={`contact_${selected}`} value={edits[selected]?.contactName || ''} onChange={(e) => handleEditChange(selected, 'contactName', e.target.value)} placeholder="Contact name" />
-                                    <FormInput label="Default Material" name={`mat_${selected}`} value={edits[selected]?.bodyMaterial || ''} onChange={(e) => handleEditChange(selected, 'bodyMaterial', e.target.value)} placeholder="Default material line for email body" />
-                                    <FormInput label="Cc" name={`cc_${selected}`} value={edits[selected]?.ccEmail ?? CC_EMAIL} onChange={(e) => handleEditChange(selected, 'ccEmail', e.target.value)} placeholder={CC_EMAIL} />
+                                    <FormInput label="Email" name={`email_${selected}`} value={edits[selected]?.email || ''} onChange={(e: any) => handleEditChange(selected, 'email', e.target.value)} placeholder="email@example.com" />
+                                    <FormInput label="Subject" name={`subject_${selected}`} value={edits[selected]?.subject || ''} onChange={(e: any) => handleEditChange(selected, 'subject', e.target.value)} placeholder="Email subject" />
+                                    <FormInput label="Contact Name" name={`contact_${selected}`} value={edits[selected]?.contactName || ''} onChange={(e: any) => handleEditChange(selected, 'contactName', e.target.value)} placeholder="Contact name" />
+                                    <FormInput label="Default Material" name={`mat_${selected}`} value={edits[selected]?.bodyMaterial || ''} onChange={(e: any) => handleEditChange(selected, 'bodyMaterial', e.target.value)} placeholder="Default material line for email body" />
+                                    <FormInput label="Cc" name={`cc_${selected}`} value={edits[selected]?.ccEmail ?? CC_EMAIL} onChange={(e: any) => handleEditChange(selected, 'ccEmail', e.target.value)} placeholder={CC_EMAIL} />
                                     <div className="md:col-span-2">
                                         <label className="block text-sm font-medium text-zinc-300">Email body (full message)</label>
                                         <p className="text-xs text-zinc-500 mt-0.5">Edit greeting, intro, and material lines in one place. Saved to your account and syncs across devices when signed in.</p>

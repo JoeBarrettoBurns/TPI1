@@ -77,7 +77,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
     useEffect(() => {
         const unsub = onSnapshot(
             ALLOWLIST_REF,
-            (snap) => {
+            (snap: any) => {
                 setLoadError(null);
                 const raw = snap.data()?.emails;
                 if (Array.isArray(raw)) {
@@ -98,7 +98,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
                 }
                 setLoadingList(false);
             },
-            (err) => {
+            (err: any) => {
                 console.error(err);
                 const code = err?.code || '';
                 const hint =
@@ -130,7 +130,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
                 try {
                     const m = await fetchSignInMethodsForEmail(auth, key);
                     if (!cancelled) next[key] = m;
-                } catch (err) {
+                } catch (err: any) {
                     console.warn('fetchSignInMethodsForEmail', key, err);
                     if (!cancelled) next[key] = [];
                 }
@@ -146,13 +146,13 @@ export const AuthenticationModal = ({ onClose }: any) => {
     }, [mergedAllowlistRows]);
 
     const persistEmails = useCallback(async (nextList: any) => {
-        const normalized = [...new Set(nextList.map((e) => normalizeEmail(String(e))).filter(Boolean))];
+        const normalized = [...new Set(nextList.map((e: any) => normalizeEmail(String(e))).filter(Boolean))];
         setSaving(true);
         setError('');
         try {
             await setDoc(ALLOWLIST_REF, { emails: normalized, updatedAt: new Date().toISOString() }, { merge: true });
             return true;
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
             setError(e?.message || 'Failed to save allowlist.');
             return false;
@@ -179,7 +179,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
         if (ok) setNewEmail('');
     };
 
-    const handleRemove = async (removeAddr, inFirestore) => {
+    const handleRemove = async (removeAddr: any, inFirestore: any) => {
         const n = normalizeEmail(removeAddr);
         if (!inFirestore) return;
         const next = emails.filter((e) => normalizeEmail(e) !== n);
@@ -223,7 +223,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
             } catch {
                 /* ignore */
             }
-        } catch (error) {
+        } catch (error: any) {
             const errorCode = error.code;
             const errorMessage = error.message;
             console.error('createUserWithEmailAndPassword:', errorCode, errorMessage);
@@ -379,7 +379,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
                             type="email"
                             placeholder="colleague@gmail.com or name@company.com"
                             value={newEmail}
-                            onChange={(ev) => setNewEmail(ev.target.value)}
+                            onChange={(ev: any) => setNewEmail(ev.target.value)}
                             disabled={!!loadError}
                         />
                     </div>
@@ -410,7 +410,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
                         type="email"
                         label="Email"
                         value={pwEmail}
-                        onChange={(ev) => setPwEmail(ev.target.value)}
+                        onChange={(ev: any) => setPwEmail(ev.target.value)}
                         autoComplete="off"
                         disabled={!!loadError}
                     />
@@ -419,7 +419,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
                         type="password"
                         label="Password"
                         value={pwNew}
-                        onChange={(ev) => setPwNew(ev.target.value)}
+                        onChange={(ev: any) => setPwNew(ev.target.value)}
                         autoComplete="new-password"
                         disabled={!!loadError}
                     />
@@ -428,7 +428,7 @@ export const AuthenticationModal = ({ onClose }: any) => {
                         type="password"
                         label="Confirm password"
                         value={pwConfirm}
-                        onChange={(ev) => setPwConfirm(ev.target.value)}
+                        onChange={(ev: any) => setPwConfirm(ev.target.value)}
                         autoComplete="new-password"
                         disabled={!!loadError}
                     />

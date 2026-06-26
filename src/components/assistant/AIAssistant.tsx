@@ -33,7 +33,7 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
         setInput('');
     };
 
-    const constructPrompt = (userInput) => {
+    const constructPrompt = (userInput: any) => {
         const inventoryContext = `
             Here is the relevant inventory data based on the user's query:
             ${JSON.stringify(inventory.slice(0, 50), null, 2)}
@@ -65,10 +65,10 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
         `;
     };
 
-    const constructPayload = (currentMessages, userInput) => {
+    const constructPayload = (currentMessages: any, userInput: any) => {
         const systemPrompt = constructPrompt(userInput);
 
-        const history = currentMessages.map(msg => ({
+        const history = currentMessages.map((msg: any) => ({
             role: msg.sender === 'ai' ? 'model' : 'user',
             parts: [{ text: msg.text }]
         }));
@@ -203,7 +203,7 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
                 throw new Error("Invalid response structure from API.");
             }
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error calling Gemini API:", error);
             const errorMessage = { sender: 'ai', text: `Error: ${error.message}` };
             setMessages(prev => [...prev, errorMessage]);
@@ -219,7 +219,7 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
             await onExecuteOrder([orderToConfirm]);
             const successMessage = { sender: 'ai', text: "Order created successfully!" };
             setMessages(prev => [...prev, successMessage]);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error executing order:", error);
             const errorMessage = { sender: 'ai', text: `Failed to create order: ${error.message}` };
             setMessages(prev => [...prev, errorMessage]);
@@ -268,7 +268,7 @@ export const AIAssistant = ({ isVisible, onClose, inventory, materials, supplier
                                 <li><strong>Job/PO:</strong> {orderToConfirm.jobName}</li>
                                 <li><strong>Status:</strong> {orderToConfirm.status}</li>
                                 {orderToConfirm.arrivalDate && <li><strong>Arrival:</strong> {orderToConfirm.arrivalDate}</li>}
-                                {orderToConfirm.items.map((item, i) => (
+                                {orderToConfirm.items.map((item: any, i: any) => (
                                     <li key={i} className="mt-2 pl-2 border-l border-zinc-600">
                                         <strong>{item.materialType}</strong>
                                         <ul className="text-xs list-disc list-inside pl-4">

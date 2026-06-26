@@ -10,6 +10,11 @@ import { groupInventoryByJob } from './dataProcessing';
 const isManualRemoveLog = (log: any) =>
     log.job === 'MODIFICATION: REMOVE' && log.customer === 'Manual Edit';
 
+// COUNT REPAIR entries are an informational trail of corrections; their detail
+// snapshots carry no sheet ids on purpose, so they are not real claims and must
+// not be flagged as legacy id-less entries.
+const isCountRepairLog = (log: any) => log.job === 'COUNT REPAIR';
+
 const skipDetail = (d: any) => (d.job || '').startsWith('MODIFICATION') && d.returnedByLogEdit;
 
 export interface CountAuditResult {
@@ -48,8 +53,8 @@ export function auditCounts(inventory: any[], usageLog: any[]): CountAuditResult
     // completed usage logs nor twice within the same log's details ──
     const sheetToLog = new Map();
     completedLogs.forEach(log => {
-        const seenInThisLog = new Set();
-        (log.details || []).forEach(d => {
+        const seenInThisLog = new Set<string>();
+        (log.details || []).forEach((d: any) => {
             if (!d.id) return;
             if (seenInThisLog.has(d.id)) {
                 issues.push({
@@ -96,8 +101,8 @@ export function auditCounts(inventory: any[], usageLog: any[]): CountAuditResult
 
     // ── Invariant 4: legacy completed logs whose snapshots lack sheet ids ──
     completedLogs.forEach(log => {
-        if (isManualRemoveLog(log)) return;
-        const missing = (log.details || []).filter(d => !d.id).length;
+        if (isManualRemoveLog(log) || isCountRepairLog(log)) return;
+        const missing = (log.details || []).filter((d: any) => !d.id).length;
         if (missing > 0) {
             issues.push({
                 type: 'details-missing-ids',
@@ -112,9 +117,9 @@ export function auditCounts(inventory: any[], usageLog: any[]): CountAuditResult
     // ── Independent recount vs what the Logs view displays ──
     // Raw path: walk every unique sheet (live docs + used snapshots) with a flat
     // global id set — no grouping logic involved.
-    const rawTotals = {};
-    const countedIds = new Set();
-    const bump = (totals, d) => {
+    const rawTotals: Record<string, number> = {};
+    const countedIds = new Set<string>();
+    const bump = (totals: Record<string, number>, d: any) => {
         const key = `${d.materialType}|${d.length}`;
         totals[key] = (totals[key] || 0) + 1;
     };
@@ -129,7 +134,7 @@ export function auditCounts(inventory: any[], usageLog: any[]): CountAuditResult
     });
     completedLogs.forEach(log => {
         const manualRemove = isManualRemoveLog(log);
-        (log.details || []).forEach((d, index) => {
+        (log.details || []).forEach((d: any, index: number) => {
             if (!d.materialType || skipDetail(d)) return;
             const id = d.id || (manualRemove ? `${log.id}-${index}-${d.materialType}-${d.length}` : null);
             if (!id || countedIds.has(id)) return;
@@ -140,8 +145,8 @@ export function auditCounts(inventory: any[], usageLog: any[]): CountAuditResult
 
     // Display path: exactly what the Incoming Stock Log renders.
     const groups = groupInventoryByJob(liveInventory, usageLog || []);
-    const displayedTotals = {};
-    groups.forEach(g => (g.displayDetails || []).forEach(d => bump(displayedTotals, d)));
+    const displayedTotals: Record<string, number> = {};
+    groups.forEach(g => (g.displayDetails || []).forEach((d: any) => bump(displayedTotals, d)));
 
     const allKeys = new Set([...Object.keys(rawTotals), ...Object.keys(displayedTotals)]);
     allKeys.forEach(key => {

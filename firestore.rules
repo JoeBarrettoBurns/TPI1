@@ -68,9 +68,34 @@ service cloud.firestore {
       allow write: if hasAccess(appId);
     }
 
-    // Protect all actual app data
+    // Inventory count invariant: a sheet may only be CONSUMED (status -> 'Used',
+    // stamped with a new usageLogId + usedAt) while it is currently 'On Hand'. This
+    // makes a double-claim by two concurrent clients fail at the database instead of
+    // silently corrupting counts. The combination of (status->Used) + (new log) +
+    // (new usedAt) uniquely identifies a fresh consumption, so it does NOT block
+    // legitimate re-writes of already-Used sheets: count-repair pointer fixes change
+    // only usageLogId (usedAt unchanged), and a log edit keeps sheets on the same log.
+    function isFreshConsumption() {
+      let newStatus = request.resource.data.get('status', '');
+      let newLog = request.resource.data.get('usageLogId', null);
+      let oldLog = resource.data.get('usageLogId', null);
+      let newUsedAt = request.resource.data.get('usedAt', null);
+      let oldUsedAt = resource.data.get('usedAt', null);
+      return newStatus == 'Used' && newLog != oldLog && newUsedAt != oldUsedAt;
+    }
+    function inventoryUpdateOk() {
+      return !isFreshConsumption() || resource.data.get('status', '') == 'On Hand';
+    }
+
+    // Protect all actual app data. The recursive match also covers top-level
+    // inventory/{id} docs; only those updates carry the consumption guard (matched by
+    // path), so backups, usage_logs, materials, supplier_settings, etc. keep the
+    // simple access gate.
     match /artifacts/{appId}/public/data/{document=**} {
-      allow read, write: if hasAccess(appId);
+      allow read: if hasAccess(appId);
+      allow create, delete: if hasAccess(appId);
+      allow update: if hasAccess(appId) &&
+        (!document.matches('inventory/[^/]+') || inventoryUpdateOk());
     }
   }
 }

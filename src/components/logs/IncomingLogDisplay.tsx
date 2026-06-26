@@ -7,15 +7,15 @@ import { AuditTag } from '../common/AuditTag';
 
 export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDelete, onEdit, onReceiveOrder, ordersToShow }: any) => {
     const processedItems = useMemo(() => {
-        return incomingItems.map(item => {
+        return incomingItems.map((item: any) => {
             const displayDetails = item.displayDetails || item.details || [];
             const latestIncomingDate = item.isFuture
                 ? displayDetails.reduce(
-                    (latest, curr) => !latest || (curr.arrivalDate && new Date(curr.arrivalDate) > new Date(latest)) ? curr.arrivalDate : latest,
+                    (latest: any, curr: any) => !latest || (curr.arrivalDate && new Date(curr.arrivalDate) > new Date(latest)) ? curr.arrivalDate : latest,
                     null
                 )
                 : displayDetails.reduce(
-                    (latest, curr) => !latest || (curr.dateReceived && new Date(curr.dateReceived) > new Date(latest)) ? curr.dateReceived : latest,
+                    (latest: any, curr: any) => !latest || (curr.dateReceived && new Date(curr.dateReceived) > new Date(latest)) ? curr.dateReceived : latest,
                     null
                 );
 
@@ -37,8 +37,8 @@ export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDel
 
     // One shared set of length columns for the whole table (like the Categories view).
     const lengthColumns = useMemo(() => {
-        const labels = [];
-        visibleItems.forEach(item => item.materialRows.forEach(row => labels.push(...Object.keys(row.counts))));
+        const labels: string[] = [];
+        visibleItems.forEach((item: any) => item.materialRows.forEach((row: any) => labels.push(...Object.keys(row.counts))));
         return orderLengthLabels(labels);
     }, [visibleItems]);
 
@@ -64,7 +64,7 @@ export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDel
                         <th className="px-3 py-4 font-semibold text-zinc-400 text-center whitespace-nowrap w-24">Actions</th>
                     </tr>
                 </thead>
-                {visibleItems.map((item, orderIdx) => {
+                {visibleItems.map((item: any, orderIdx: any) => {
                     const rows = item.materialRows.length > 0
                         ? item.materialRows
                         : [{ materialType: 'No item details', counts: {} }];
@@ -78,7 +78,7 @@ export const IncomingLogDisplay = ({ incomingItems, materials, onRowClick, onDel
                                     <td colSpan={99} className="p-0"><div className="h-3" /></td>
                                 </tr>
                             )}
-                            {rows.map((row, idx) => (
+                            {rows.map((row: any, idx: any) => (
                                 <tr
                                     key={`${item.id}-${row.materialType}`}
                                     onClick={() => onRowClick(item)}

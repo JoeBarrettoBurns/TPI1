@@ -12,11 +12,11 @@ function openMailto(mailto: any) {
 }
 
 export const BuyOrderDraftsModal = ({ onClose, drafts = [] }: any) => {
-    const [remainingDrafts, setRemainingDrafts] = useState(() => drafts.filter((draft) => draft?.mailto));
+    const [remainingDrafts, setRemainingDrafts] = useState(() => drafts.filter((draft: any) => draft?.mailto));
 
-    const handleOpenDraft = (draftToOpen) => {
+    const handleOpenDraft = (draftToOpen: any) => {
         openMailto(draftToOpen.mailto);
-        setRemainingDrafts((currentDrafts) => currentDrafts.filter((draft) => draft !== draftToOpen));
+        setRemainingDrafts((currentDrafts: any) => currentDrafts.filter((draft: any) => draft !== draftToOpen));
     };
 
     return (
@@ -29,7 +29,7 @@ export const BuyOrderDraftsModal = ({ onClose, drafts = [] }: any) => {
                     <p className="text-zinc-400">All supplier drafts have been opened.</p>
                 ) : (
                     <div className="space-y-3">
-                        {remainingDrafts.map((draft, index) => (
+                        {remainingDrafts.map((draft: any, index: any) => (
                             <div key={`${draft.supplier || 'supplier'}-${index}`} className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-4">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                                     <div className="min-w-0">

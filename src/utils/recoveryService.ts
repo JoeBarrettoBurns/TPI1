@@ -26,7 +26,7 @@ export async function rebuildMissingMaterialsFromInventory(db: any, appId: strin
   const invSnap = await getDocs(invRef);
 
   const missing = new Map();
-  invSnap.forEach((docSnap) => {
+  invSnap.forEach((docSnap: any) => {
     const data = docSnap.data();
     const mt = data.materialType;
     if (!mt) return;

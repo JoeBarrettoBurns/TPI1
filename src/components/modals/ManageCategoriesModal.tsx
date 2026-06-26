@@ -68,7 +68,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 		);
 	}, [selectedCategory, materials, mode, materialIndicatorSettings, categories.length]);
 
-	const handleMaterialChange = (index, field, value) => {
+	const handleMaterialChange = (index: any, field: any, value: any) => {
 		const newMaterials = [...categoryMaterials];
 		newMaterials[index][field] = value;
 		setCategoryMaterials(newMaterials);
@@ -78,7 +78,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 		setCategoryMaterials([...categoryMaterials, createEmptyMaterialRow()]);
 	};
 
-	const removeMaterialRow = (index) => {
+	const removeMaterialRow = (index: any) => {
 		const newMaterials = categoryMaterials.filter((_, i) => i !== index);
 		setCategoryMaterials(newMaterials);
 	};
@@ -97,7 +97,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 				await onSave(finalCategoryName, [], mode);
 				if (refetchMaterials) await refetchMaterials();
 				onClose();
-			} catch (err) {
+			} catch (err: any) {
 				setError(err.message || 'Failed to save changes.');
 			} finally {
 				setIsSubmitting(false);
@@ -127,7 +127,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
                 await refetchMaterials();
             }
 			onClose();
-		} catch (err) {
+		} catch (err: any) {
 			setError(err.message || 'Failed to save changes.');
 		} finally {
 			setIsSubmitting(false);
@@ -142,7 +142,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 			await onDeleteCategory(categoryPendingDelete);
 			setCategoryPendingDelete(null);
 			onClose();
-		} catch (err) {
+		} catch (err: any) {
 			setDeleteError(err.message || 'Failed to delete category.');
 		} finally {
 			setDeleteSubmitting(false);
@@ -161,7 +161,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 								const materialsKeys = Object.keys(materials);
 								const res = await repairInventoryMaterialKeys(db, appId, materialsKeys);
 								setBusyMsg(`Repair complete. Updated ${res.updated} items.`);
-							} catch (err) {
+							} catch (err: any) {
 								setBusyMsg('');
 								setError(err.message || 'Repair failed');
 							} finally {
@@ -180,7 +180,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 								const keys = Object.keys(materials);
 								const res = await rebuildMissingMaterialsFromInventory(db, appId, keys);
 								setBusyMsg(`Rebuilt ${res.created} missing materials.`);
-							} catch (err) {
+							} catch (err: any) {
 								setBusyMsg('');
 								setError(err.message || 'Rebuild failed');
 							} finally {
@@ -212,7 +212,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 									{categories.length === 0 ? (
 										<option value="">No categories yet</option>
 									) : (
-										categories.map(cat => <option key={cat} value={cat}>{cat}</option>)
+										categories.map((cat: any) => <option key={cat} value={cat}>{cat}</option>)
 									)}
 								</select>
 							</div>
@@ -237,7 +237,7 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 						label="New Category Name"
 						name="newCategoryName"
 						value={newCategoryName}
-						onChange={(e) => setNewCategoryName(e.target.value)}
+						onChange={(e: any) => setNewCategoryName(e.target.value)}
 						required
 						placeholder="e.g., Cold Rolled Steel"
 					/>
@@ -259,14 +259,14 @@ export const ManageCategoriesModal = ({ onClose, onSave, onDeleteCategory, categ
 								<div className="rounded-lg border border-slate-700 bg-slate-950/50 p-3">
 									<p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">High / Low</p>
 									<div className="grid grid-cols-2 gap-2 mt-3">
-										<FormInput label="Low" type="number" value={material.low} onChange={(e) => handleMaterialChange(index, 'low', e.target.value)} required min="0" step="1" />
-										<FormInput label="High" type="number" value={material.high} onChange={(e) => handleMaterialChange(index, 'high', e.target.value)} required min="1" step="1" />
+										<FormInput label="Low" type="number" value={material.low} onChange={(e: any) => handleMaterialChange(index, 'low', e.target.value)} required min="0" step="1" />
+										<FormInput label="High" type="number" value={material.high} onChange={(e: any) => handleMaterialChange(index, 'high', e.target.value)} required min="1" step="1" />
 									</div>
 								</div>
 								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-									<FormInput label="Material Name" value={material.name} onChange={(e) => handleMaterialChange(index, 'name', e.target.value)} required placeholder="e.g., 16GA-CRS" />
-									<FormInput label="Thickness (in)" type="number" value={material.thickness} onChange={(e) => handleMaterialChange(index, 'thickness', e.target.value)} required step="0.001" />
-									<FormInput label="Density (lbs/inł)" type="number" value={material.density} onChange={(e) => handleMaterialChange(index, 'density', e.target.value)} required step="0.0001" />
+									<FormInput label="Material Name" value={material.name} onChange={(e: any) => handleMaterialChange(index, 'name', e.target.value)} required placeholder="e.g., 16GA-CRS" />
+									<FormInput label="Thickness (in)" type="number" value={material.thickness} onChange={(e: any) => handleMaterialChange(index, 'thickness', e.target.value)} required step="0.001" />
+									<FormInput label="Density (lbs/inł)" type="number" value={material.density} onChange={(e: any) => handleMaterialChange(index, 'density', e.target.value)} required step="0.0001" />
 								</div>
 							</div>
 						</div>

@@ -68,8 +68,8 @@ function createManualEditSessionId() {
     return `manual-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function normalizeOrderItemsForStorage(items = []) {
-    return items.map((item) => ({
+function normalizeOrderItemsForStorage(items: any[] = []) {
+    return items.map((item: any) => ({
         materialType: item.materialType || '',
         qty96: String(item.qty96 || ''),
         qty120: String(item.qty120 || ''),
@@ -81,7 +81,7 @@ function normalizeOrderItemsForStorage(items = []) {
     }));
 }
 
-function getBuyOrderPrimarySupplier(buyOrder) {
+function getBuyOrderPrimarySupplier(buyOrder: any) {
     if (buyOrder?.supplier) {
         return buyOrder.supplier;
     }
@@ -93,12 +93,68 @@ function getBuyOrderPrimarySupplier(buyOrder) {
     return '';
 }
 
-function triggerMailto(mailto) {
+function triggerMailto(mailto: any) {
     const link = document.createElement('a');
     link.href = mailto;
     document.body.appendChild(link);
     link.click();
     link.remove();
+}
+
+/** Thrown when stock changed between the in-memory snapshot and the transactional write. */
+class StockConflictError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'StockConflictError';
+    }
+}
+
+/**
+ * Atomically reserve On Hand sheets inside a Firestore transaction.
+ *
+ * Sheets are pre-selected FIFO from the in-memory snapshot (the caller supplies
+ * `candidateIds`, ideally a few more than `qty` as a buffer). This re-reads each
+ * candidate inside the transaction and returns, per requirement, the first `qty`
+ * that are STILL `On Hand` and not already chosen in this transaction — so two
+ * clients can never consume the same physical sheet. It only READS, so it must be
+ * called before any `tx` writes (Firestore requires all reads before writes).
+ *
+ * Throws {@link StockConflictError} when a requirement can no longer be satisfied
+ * (candidates were consumed elsewhere since the snapshot was taken).
+ */
+async function reserveOnHandSheets(
+    tx: any,
+    inventoryCollectionRef: any,
+    requirements: Array<{ materialType: string; length: number; qty: number; candidateIds: string[] }>
+): Promise<any[][]> {
+    const uniqueIds = Array.from(new Set(requirements.flatMap((r) => r.candidateIds)));
+    const snaps = await Promise.all(uniqueIds.map((id) => tx.get(doc(inventoryCollectionRef, id))));
+    const dataById = new Map<string, any>();
+    snaps.forEach((snap: any, i: number) => {
+        dataById.set(uniqueIds[i], snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    });
+
+    const claimedInTxn = new Set<string>();
+    const picksPerRequirement: any[][] = [];
+    for (const req of requirements) {
+        const picked: any[] = [];
+        for (const id of req.candidateIds) {
+            if (picked.length === req.qty) break;
+            if (claimedInTxn.has(id)) continue;
+            const data = dataById.get(id);
+            if (data && data.status === 'On Hand') {
+                claimedInTxn.add(id);
+                picked.push(data);
+            }
+        }
+        if (picked.length < req.qty) {
+            throw new StockConflictError(
+                `Stock for ${req.materialType} @ ${req.length}" changed before it could be saved (needed ${req.qty}, only ${picked.length} still available). Please refresh and try again.`
+            );
+        }
+        picksPerRequirement.push(picked);
+    }
+    return picksPerRequirement;
 }
 
 export default function App() {
@@ -113,18 +169,18 @@ export default function App() {
     const [activeView, setActiveView] = useState('dashboard');
     const [modal, setModal] = useState<any>({ type: null, data: null, error: null });
     const [isEditMode, setIsEditMode] = useState(false);
-    const [manualEditSessionId, setManualEditSessionId] = useState(null);
-    const [scrollToMaterial, setScrollToMaterial] = useState(null);
-    const [activeCategory, setActiveCategory] = useState(null);
-    const [categoriesToDelete, setCategoriesToDelete] = useState([]);
+    const [manualEditSessionId, setManualEditSessionId] = useState<string | null>(null);
+    const [scrollToMaterial, setScrollToMaterial] = useState<string | null>(null);
+    const [activeCategory, setActiveCategory] = useState<string | null>(null);
+    const [categoriesToDelete, setCategoriesToDelete] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedJobFromSearch, setSelectedJobFromSearch] = useState(null);
-    const searchInputRef = useRef(null);
-    const [searchResults, setSearchResults] = useState([]);
+    const [selectedJobFromSearch, setSelectedJobFromSearch] = useState<any>(null);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
+    const [searchResults, setSearchResults] = useState<any[]>([]);
     const [activeIndex, setActiveIndex] = useState(0);
-    const [fuse, setFuse] = useState(null);
+    const [fuse, setFuse] = useState<any>(null);
     const [isAssistantVisible, setIsAssistantVisible] = useState(false);
-    const [openBuyOrders, setOpenBuyOrders] = useState([]);
+    const [openBuyOrders, setOpenBuyOrders] = useState<any[]>([]);
 
     const {
         inventory,
@@ -165,14 +221,14 @@ export default function App() {
 
         return onSnapshot(
             buyOrdersQuery,
-            (snapshot) => {
+            (snapshot: any) => {
                 const openBuyOrders = snapshot.docs
-                    .map((buyOrderDoc) => ({ id: buyOrderDoc.id, ...buyOrderDoc.data() }))
-                    .filter((buyOrder) => !buyOrder.workflowStatus || buyOrder.workflowStatus === 'emailed');
+                    .map((buyOrderDoc: any) => ({ id: buyOrderDoc.id, ...buyOrderDoc.data() }))
+                    .filter((buyOrder: any) => !buyOrder.workflowStatus || buyOrder.workflowStatus === 'emailed');
 
                 setOpenBuyOrders(openBuyOrders);
             },
-            (err) => {
+            (err: any) => {
                 console.error('Failed to load buy orders:', err);
                 setOpenBuyOrders([]);
             }
@@ -186,7 +242,7 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        const handleKeyDown = (event) => {
+        const handleKeyDown = (event: any) => {
             if (event.key === 'Escape') {
                 if (AI_ASSISTANT_ENABLED && isAssistantVisible) {
                     setIsAssistantVisible(false);
@@ -321,7 +377,7 @@ export default function App() {
     }, [loading, materials, inventory, usageLog, initialCategories, isEditMode, allJobs, materialTypes, handleFinishEditing, handleStartEditing, handleSignOut]);
 
 
-    const handleSearchChange = (e) => {
+    const handleSearchChange = (e: any) => {
         const query = e.target.value;
         setSearchQuery(query);
         setActiveIndex(0);
@@ -337,7 +393,7 @@ export default function App() {
         }
     };
 
-    const handleResultSelect = (result) => {
+    const handleResultSelect = (result: any) => {
         const item = result.item;
         switch (item.type) {
             case 'command':
@@ -368,7 +424,7 @@ export default function App() {
         searchInputRef.current?.blur();
     };
 
-    const handleSearchKeyDown = (e) => {
+    const handleSearchKeyDown = (e: any) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             if (searchResults[activeIndex]) {
@@ -396,7 +452,7 @@ export default function App() {
 
     const onScrollToComplete = useCallback(() => setScrollToMaterial(null), []);
 
-    const buildBuyOrderPrefillFromReorderItem = useCallback((item) => {
+    const buildBuyOrderPrefillFromReorderItem = useCallback((item: any) => {
         if (!item) return null;
 
         const matchingPurchases = inventory
@@ -430,18 +486,18 @@ export default function App() {
         };
     }, [inventory, suppliers]);
 
-    const handleOpenBuyModal = useCallback((prefill = null) => {
+    const handleOpenBuyModal = useCallback((prefill: any = null) => {
         setModal({ type: 'buy', data: prefill ? { prefill } : null });
     }, []);
 
-    const handleRestock = useCallback((item) => {
+    const handleRestock = useCallback((item: any) => {
         const prefill = typeof item === 'string'
             ? { createdAt: getTodayDateInputValue(), items: [{ materialType: item }], suppliers: suppliers[0] ? [suppliers[0]] : [] }
             : buildBuyOrderPrefillFromReorderItem(item);
         handleOpenBuyModal(prefill);
     }, [buildBuyOrderPrefillFromReorderItem, handleOpenBuyModal, suppliers]);
 
-    const handleAddBuyOrderToInventory = useCallback((buyOrder) => {
+    const handleAddBuyOrderToInventory = useCallback((buyOrder: any) => {
         if (!buyOrder) return;
         setModal({
             type: 'add',
@@ -481,7 +537,7 @@ export default function App() {
         closeModal();
     }, [openBuyOrders, closeModal]);
 
-    const handleDeleteBuyOrder = useCallback((buyOrder) => {
+    const handleDeleteBuyOrder = useCallback((buyOrder: any) => {
         if (!buyOrder?.id) {
             return;
         }
@@ -505,8 +561,8 @@ export default function App() {
         closeModal();
     }, [modal.data, closeModal]);
 
-    const handleDragStart = (event) => setActiveCategory(event.active.id);
-    const handleDragEnd = (event) => {
+    const handleDragStart = (event: any) => setActiveCategory(event.active.id);
+    const handleDragEnd = (event: any) => {
         const { active, over } = event;
         if (over && active.id !== over.id) {
             setCategories((items) => arrayMove(items, items.indexOf(active.id), items.indexOf(over.id)));
@@ -515,7 +571,7 @@ export default function App() {
     };
     const handleDragCancel = () => setActiveCategory(null);
 
-    const handleToggleCategoryForDeletion = (categoryName) => {
+    const handleToggleCategoryForDeletion = (categoryName: any) => {
         setCategoriesToDelete(prev =>
             prev.includes(categoryName)
                 ? prev.filter(c => c !== categoryName)
@@ -523,7 +579,7 @@ export default function App() {
         );
     };
 
-    const handleDeleteSingleCategory = useCallback(async (categoryName) => {
+    const handleDeleteSingleCategory = useCallback(async (categoryName: any) => {
         try {
             const materialsToDelete = Object.values<any>(materials).filter(m => m.category === categoryName);
             const materialIdsToDelete = materialsToDelete.map(m => m.id);
@@ -579,17 +635,17 @@ export default function App() {
             if (refetchMaterials) await refetchMaterials();
         } catch (err) {
             console.error("Error deleting categories:", err);
-            setModal(prev => ({ ...prev, error: "Failed to delete categories. Please try again." }));
+            setModal((prev: any) => ({ ...prev, error: "Failed to delete categories. Please try again." }));
         }
     };
 
-    const handleUseStock = async (jobs, options) => {
+    const handleUseStock = async (jobs: any, options: any) => {
         const { isScheduled, scheduledDate } = options;
         const batch = writeBatch(db);
         const usageLogCollectionRef = collection(db, `artifacts/${appId}/public/data/usage_logs`);
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
-        const resolveUseStockJobLabel = (job) => {
+        const resolveUseStockJobLabel = (job: any) => {
             const fromParts = formatUseStockJobLabel(job.jobNumber, job.jobSection, job.joinWith);
             if (fromParts) return fromParts;
             return (job.jobName || '').trim() || 'N/A';
@@ -603,7 +659,7 @@ export default function App() {
 
                 for (const item of job.items) {
                     for (const len of STANDARD_LENGTHS) {
-                        const qty = parseInt(item[`qty${len}`] || 0);
+                        const qty = parseInt(item[`qty${len}`] || 0, 10);
                         if (qty > 0) {
                             totalItems += qty;
                             const materialInfo = materials[item.materialType];
@@ -642,111 +698,152 @@ export default function App() {
             return;
         }
 
-        // Use Now: skip individual transaction reads for speed.
-        // Sheets already taken by an earlier item/job in this same submission must
-        // not be selected again, or two log entries would claim the same sheet.
-        const allocatedSheetIds = new Set();
-        for (const job of jobs) {
-            const logDocRef = doc(usageLogCollectionRef);
-            const usedItems = [];
-
-            for (const item of job.items) {
-                for (const len of STANDARD_LENGTHS) {
-                    const qty = parseInt(item[`qty${len}`] || 0);
-                    if (qty <= 0) continue;
-
-                    const matchingSheets = inventory
-                        .filter(i => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !allocatedSheetIds.has(i.id))
-                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-                    if (matchingSheets.length < qty) {
-                        throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
-                    }
-
-                    const sheetsToUse = matchingSheets.slice(0, qty);
-                    for (const sheet of sheetsToUse) {
-                        const ref = doc(inventoryCollectionRef, sheet.id);
-                        allocatedSheetIds.add(sheet.id);
-                        usedItems.push({ ...sheet, status: 'Used' });
-                        batch.update(ref, {
-                            status: 'Used',
-                            usageLogId: logDocRef.id,
-                            jobNameUsed: resolveUseStockJobLabel(job),
-                            customerUsed: job.customer,
-                            usedAt: new Date().toISOString(),
+        // Use Now: select FIFO from the in-memory snapshot, then CLAIM in a transaction
+        // that re-reads each sheet and verifies it is still On Hand — so two clients (or
+        // tabs) can never consume the same physical sheet. `allocatedSnapshotIds` keeps a
+        // submission's own items from picking the same sheet twice; the extra candidates
+        // (qty + buffer) let the transaction self-heal when a few snapshot sheets were
+        // taken since the last refresh.
+        const CLAIM_CANDIDATE_BUFFER = 5;
+        const allocatedSnapshotIds = new Set<string>();
+        const jobPlans = jobs
+            .map((job: any) => {
+                const requirements: Array<{ materialType: string; length: number; qty: number; candidateIds: string[] }> = [];
+                for (const item of job.items) {
+                    for (const len of STANDARD_LENGTHS) {
+                        const qty = parseInt(item[`qty${len}`] || '0', 10);
+                        if (qty <= 0) continue;
+                        const matchingSheets = inventory
+                            .filter((i: any) => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !allocatedSnapshotIds.has(i.id))
+                            .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                        if (matchingSheets.length < qty) {
+                            throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
+                        }
+                        matchingSheets.slice(0, qty).forEach((s: any) => allocatedSnapshotIds.add(s.id));
+                        requirements.push({
+                            materialType: item.materialType,
+                            length: len,
+                            qty,
+                            candidateIds: matchingSheets.slice(0, qty + CLAIM_CANDIDATE_BUFFER).map((s: any) => s.id),
                         });
                     }
                 }
-            }
+                return { job, logRef: doc(usageLogCollectionRef), requirements };
+            })
+            .filter((p: any) => p.requirements.length > 0);
 
-            if (usedItems.length > 0) {
-                const nowIso = new Date().toISOString();
-                const logEntry = {
-                    job: resolveUseStockJobLabel(job),
-                    customer: job.customer,
-                    usedAt: nowIso,
-                    createdAt: nowIso,
-                    status: 'Completed',
-                    details: usedItems,
-                    qty: -usedItems.length,
-                    createdBy: auditActor(),
-                };
-                batch.set(logDocRef, logEntry);
-            }
-        }
+        if (jobPlans.length === 0) return;
 
-        await batch.commit();
+        const nowIso = new Date().toISOString();
+        await runTransaction(db, async (tx: any) => {
+            const flatReqs: any[] = [];
+            const reqPlanIndex: number[] = [];
+            jobPlans.forEach((plan: any, pi: number) =>
+                plan.requirements.forEach((r: any) => { flatReqs.push(r); reqPlanIndex.push(pi); })
+            );
+
+            // All reads first (Firestore requires reads before writes).
+            const reserved = await reserveOnHandSheets(tx, inventoryCollectionRef, flatReqs);
+
+            const usedByPlan: any[][] = jobPlans.map(() => [] as any[]);
+            reserved.forEach((sheets, ri) => {
+                const pi = reqPlanIndex[ri];
+                const plan = jobPlans[pi];
+                for (const sheet of sheets) {
+                    tx.update(doc(inventoryCollectionRef, sheet.id), {
+                        status: 'Used',
+                        usageLogId: plan.logRef.id,
+                        jobNameUsed: resolveUseStockJobLabel(plan.job),
+                        customerUsed: plan.job.customer,
+                        usedAt: nowIso,
+                    });
+                    usedByPlan[pi].push({ ...sheet, status: 'Used' });
+                }
+            });
+
+            jobPlans.forEach((plan: any, pi: number) => {
+                const used = usedByPlan[pi];
+                if (used.length > 0) {
+                    tx.set(plan.logRef, {
+                        job: resolveUseStockJobLabel(plan.job),
+                        customer: plan.job.customer,
+                        usedAt: nowIso,
+                        createdAt: nowIso,
+                        status: 'Completed',
+                        details: used,
+                        qty: -used.length,
+                        createdBy: auditActor(),
+                    });
+                }
+            });
+        });
     };
 
-    const handleFulfillScheduledLog = async (logToFulfill) => {
+    const handleFulfillScheduledLog = async (logToFulfill: any) => {
         try {
-            const batch = writeBatch(db);
-            const itemsNeeded: Record<string, number> = logToFulfill.details.reduce((acc: Record<string, number>, item: any) => {
+            const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+            const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
+
+            const itemsNeeded: Record<string, number> = (logToFulfill.details || []).reduce((acc: Record<string, number>, item: any) => {
                 const key = `${item.materialType}|${item.length}`;
                 acc[key] = (acc[key] || 0) + 1;
                 return acc;
             }, {});
 
-            // Prepare selection based on current in-memory inventory
-            const selectedSheets = [];
+            // Select FIFO from the in-memory snapshot (plus a buffer); the actual claim
+            // re-verifies each sheet inside the transaction.
+            const CLAIM_CANDIDATE_BUFFER = 5;
+            const allocatedSnapshotIds = new Set<string>();
+            const requirements: Array<{ materialType: string; length: number; qty: number; candidateIds: string[] }> = [];
             for (const [key, qty] of Object.entries(itemsNeeded)) {
                 const [materialType, lengthStr] = key.split('|');
                 const length = parseInt(lengthStr, 10);
-
                 const availableSheets = inventory
-                    .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
-                    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
+                    .filter((i: any) => i.materialType === materialType && i.length === length && i.status === 'On Hand' && !allocatedSnapshotIds.has(i.id))
+                    .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                 if (availableSheets.length < qty) {
                     throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
                 }
-                selectedSheets.push(...availableSheets.slice(0, qty));
-            }
-
-            const nowIso = new Date().toISOString();
-            for (const s of selectedSheets) {
-                const r = doc(db, `artifacts/${appId}/public/data/inventory`, s.id);
-                batch.update(r, {
-                    status: 'Used',
-                    usageLogId: logToFulfill.id,
-                    jobNameUsed: logToFulfill.job || 'N/A',
-                    customerUsed: logToFulfill.customer || 'N/A',
-                    usedAt: nowIso,
+                availableSheets.slice(0, qty).forEach((s: any) => allocatedSnapshotIds.add(s.id));
+                requirements.push({
+                    materialType,
+                    length,
+                    qty,
+                    candidateIds: availableSheets.slice(0, qty + CLAIM_CANDIDATE_BUFFER).map((s: any) => s.id),
                 });
             }
 
-            const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
-            batch.update(logDocRef, {
-                status: 'Completed',
-                details: selectedSheets.map(s => ({ ...s, status: 'Used' })),
-                qty: -selectedSheets.length,
-                fulfilledAt: nowIso,
-                lastEditedBy: auditActor(),
-                lastEditedAt: nowIso,
-            });
+            const nowIso = new Date().toISOString();
+            await runTransaction(db, async (tx: any) => {
+                // Re-read the log first and bail if it was already fulfilled or rescheduled
+                // since this click (mirrors the auto-fulfill freshness guard).
+                const freshLog = await tx.get(logDocRef);
+                if (!freshLog.exists() || (freshLog.data().status || 'Completed') !== 'Scheduled') {
+                    throw new StockConflictError('This scheduled order was already fulfilled or changed elsewhere. Please refresh and try again.');
+                }
 
-            await batch.commit();
-        } catch (error) {
+                const selectedSheets = (await reserveOnHandSheets(tx, inventoryCollectionRef, requirements)).flat();
+
+                for (const sheet of selectedSheets) {
+                    tx.update(doc(inventoryCollectionRef, sheet.id), {
+                        status: 'Used',
+                        usageLogId: logToFulfill.id,
+                        jobNameUsed: logToFulfill.job || 'N/A',
+                        customerUsed: logToFulfill.customer || 'N/A',
+                        usedAt: nowIso,
+                    });
+                }
+
+                tx.update(logDocRef, {
+                    status: 'Completed',
+                    details: selectedSheets.map((s: any) => ({ ...s, status: 'Used' })),
+                    qty: -selectedSheets.length,
+                    fulfilledAt: nowIso,
+                    lastEditedBy: auditActor(),
+                    lastEditedAt: nowIso,
+                });
+            });
+        } catch (error: any) {
             console.error("Fulfillment Error:", error);
             setModal({
                 type: 'fulfill-error',
@@ -755,14 +852,14 @@ export default function App() {
         }
     };
 
-    const handleManageCategory = async (categoryName, materialsFromModal, mode) => {
+    const handleManageCategory = async (categoryName: any, materialsFromModal: any, mode: any) => {
         const materialsCollectionRef = collection(db, `artifacts/${appId}/public/data/materials`);
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
         try {
             const allMaterialsSnapshot = await getDocs(materialsCollectionRef);
-            const allMaterials = {};
-            allMaterialsSnapshot.forEach(docSnap => {
+            const allMaterials: Record<string, any> = {};
+            allMaterialsSnapshot.forEach((docSnap: any) => {
                 // Use canonical Firestore IDs as names to avoid mismatches
                 allMaterials[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
             });
@@ -801,9 +898,9 @@ export default function App() {
 
             // Determine deletions (materials removed entirely)
             const keepOriginalIds = new Set(
-                materialsFromModal.filter(m => !m.isNew && m.id).map(m => m.id)
+                materialsFromModal.filter((m: any) => !m.isNew && m.id).map((m: any) => m.id)
             );
-            const removedMaterialIds = [];
+            const removedMaterialIds: string[] = [];
             for (const origId of Object.keys(originalById)) {
                 if (!keepOriginalIds.has(origId)) {
                     batch.delete(doc(materialsCollectionRef, origId));
@@ -812,7 +909,7 @@ export default function App() {
                 }
             }
             if (removedMaterialIds.length > 0) {
-                const idMatchesType = (mt) =>
+                const idMatchesType = (mt: any) =>
                     removedMaterialIds.includes(mt) ||
                     removedMaterialIds.some(
                         rid => mt === rid.replace(/-/g, '/') || mt === rid.replace(/\//g, '-')
@@ -916,7 +1013,7 @@ export default function App() {
     };
 
 
-    const handleAddSupplier = (supplier, info) => {
+    const handleAddSupplier = (supplier: any, info: any) => {
         setSuppliers(prev => [...prev, supplier]);
         if (info) {
             const key = (supplier || '').toUpperCase().replace(/\s+/g, '_');
@@ -924,7 +1021,7 @@ export default function App() {
         }
     };
 
-    const handleDeleteSupplier = (supplier) => {
+    const handleDeleteSupplier = (supplier: any) => {
         setSuppliers(prev => prev.filter(s => s !== supplier));
         const key = (supplier || '').toUpperCase().replace(/\s+/g, '_');
         setSupplierInfo(prev => {
@@ -934,30 +1031,30 @@ export default function App() {
         });
     };
 
-    const handleUpdateSupplierInfo = (supplierName, info) => {
+    const handleUpdateSupplierInfo = (supplierName: any, info: any) => {
         const key = (supplierName || '').toUpperCase().replace(/\s+/g, '_');
         setSupplierInfo((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), ...info } }));
     };
 
-    const handleAddOrEditOrder = async (jobs, originalOrderGroup = null, options: any = {}) => {
+    const handleAddOrEditOrder = async (jobs: any, originalOrderGroup: any = null, options: any = {}) => {
         const isEditing = !!originalOrderGroup;
         const batch = writeBatch(db);
 
         if (isEditing) {
-            (originalOrderGroup.details || []).forEach(item => {
+            (originalOrderGroup.details || []).forEach((item: any) => {
                 if (!item?.id) return;
                 const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
                 batch.delete(docRef);
             });
-            (originalOrderGroup.sourceLogIds || []).forEach(logId => {
+            (originalOrderGroup.sourceLogIds || []).forEach((logId: any) => {
                 batch.delete(doc(db, `artifacts/${appId}/public/data/usage_logs`, logId));
             });
         }
 
         const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
-        jobs.forEach(job => {
+        jobs.forEach((job: any) => {
             const jobName = job.jobName.trim() || 'N/A';
-            job.items.forEach(item => {
+            job.items.forEach((item: any) => {
                 const arrivalDateString = job.useItemArrivalDates ? item.arrivalDate : job.arrivalDate;
 
                 const stockData = {
@@ -976,7 +1073,7 @@ export default function App() {
                 };
 
                 STANDARD_LENGTHS.forEach(len => {
-                    const qty = parseInt(item[`qty${len}`] || 0);
+                    const qty = parseInt(item[`qty${len}`] || 0, 10);
                     for (let i = 0; i < qty; i++) {
                         const newDocRef = doc(inventoryCollectionRef);
                         batch.set(newDocRef, { ...stockData, width: 48, length: len });
@@ -1004,7 +1101,7 @@ export default function App() {
         await batch.commit();
     };
 
-    const handleSubmitBuyOrder = useCallback(async (jobs) => {
+    const handleSubmitBuyOrder = useCallback(async (jobs: any) => {
         const job = jobs?.[0];
         if (!job) {
             throw new Error('A buy order requires at least one job.');
@@ -1020,7 +1117,7 @@ export default function App() {
         const customBody = buildBuyOrderEmailBody(normalizedItems);
         const createdAt = new Date().toISOString();
         const requestedEmailSubject = (job.emailSubject || '').trim();
-        const emailDrafts = selectedSuppliers.map((supplier) => ({
+        const emailDrafts = selectedSuppliers.map((supplier: any) => ({
             supplier,
             ...createSupplierMailtoLink({
                 supplier,
@@ -1029,7 +1126,7 @@ export default function App() {
                 customSubject: requestedEmailSubject,
             }),
         }));
-        const validDrafts = emailDrafts.filter((draft) => draft?.mailto);
+        const validDrafts = emailDrafts.filter((draft: any) => draft?.mailto);
 
         // A single supplier opens straight into the mail client (reliable within
         // this click). Multiple suppliers can't all be launched from one click —
@@ -1055,7 +1152,7 @@ export default function App() {
             requestedEmailSubject,
             emailSubject: requestedEmailSubject || (emailDrafts[0]?.subject || 'Quote Request'),
             emailBody: emailDrafts[0]?.body || customBody,
-            emailDrafts: emailDrafts.map(({ supplier, subject, body, info }) => ({
+            emailDrafts: emailDrafts.map(({ supplier, subject, body, info }: any) => ({
                 supplier,
                 email: info?.email || '',
                 ccEmail: info?.ccEmail || '',
@@ -1071,23 +1168,23 @@ export default function App() {
         return { closeModalOnSuccess: false };
     }, [closeModal, supplierInfo]);
 
-    const handleDeleteInventoryGroup = async (group) => {
+    const handleDeleteInventoryGroup = async (group: any) => {
         const details = group?.details || [];
         const sourceLogIds = group?.sourceLogIds || [];
         if (!details.length && !sourceLogIds.length) return;
         const batch = writeBatch(db);
-        details.forEach(item => {
+        details.forEach((item: any) => {
             if (!item?.id) return;
             const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
             batch.delete(docRef);
         });
-        sourceLogIds.forEach(logId => {
+        sourceLogIds.forEach((logId: any) => {
             batch.delete(doc(db, `artifacts/${appId}/public/data/usage_logs`, logId));
         });
         await batch.commit();
     };
 
-    const handleDeleteLog = async (logId) => {
+    const handleDeleteLog = async (logId: any) => {
         const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logId);
         const logSnap = await getDoc(logDocRef);
         if (!logSnap.exists()) {
@@ -1104,7 +1201,7 @@ export default function App() {
                 query(inventoryCollectionRef, where('usageLogId', '==', logId))
             );
 
-            usedInventorySnap.forEach((itemDoc) => {
+            usedInventorySnap.forEach((itemDoc: any) => {
                 batch.update(doc(inventoryCollectionRef, itemDoc.id), {
                     status: 'On Hand',
                     usageLogId: null,
@@ -1119,9 +1216,9 @@ export default function App() {
         await batch.commit();
     };
 
-    const handleReceiveOrder = async (orderGroup) => {
+    const handleReceiveOrder = async (orderGroup: any) => {
         const batch = writeBatch(db);
-        orderGroup.details.forEach(item => {
+        orderGroup.details.forEach((item: any) => {
             if (item.id) {
                 const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
                 batch.update(docRef, {
@@ -1135,7 +1232,7 @@ export default function App() {
         await batch.commit();
     };
 
-    const handleStockEdit = async (materialType, length, newQuantity) => {
+    const handleStockEdit = async (materialType: any, length: any, newQuantity: any) => {
         const currentQuantity = inventorySummary[materialType]?.[length] || 0;
         const diff = newQuantity - currentQuantity;
 
@@ -1169,26 +1266,37 @@ export default function App() {
                 const newDocRef = doc(inventoryCollectionRef);
                 batch.set(newDocRef, stockData);
             }
-        } else {
-            const sheetsToRemove = Math.abs(diff);
-            const availableSheets = inventory
-                .filter(
-                    item => item.materialType === materialType &&
-                        item.length === length &&
-                        item.status === 'On Hand'
-                )
-                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            await batch.commit();
+            return;
+        }
 
-            if (availableSheets.length < sheetsToRemove) {
-                throw new Error(`Cannot remove ${sheetsToRemove} sheets. Only ${availableSheets.length} available.`);
-            }
+        // diff < 0: claim the sheets to remove transactionally, re-verifying each is
+        // still On Hand so a manual edit can never consume a sheet another client just used.
+        const sheetsToRemove = Math.abs(diff);
+        const CLAIM_CANDIDATE_BUFFER = 5;
+        const candidates = inventory
+            .filter((item: any) =>
+                item.materialType === materialType &&
+                item.length === length &&
+                item.status === 'On Hand'
+            )
+            .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-            const sheetsToUse = availableSheets.slice(0, sheetsToRemove);
-            const logDocRef = doc(usageLogCollectionRef);
+        if (candidates.length < sheetsToRemove) {
+            throw new Error(`Cannot remove ${sheetsToRemove} sheets. Only ${candidates.length} available.`);
+        }
 
-            for (const sheet of sheetsToUse) {
-                const sheetRef = doc(inventoryCollectionRef, sheet.id);
-                batch.update(sheetRef, {
+        const removeRequirement = {
+            materialType,
+            length,
+            qty: sheetsToRemove,
+            candidateIds: candidates.slice(0, sheetsToRemove + CLAIM_CANDIDATE_BUFFER).map((s: any) => s.id),
+        };
+        const logDocRef = doc(usageLogCollectionRef);
+        await runTransaction(db, async (tx: any) => {
+            const [reservedSheets] = await reserveOnHandSheets(tx, inventoryCollectionRef, [removeRequirement]);
+            for (const sheet of reservedSheets) {
+                tx.update(doc(inventoryCollectionRef, sheet.id), {
                     status: 'Used',
                     usageLogId: logDocRef.id,
                     jobNameUsed: 'MODIFICATION: REMOVE',
@@ -1197,24 +1305,21 @@ export default function App() {
                     manualEditSessionId: editSessionId,
                 });
             }
-
-            batch.set(logDocRef, {
+            tx.set(logDocRef, {
                 job: 'MODIFICATION: REMOVE',
                 customer: 'Manual Edit',
                 usedAt: nowIso,
                 createdAt: nowIso,
                 status: 'Completed',
-                details: sheetsToUse.map(s => ({ ...s, status: 'Used' })),
-                qty: -sheetsToUse.length,
+                details: reservedSheets.map((s: any) => ({ ...s, status: 'Used' })),
+                qty: -reservedSheets.length,
                 manualEditSessionId: editSessionId,
                 createdBy: auditActor(),
             });
-        }
-
-        await batch.commit();
+        });
     };
 
-    const handleEditOutgoingLog = async (originalLog, newLogData) => {
+    const handleEditOutgoingLog = async (originalLog: any, newLogData: any) => {
         const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, originalLog.id);
 
         // Always fetch the latest log status from Firestore to avoid relying on derived objects
@@ -1223,11 +1328,11 @@ export default function App() {
         const latestStatus = (latestLog.status || 'Completed');
 
         if (latestStatus === 'Scheduled') {
-            const newDetails = [];
+            const newDetails: any[] = [];
             let totalItems = 0;
             for (const item of newLogData.items) {
                 for (const len of STANDARD_LENGTHS) {
-                    const qty = parseInt(item[`qty${len}`] || 0);
+                    const qty = parseInt(item[`qty${len}`] || 0, 10);
                     if (qty > 0) {
                         totalItems += qty;
                         const materialInfo = materials[item.materialType];
@@ -1305,7 +1410,7 @@ export default function App() {
                 // can't be silently lost to a concurrent auto-fulfill: if the log was
                 // already fulfilled between opening the editor and saving, abort with a
                 // clear error instead of writing over (or losing) the user's reschedule.
-                await runTransaction(db, async (tx) => {
+                await runTransaction(db, async (tx: any) => {
                     const snap = await tx.get(logDocRef);
                     if (!snap.exists()) {
                         throw new Error('This scheduled log no longer exists. Reload and try again.');
@@ -1340,8 +1445,8 @@ export default function App() {
                 const batch = writeBatch(db);
 
                 // Return currently used items for this log (that still exist) back to On Hand
-                const originalItemIds = (latestLog.details || []).map(d => d.id).filter(Boolean);
-                const returnRefs = originalItemIds.map((id) => doc(inventoryCollectionRef, id));
+                const originalItemIds = (latestLog.details || []).map((d: any) => d.id).filter(Boolean);
+                const returnRefs = originalItemIds.map((id: any) => doc(inventoryCollectionRef, id));
 
                 // WRITES: make them On Hand
                 for (const r of returnRefs) {
@@ -1356,8 +1461,8 @@ export default function App() {
                 }
 
                 // For any items that no longer exist or are not revertable, recreate a matching sheet back to On Hand
-                const validReturnIds = new Set(returnRefs.map(ref => ref.id));
-                const missingDetails = (latestLog.details || []).filter(d => d.id && !validReturnIds.has(d.id));
+                const validReturnIds = new Set(returnRefs.map((ref: any) => ref.id));
+                const missingDetails = (latestLog.details || []).filter((d: any) => d.id && !validReturnIds.has(d.id));
                 const nowIso = new Date().toISOString();
                 for (const d of missingDetails) {
                     const recreated = {
@@ -1384,7 +1489,7 @@ export default function App() {
                 let totalItems = 0;
                 for (const item of newLogData.items) {
                     for (const len of STANDARD_LENGTHS) {
-                        const qty = parseInt(item[`qty${len}`] || 0);
+                        const qty = parseInt(item[`qty${len}`] || 0, 10);
                         if (qty > 0) {
                             totalItems += qty;
                             const materialInfo = materials[item.materialType];
@@ -1422,14 +1527,14 @@ export default function App() {
 
             const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
-                const netChange = {};
-                (latestLog.details || []).forEach(item => {
+                const netChange: Record<string, number> = {};
+                (latestLog.details || []).forEach((item: any) => {
                     const key = `${item.materialType}|${item.length}`;
                     netChange[key] = (netChange[key] || 0) + 1;
                 });
-                newLogData.items.forEach(item => {
+                newLogData.items.forEach((item: any) => {
                     STANDARD_LENGTHS.forEach(len => {
-                        const qty = parseInt(item[`qty${len}`] || 0);
+                        const qty = parseInt(item[`qty${len}`] || 0, 10);
                         if (qty > 0) {
                             const key = `${item.materialType}|${len}`;
                             netChange[key] = (netChange[key] || 0) - qty;
@@ -1455,18 +1560,18 @@ export default function App() {
                     }
                 }
 
-                const originalDetails = (latestLog.details || []).filter(d => d.id);
-                const originalItemIds = originalDetails.map(d => d.id);
-                const originalItemsByKey = {};
-                const desiredCounts = {};
+                const originalDetails = (latestLog.details || []).filter((d: any) => d.id);
+                const originalItemIds = originalDetails.map((d: any) => d.id);
+                const originalItemsByKey: Record<string, any[]> = {};
+                const desiredCounts: Record<string, number> = {};
 
-                originalDetails.forEach(detail => {
+                originalDetails.forEach((detail: any) => {
                     const key = `${detail.materialType}|${detail.length}`;
                     if (!originalItemsByKey[key]) originalItemsByKey[key] = [];
                     originalItemsByKey[key].push(detail);
                 });
 
-                newLogData.items.forEach(item => {
+                newLogData.items.forEach((item: any) => {
                     STANDARD_LENGTHS.forEach(len => {
                         const qty = parseInt(item[`qty${len}`] || 0, 10);
                         if (qty > 0) {
@@ -1476,7 +1581,7 @@ export default function App() {
                     });
                 });
 
-                const keptOriginalDetails = [];
+                const keptOriginalDetails: any[] = [];
                 const returnDetailIds = new Set<any>();
 
                 Object.entries<any>(originalItemsByKey).forEach(([key, details]) => {
@@ -1490,14 +1595,14 @@ export default function App() {
                     const desiredQty = desiredCounts[key] || 0;
                     const keepCount = Math.min(details.length, desiredQty);
                     keptOriginalDetails.push(...details.slice(0, keepCount));
-                    details.slice(keepCount).forEach(detail => returnDetailIds.add(detail.id));
+                    details.slice(keepCount).forEach((detail: any) => returnDetailIds.add(detail.id));
                 });
 
                 const keptOriginalRefs = keptOriginalDetails.map(detail => doc(inventoryCollectionRef, detail.id));
                 const returnRefs = Array.from(returnDetailIds).map(id => doc(inventoryCollectionRef, id));
 
                 // Only allocate additional stock for the deficit after reusing matching sheets already on this log.
-                const plannedNewRefs = [];
+                const plannedNewRefs: any[] = [];
                 Object.entries<any>(desiredCounts).forEach(([key, desiredQty]) => {
                     const keptCount = keptOriginalDetails.filter(detail => `${detail.materialType}|${detail.length}` === key).length;
                     const neededQty = desiredQty - keptCount;
@@ -1525,7 +1630,7 @@ export default function App() {
                 for (const r of plannedNewRefs) {
                     const sheet = inventory.find(i => i.id === r.id);
                     if (sheet) {
-                        updatedUsedItemsForLog.push({ id: r.id, ...sheet });
+                        updatedUsedItemsForLog.push({ ...sheet, id: r.id });
                     }
                 }
 
@@ -1577,7 +1682,7 @@ export default function App() {
         }
     };
 
-    const openModalForEdit = (transaction) => {
+    const openModalForEdit = (transaction: any) => {
         const modalType = transaction.isAddition ? 'edit-order' : 'edit-log';
         setModal({ type: modalType, data: transaction });
     };
@@ -1615,7 +1720,7 @@ export default function App() {
                                     materials={materials}
                                     categories={categories}
                                     onSave={handleStockEdit}
-                                    onMaterialClick={(materialType) => {
+                                    onMaterialClick={(materialType: any) => {
                                         const category = materials[materialType]?.category;
                                         if (category) {
                                             setActiveView(category);
@@ -1666,7 +1771,7 @@ export default function App() {
                     onFulfillLog={handleFulfillScheduledLog}
                     onReceiveOrder={handleReceiveOrder}
                     searchQuery={searchQuery}
-                    onRepairCountIssues={(issues) => repairCountIssues(db, appId, issues, usageLog, `Count Repair (${auditActor()})`)}
+                    onRepairCountIssues={(issues: any) => repairCountIssues(db, appId, issues, usageLog, `Count Repair (${auditActor()})`)}
                 />;
             case 'price-history':
                 return <PriceHistoryView inventory={inventory} materials={materials} searchQuery={searchQuery} />;
@@ -1824,8 +1929,8 @@ export default function App() {
                             materials={materials}
                             suppliers={suppliers}
                             usageLog={usageLog}
-                            onExecuteOrder={(jobs) => handleAddOrEditOrder(jobs)}
-                            onOpenModal={(type) => setModal({ type })}
+                            onExecuteOrder={(jobs: any) => handleAddOrEditOrder(jobs)}
+                            onOpenModal={(type: any) => setModal({ type })}
                         />
                     </Suspense>
                 </>
@@ -1834,7 +1939,7 @@ export default function App() {
 
 
 
-            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, null, { linkedBuyOrderId: modal.data?.linkedBuyOrderId })} materialTypes={materialTypes} materials={materials} suppliers={suppliers} prefill={modal.data?.prefill} />}
+            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={(jobs: any) => handleAddOrEditOrder(jobs, null, { linkedBuyOrderId: modal.data?.linkedBuyOrderId })} materialTypes={materialTypes} materials={materials} suppliers={suppliers} prefill={modal.data?.prefill} />}
             {modal.type === 'buy' && !buyPanelInDashboard && (
                 <AddOrderModal
                     onClose={closeModal}
@@ -1847,7 +1952,7 @@ export default function App() {
                     mode="buy"
                 />
             )}
-            {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} materials={materials} suppliers={suppliers} />}
+            {modal.type === 'edit-order' && <AddOrderModal onClose={closeModal} onSave={(jobs: any) => handleAddOrEditOrder(jobs, modal.data)} initialData={modal.data} title="Edit Stock Order" materialTypes={materialTypes} materials={materials} suppliers={suppliers} />}
             {modal.type === 'use' && <UseStockModal onClose={closeModal} onSave={handleUseStock} inventory={inventory} materialTypes={materialTypes} materials={materials} inventorySummary={inventorySummary} incomingSummary={incomingSummary} suppliers={suppliers} />}
             {modal.type === 'edit-log' && <EditOutgoingLogModal isOpen={true} onClose={closeModal} logEntry={modal.data} onSave={handleEditOutgoingLog} inventory={inventory} materialTypes={materialTypes} />}
             {modal.type === 'manage-categories' && (

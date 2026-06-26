@@ -21,7 +21,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
         const lowercasedQuery = (searchQuery || '').toLowerCase();
 
         // First, filter the raw inventory data
-        const filteredInventory = inventory.filter(item => {
+        const filteredInventory = inventory.filter((item: any) => {
             const materialInfo = materials[item.materialType];
             // Ensure the item has the necessary data to be included
             if (!materialInfo || !item.costPerPound || item.costPerPound <= 0) return false;
@@ -42,7 +42,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
 
         // Now, create a de-duplicated list of unique price points (ignore dimensions)
         const uniquePricePoints = new Map();
-        filteredInventory.forEach(item => {
+        filteredInventory.forEach((item: any) => {
             const dateKey = (item.dateReceived || item.createdAt).split('T')[0];
             const key = `${item.materialType}-${item.supplier}-${dateKey}-${item.costPerPound}`;
 
@@ -95,7 +95,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
         const containerRef = useRef<any>(null);
 
         useEffect(() => {
-            const handleClickOutside = (event) => {
+            const handleClickOutside = (event: any) => {
                 if (containerRef.current && !containerRef.current.contains(event.target)) {
                     setIsOpen(false);
                 }
@@ -108,9 +108,9 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
             setHighlightIndex(Math.max(0, options.indexOf(value)));
         }, [value, options]);
 
-        const getLabel = (opt) => (opt === 'All' ? 'All Materials' : opt);
+        const getLabel = (opt: any) => (opt === 'All' ? 'All Materials' : opt);
 
-        const handleKeyDown = (e) => {
+        const handleKeyDown = (e: any) => {
             if (!isOpen && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
                 e.preventDefault();
                 setIsOpen(true);
@@ -151,7 +151,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
                         role="listbox"
                         className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-zinc-700 bg-zinc-800 shadow-lg text-sm custom-scrollbar"
                     >
-                        {options.map((opt, idx) => {
+                        {options.map((opt: any, idx: any) => {
                             const selected = opt === value;
                             const highlighted = idx === highlightIndex;
                             return (

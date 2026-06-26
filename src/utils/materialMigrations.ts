@@ -11,8 +11,8 @@ export async function replaceSlashWithDashInMaterialNames(db: any, appId: string
 
   const matsSnap = await getDocs(materialsRef);
 
-  const idRenames = []; // { oldId, newId, data }
-  const nameOnlyUpdates = []; // { id, newName }
+  const idRenames: Array<{ oldId: string; newId: string; data: any }> = []; // { oldId, newId, data }
+  const nameOnlyUpdates: Array<{ id: string; newName: string }> = []; // { id, newName }
 
   matsSnap.forEach((docSnap) => {
     const id = docSnap.id;
@@ -112,7 +112,7 @@ export async function replaceSlashWithDashInMaterialNames(db: any, appId: string
     } catch (e) {
       // If deletion fails due to permissions, leave both docs; references already updated
       // eslint-disable-next-line no-console
-      console.warn('Could not delete old material doc', oldId, e?.message);
+      console.warn('Could not delete old material doc', oldId, (e as any)?.message);
     }
   }
 

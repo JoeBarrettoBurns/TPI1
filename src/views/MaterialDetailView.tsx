@@ -12,7 +12,7 @@ export const MaterialDetailView = ({
 }: any) => {
     const stableMaterialsInCategory = useMemo(() => {
         return materialTypes
-            .filter(m => materials[m] && materials[m].category === category);
+            .filter((m: any) => materials[m] && materials[m].category === category);
     }, [category, materials, materialTypes]);
 
     const {

@@ -52,7 +52,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
         try {
             await onSave(jobs, currentOptions);
             onClose();
-        } catch (err) {
+        } catch (err: any) {
             console.error('Transaction failed:', err);
             setError(err.message || 'Failed to update stock.');
 
@@ -94,13 +94,13 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2 border-t border-b border-slate-700 py-4">
                     <div className="p-4 border border-slate-700 rounded-lg bg-slate-900/50 relative">
-                        <FormInput label="Customer" name="customer" value={job.customer} onChange={(e) => { const v = e.target.value.toUpperCase(); setJobField(jobIndex, 'customer', v); clearError(); }} required style={{ textTransform: 'uppercase' }} />
+                        <FormInput label="Customer" name="customer" value={job.customer} onChange={(e: any) => { const v = e.target.value.toUpperCase(); setJobField(jobIndex, 'customer', v); clearError(); }} required style={{ textTransform: 'uppercase' }} />
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormInput label="Job #" name="jobNumber" value={job.jobNumber} onChange={(e) => { const v = e.target.value.toUpperCase(); setJobField(jobIndex, 'jobNumber', v); clearError(); }} required style={{ textTransform: 'uppercase' }} placeholder="e.g. J5851 or 5851" />
-                            <FormInput label="Section" name="jobSection" value={job.jobSection} onChange={(e) => { const v = e.target.value.toUpperCase(); setJobField(jobIndex, 'jobSection', v); clearError(); }} style={{ textTransform: 'uppercase' }} placeholder="Optional (e.g. EXT, PART-A)" />
+                            <FormInput label="Job #" name="jobNumber" value={job.jobNumber} onChange={(e: any) => { const v = e.target.value.toUpperCase(); setJobField(jobIndex, 'jobNumber', v); clearError(); }} required style={{ textTransform: 'uppercase' }} placeholder="e.g. J5851 or 5851" />
+                            <FormInput label="Section" name="jobSection" value={job.jobSection} onChange={(e: any) => { const v = e.target.value.toUpperCase(); setJobField(jobIndex, 'jobSection', v); clearError(); }} style={{ textTransform: 'uppercase' }} placeholder="Optional (e.g. EXT, PART-A)" />
                         </div>
                         <div className="mt-4 space-y-2">
-                            {job.items.map((item, itemIndex) => {
+                            {job.items.map((item: any, itemIndex: any) => {
                                 const stock96 = inventorySummary[item.materialType]?.[96] || 0;
                                 const stock120 = inventorySummary[item.materialType]?.[120] || 0;
                                 const stock144 = inventorySummary[item.materialType]?.[144] || 0;
@@ -113,9 +113,9 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
                                                 label={`Category #${itemIndex + 1}`}
                                                 name={`category-${itemIndex}`}
                                                 value={materials[item.materialType]?.category || categories[0] || ''}
-                                                onChange={(e) => {
+                                                onChange={(e: any) => {
                                                     const newCategory = e.target.value;
-                                                    const firstInCat = materialTypes.find(t => (materials[t]?.category) === newCategory) || '';
+                                                    const firstInCat = materialTypes.find((t: any) => (materials[t]?.category) === newCategory) || '';
                                                     setItemField(jobIndex, itemIndex, 'materialType', firstInCat);
                                                     clearError();
                                                 }}
@@ -127,19 +127,19 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
                                                 label={`Material Type`}
                                                 name={`materialType-${itemIndex}`}
                                                 value={item.materialType}
-                                                onChange={(e) => { setItemField(jobIndex, itemIndex, 'materialType', e.target.value); clearError(); }}
+                                                onChange={(e: any) => { setItemField(jobIndex, itemIndex, 'materialType', e.target.value); clearError(); }}
                                                 as="select"
                                             >
                                                 {materialTypes
-                                                    .filter(t => (materials[t]?.category) === (materials[item.materialType]?.category || categories[0]))
-                                                    .map(type => <option key={type} value={type}>{type}</option>)}
+                                                    .filter((t: any) => (materials[t]?.category) === (materials[item.materialType]?.category || categories[0]))
+                                                    .map((type: any) => <option key={type} value={type}>{type}</option>)}
                                             </FormInput>
                                         </div>
                                         <p className="text-sm font-medium text-slate-300 mt-2">Quantities to Use (On Hand):</p>
                                         <div className="grid grid-cols-3 gap-2">
-                                            <FormInput label={`96"x48" (${stock96})`} name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e) => { setItemField(jobIndex, itemIndex, 'qty96', e.target.value); clearError(); }} />
-                                            <FormInput label={`120"x48" (${stock120})`} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e) => { setItemField(jobIndex, itemIndex, 'qty120', e.target.value); clearError(); }} />
-                                            <FormInput label={`144"x48" (${stock144})`} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e) => { setItemField(jobIndex, itemIndex, 'qty144', e.target.value); clearError(); }} />
+                                            <FormInput label={`96"x48" (${stock96})`} name="qty96" type="number" placeholder="0" value={item.qty96} onChange={(e: any) => { setItemField(jobIndex, itemIndex, 'qty96', e.target.value); clearError(); }} />
+                                            <FormInput label={`120"x48" (${stock120})`} name="qty120" type="number" placeholder="0" value={item.qty120} onChange={(e: any) => { setItemField(jobIndex, itemIndex, 'qty120', e.target.value); clearError(); }} />
+                                            <FormInput label={`144"x48" (${stock144})`} name="qty144" type="number" placeholder="0" value={item.qty144} onChange={(e: any) => { setItemField(jobIndex, itemIndex, 'qty144', e.target.value); clearError(); }} />
                                         </div>
                                     </div>
                                 )
@@ -157,7 +157,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
                         </button>
                     </div>
 
-                    {options.isScheduled && (<FormInput label="Expected Use Date" name="scheduledDate" type="date" value={options.scheduledDate} onChange={(e) => setOptions({ ...options, scheduledDate: e.target.value })} required />)}
+                    {options.isScheduled && (<FormInput label="Expected Use Date" name="scheduledDate" type="date" value={options.scheduledDate} onChange={(e: any) => setOptions({ ...options, scheduledDate: e.target.value })} required />)}
                 </div>
 
                 {error && <ErrorMessage message={error} />}
@@ -165,7 +165,7 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
                 {scheduleSuggestion && (
                     <div className="text-center mt-2 p-4 bg-yellow-900/30 border border-yellow-700 rounded-lg">
                         <p className="text-yellow-200 mb-3">
-                            However, an order of {scheduleSuggestion.materialType} is scheduled to arrive on {parseLocalDate(scheduleSuggestion.date).toLocaleDateString()}.
+                            However, an order of {scheduleSuggestion.materialType} is scheduled to arrive on {parseLocalDate(scheduleSuggestion.date)?.toLocaleDateString()}.
                         </p>
                         <Button variant="warning" onClick={handleScheduleInstead} type="button">
                             Schedule Usage for Arrival Date

@@ -17,7 +17,7 @@ export const getGaugeFromMaterial = (materialType: string | null | undefined): n
 };
 
 export const calculateInventorySummary = (inventory: Sheet[], materialTypes: string[]) => {
-    const summary = {};
+    const summary: Record<string, Record<string, number>> = {};
     materialTypes.forEach(type => {
         summary[type] = {
             ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {}),
@@ -40,7 +40,7 @@ export const calculateInventorySummary = (inventory: Sheet[], materialTypes: str
 };
 
 export const calculateIncomingSummary = (inventory: Sheet[], materialTypes: string[]) => {
-    const summary = {};
+    const summary: Record<string, { lengths: Record<string, number>; totalCount: number; latestArrivalDate: string | null }> = {};
     materialTypes.forEach(type => {
         summary[type] = {
             lengths: { ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {}), custom: 0 },
@@ -57,7 +57,8 @@ export const calculateIncomingSummary = (inventory: Sheet[], materialTypes: stri
             }
             summary[item.materialType].totalCount++;
             if (item.arrivalDate) {
-                if (!summary[item.materialType].latestArrivalDate || new Date(item.arrivalDate) > new Date(summary[item.materialType].latestArrivalDate)) {
+                const latest = summary[item.materialType].latestArrivalDate;
+                if (!latest || new Date(item.arrivalDate) > new Date(latest)) {
                     summary[item.materialType].latestArrivalDate = item.arrivalDate;
                 }
             }
@@ -68,7 +69,7 @@ export const calculateIncomingSummary = (inventory: Sheet[], materialTypes: stri
 
 // Summarize scheduled outgoing usage by material and length
 export const calculateScheduledOutgoingSummary = (usageLog: UsageLog[], materialTypes: string[]) => {
-    const summary = {};
+    const summary: Record<string, { lengths: Record<string, number>; totalCount: number; earliestUseDate: string | null }> = {};
     materialTypes.forEach(type => {
         summary[type] = {
             lengths: { ...STANDARD_LENGTHS.reduce((acc, len) => ({ ...acc, [len]: 0 }), {}), custom: 0 },
@@ -106,6 +107,7 @@ export const calculateScheduledOutgoingSummary = (usageLog: UsageLog[], material
 };
 
 export const calculateSheetCost = (sheet: Partial<Sheet>, materials: MaterialsMap): number => {
+    if (!sheet.materialType || sheet.length == null) return 0;
     const materialInfo = materials[sheet.materialType];
     if (!materialInfo || !materialInfo.density || !materialInfo.thickness || !sheet.costPerPound) return 0;
     const volume = (sheet.length * (sheet.width || 48) * materialInfo.thickness);
@@ -114,12 +116,12 @@ export const calculateSheetCost = (sheet: Partial<Sheet>, materials: MaterialsMa
 };
 
 export const calculateMaterialTransactions = (materialTypes: string[], inventory: Sheet[], usageLog: UsageLog[]) => {
-    const allTransactions = {};
+    const allTransactions: Record<string, any[]> = {};
     materialTypes.forEach(matType => {
         const groupedInventory: Record<string, any> = {};
 
         /** Hide internal/rescheduled rows from per-material timeline; keep manual stock edits visible. */
-        const skipInventoryItemInMaterialTimeline = (item) => {
+        const skipInventoryItemInMaterialTimeline = (item: SheetLike) => {
             if (item.supplier === 'Rescheduled Return') return true;
             const job = item.job || '';
             if (job.startsWith('MODIFICATION')) {
@@ -128,7 +130,7 @@ export const calculateMaterialTransactions = (materialTypes: string[], inventory
             return false;
         };
 
-        const getInventoryGroup = (item) => {
+        const getInventoryGroup = (item: SheetLike) => {
             if (item.materialType !== matType) return;
             if (skipInventoryItemInMaterialTimeline(item)) return;
 
@@ -153,7 +155,7 @@ export const calculateMaterialTransactions = (materialTypes: string[], inventory
             return groupedInventory[key];
         };
 
-        const addInventoryItemToTimeline = (item, { includeActionDetail = true } = {}) => {
+        const addInventoryItemToTimeline = (item: SheetLike, { includeActionDetail = true }: { includeActionDetail?: boolean } = {}) => {
             const group = getInventoryGroup(item);
             if (!group) return;
 
@@ -242,7 +244,7 @@ export const calculateMaterialTransactions = (materialTypes: string[], inventory
 export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] = []) => {
     const grouped: Record<string, any> = {};
 
-    const getGroupKey = (item) => {
+    const getGroupKey = (item: SheetLike) => {
         const createdDate = item.createdAt ? item.createdAt.split('T')[0] : 'unknown-date';
         if ((item.job || '').startsWith('MODIFICATION')) {
             const editSessionKey = item.manualEditSessionId || createdDate;
@@ -251,7 +253,7 @@ export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] 
         return `${item.job || 'N/A'}|${createdDate}`;
     };
 
-    const ensureGroup = (item) => {
+    const ensureGroup = (item: SheetLike) => {
         const key = getGroupKey(item);
         if (!grouped[key]) {
             grouped[key] = {
@@ -300,7 +302,7 @@ export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] 
         return group;
     };
 
-    const addMaterialCount = (group, item) => {
+    const addMaterialCount = (group: any, item: SheetLike) => {
         if (!group.materials[item.materialType]) {
             group.materials[item.materialType] = {};
         }
@@ -310,7 +312,7 @@ export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] 
         group.materials[item.materialType][item.length]++;
     };
 
-    const pushUniqueDetail = (target, ids, item) => {
+    const pushUniqueDetail = (target: any[], ids: Set<string>, item: SheetLike) => {
         const dedupeKey = item.id || `${item.materialType}|${item.length}|${item.createdAt}|${item.supplier}|${item.job}`;
         if (ids.has(dedupeKey)) return false;
         ids.add(dedupeKey);
@@ -318,7 +320,7 @@ export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] 
         return true;
     };
 
-    const addInventoryItemToGroup = (item, { includeDeletableDetail = true } = {}) => {
+    const addInventoryItemToGroup = (item: SheetLike, { includeDeletableDetail = true }: { includeDeletableDetail?: boolean } = {}) => {
         const group = ensureGroup(item);
         if (includeDeletableDetail && pushUniqueDetail(group.details, group._detailIds, item)) {
             addMaterialCount(group, item);
@@ -338,7 +340,7 @@ export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] 
             log.customer === 'Manual Edit'
         )
         .forEach(log => {
-            (log.details || []).forEach((detail, index) => {
+            (log.details || []).forEach((detail: SheetLike, index: number) => {
                 if (!detail.materialType) return;
                 const item = {
                     ...detail,
@@ -364,7 +366,7 @@ export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] 
             !(log.job === 'MODIFICATION: REMOVE' && log.customer === 'Manual Edit')
         )
         .forEach(log => {
-            (log.details || []).forEach(detail => {
+            (log.details || []).forEach((detail: SheetLike) => {
                 if (!detail?.id || !detail.materialType) return;
                 if ((detail.job || '').startsWith('MODIFICATION') && detail.returnedByLogEdit) return;
                 addInventoryItemToGroup(
@@ -413,13 +415,14 @@ export const calculateCostBySupplier = (inventory: Sheet[], materials: Materials
 };
 
 export const calculateAnalyticsByCategory = (inventory: Sheet[], materials: MaterialsMap) => {
-    const categoryData = {};
+    const categoryData: Record<string, Record<string, { name: string; quantity: number; cost: number }>> = {};
 
     inventory.forEach(sheet => {
         const materialInfo = materials[sheet.materialType];
         if (!materialInfo) return;
 
         const category = materialInfo.category;
+        if (!category) return;
         const cost = calculateSheetCost(sheet, materials);
 
         if (!categoryData[category]) {
@@ -436,7 +439,7 @@ export const calculateAnalyticsByCategory = (inventory: Sheet[], materials: Mate
         }
     });
 
-    const result = {};
+    const result: Record<string, any[]> = {};
     for (const category in categoryData) {
         result[category] = Object.values(categoryData[category]);
     }
@@ -446,12 +449,12 @@ export const calculateAnalyticsByCategory = (inventory: Sheet[], materials: Mate
 export const groupLogsByJob = (inventory: SheetLike[], usageLog: LogLike[]) => {
     const jobs: Record<string, any> = {};
 
-    const isTrackableJobName = (jobName) => {
-        const name = (jobName || '').trim();
+    const isTrackableJobName = (jobName: unknown): jobName is string => {
+        const name = (typeof jobName === 'string' ? jobName : '').trim();
         return Boolean(name && name !== 'N/A' && !name.startsWith('MODIFICATION'));
     };
 
-    const ensureJob = (jobName, source: any = {}) => {
+    const ensureJob = (jobName: unknown, source: any = {}) => {
         if (!isTrackableJobName(jobName)) return null;
         const key = jobName;
         if (!jobs[key]) {
@@ -498,9 +501,9 @@ export const groupLogsByJob = (inventory: SheetLike[], usageLog: LogLike[]) => {
         // Used sheet snapshots still carry their original inventory PO. Preserve those
         // jobs after the live inventory document moves out of On Hand/Ordered queries.
         if ((log.status || 'Completed') === 'Completed') {
-            (log.details || []).forEach((detail) => {
+            (log.details || []).forEach((detail: SheetLike) => {
                 if (!detail?.job || detail.job === log.job) return;
-                ensureJob(detail.job, {
+                ensureJob(detail.job as string, {
                     supplier: detail.supplier,
                     customer: detail.customer || detail.supplier,
                     date: detail.createdAt || log.usedAt || log.createdAt,
@@ -515,7 +518,7 @@ export const groupLogsByJob = (inventory: SheetLike[], usageLog: LogLike[]) => {
         ...inventory,
         ...usageLog
             .filter(log => (log.status || 'Completed') === 'Completed')
-            .flatMap(log => (log.details || []).flatMap((d, index) => {
+            .flatMap(log => (log.details || []).flatMap((d: SheetLike, index: number) => {
                 const baseId = d.id || `${log.id}-${index}-${d.materialType}-${d.length}`;
                 const outgoingSheet = {
                     ...d,
@@ -555,7 +558,7 @@ export const groupLogsByJob = (inventory: SheetLike[], usageLog: LogLike[]) => {
     // Clean up materials to remove duplicates
     Object.values(jobs).forEach(job => {
         for (const mat in job.materials) {
-            job.materials[mat] = Array.from(new Map(job.materials[mat].map(item => [item.id, item])).values());
+            job.materials[mat] = Array.from(new Map(job.materials[mat].map((item: SheetLike) => [item.id, item])).values());
         }
     });
 
@@ -564,7 +567,7 @@ export const groupLogsByJob = (inventory: SheetLike[], usageLog: LogLike[]) => {
 
 function shallowCopyJobMaterials(materials: any) {
     if (!materials || typeof materials !== 'object') return {};
-    const out = {};
+    const out: Record<string, any> = {};
     for (const [type, sheets] of Object.entries(materials)) {
         out[type] = Array.isArray(sheets) ? [...sheets] : sheets;
     }
@@ -572,7 +575,7 @@ function shallowCopyJobMaterials(materials: any) {
 }
 
 /** Common plural legal-name tokens → canonical form (pairs with hyphen/space normalize). */
-const CUSTOMER_NAME_TOKEN_CANON = {
+const CUSTOMER_NAME_TOKEN_CANON: Record<string, string> = {
     SOLUTIONS: 'SOLUTION',
     SYSTEMS: 'SYSTEM',
     SERVICES: 'SERVICE',
@@ -727,7 +730,7 @@ export const buildCustomerJobGroups = (usageLog: LogLike[], allJobs: any[] = [])
 
     const jobByName = new Map((allJobs || []).map(j => [j.job, j]));
 
-    const parseMs = (iso) => {
+    const parseMs = (iso: string | null | undefined) => {
         if (!iso) return 0;
         const n = new Date(iso).getTime();
         return Number.isFinite(n) ? n : 0;
@@ -792,12 +795,12 @@ export const buildCustomerJobGroups = (usageLog: LogLike[], allJobs: any[] = [])
             return {
                 customerKey,
                 customer: bestLabel,
-                jobs: g.jobs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+                jobs: g.jobs.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
             };
         })
         .sort((a, b) => {
-            const latestA = Math.max(...a.jobs.map(j => parseMs(j.date)));
-            const latestB = Math.max(...b.jobs.map(j => parseMs(j.date)));
+            const latestA = Math.max(...a.jobs.map((j: any) => parseMs(j.date)));
+            const latestB = Math.max(...b.jobs.map((j: any) => parseMs(j.date)));
             return latestB - latestA;
         });
 

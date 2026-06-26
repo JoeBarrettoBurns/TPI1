@@ -18,7 +18,7 @@ export function useJobOverviewArchive(userId: string | null | undefined) {
         const ref = archiveDocRef();
         const unsub = onSnapshot(
             ref,
-            (snap) => {
+            (snap: any) => {
                 const bases = snap.exists() ? snap.data()?.bases : null;
                 const keys =
                     bases && typeof bases === 'object'
@@ -27,7 +27,7 @@ export function useJobOverviewArchive(userId: string | null | undefined) {
                 setArchivedBaseKeys(new Set(keys));
                 setReady(true);
             },
-            (err) => {
+            (err: any) => {
                 console.error('job_overview_archive listener:', err);
                 setReady(true);
             }
@@ -55,7 +55,7 @@ export function useJobOverviewArchive(userId: string | null | undefined) {
         const ref = archiveDocRef();
         try {
             await updateDoc(ref, { [`bases.${k}`]: deleteField() });
-        } catch (e) {
+        } catch (e: any) {
             if (e?.code !== 'not-found') console.warn('restorePoBase:', e);
         }
     }, []);

@@ -7,21 +7,21 @@ import { useJobOverviewArchive } from '../hooks/useJobOverviewArchive';
 
 // ─── utilities ───────────────────────────────────────────────────────────────
 
-function jobNameKey(jobLike) {
+function jobNameKey(jobLike: any) {
     return (jobLike?.job || '').trim().toUpperCase();
 }
 
-function jobPoArchiveKey(jobLike) {
+function jobPoArchiveKey(jobLike: any) {
     const { baseKey } = parseJobPoParts(jobLike?.job);
     return (baseKey || (jobLike?.job || '').trim()).toUpperCase();
 }
 
-function shortMat(type) {
+function shortMat(type: any) {
     if (!type) return '?';
     return String(type).replace(/\bGALV\b/gi, 'Galv').replace(/\bALUM\b/gi, 'Al');
 }
 
-function uniqueSectionSuffixes(parts) {
+function uniqueSectionSuffixes(parts: any) {
     const seen = new Set();
     const out = [];
     for (const p of parts || []) {
@@ -35,7 +35,7 @@ function uniqueSectionSuffixes(parts) {
     return out;
 }
 
-function formatMoneyUSD(n) {
+function formatMoneyUSD(n: any) {
     if (!Number.isFinite(n)) return '—';
     return new Intl.NumberFormat('en-US', {
         style: 'currency', currency: 'USD',
@@ -45,38 +45,38 @@ function formatMoneyUSD(n) {
 
 const COST_EPS = 0.005;
 
-function sortKeyFromPoGroup(group) {
+function sortKeyFromPoGroup(group: any) {
     const base = (group.displayBase || group.baseKey || '').trim();
     const m = /^J(\d+)$/i.exec(base);
     if (m) return parseInt(m[1], 10);
     return null;
 }
 
-function formatJobTotalCost(totalCost, totalSheets) {
+function formatJobTotalCost(totalCost: any, totalSheets: any) {
     if (!totalSheets) return null;
     if (!Number.isFinite(totalCost) || totalCost <= COST_EPS) return null;
     return formatMoneyUSD(totalCost);
 }
 
-function formatLineCost(sum) {
+function formatLineCost(sum: any) {
     if (!Number.isFinite(sum) || sum <= COST_EPS) return null;
     return formatMoneyUSD(sum);
 }
 
 /** Title-case ALL-CAPS strings coming from usage logs. */
-function prettify(raw) {
+function prettify(raw: any) {
     const t = (raw || '').trim();
     if (!t) return t;
     const shouting = t === t.toUpperCase() && /[A-Z]/.test(t) && t.length > 2;
     if (!shouting) return t;
-    return t.toLowerCase().split(/\s+/).map((w) =>
+    return t.toLowerCase().split(/\s+/).map((w: any) =>
         /^\d+$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)
     ).join(' ');
 }
 
 // ─── data helpers ─────────────────────────────────────────────────────────────
 
-function groupJobsByPoNumber(jobs) {
+function groupJobsByPoNumber(jobs: any) {
     const map = new Map();
     for (const job of jobs) {
         const { baseKey, displayBase } = parseJobPoParts(job.job);
@@ -94,18 +94,18 @@ function groupJobsByPoNumber(jobs) {
         if (na != null && nb != null) return nb - na;
         if (na != null) return -1;
         if (nb != null) return 1;
-        const maxB = Math.max(...b.parts.map((p) => new Date(p.date).getTime() || 0), 0);
-        const maxA = Math.max(...a.parts.map((p) => new Date(p.date).getTime() || 0), 0);
+        const maxB = Math.max(...b.parts.map((p: any) => new Date(p.date).getTime() || 0), 0);
+        const maxA = Math.max(...a.parts.map((p: any) => new Date(p.date).getTime() || 0), 0);
         return maxB - maxA;
     });
     return groups;
 }
 
-const BUCKET_ORDER = { used: 0, scheduled_use: 1, ordered: 2, on_hand: 3 };
-const BUCKET_LABEL = { used: 'Used', scheduled_use: 'Sched', ordered: 'Due', on_hand: 'Stock' };
+const BUCKET_ORDER: Record<string, number> = { used: 0, scheduled_use: 1, ordered: 2, on_hand: 3 };
+const BUCKET_LABEL: Record<string, string> = { used: 'Used', scheduled_use: 'Sched', ordered: 'Due', on_hand: 'Stock' };
 
 /** One-time index so job economics does not scan full inventory / usageLog per job. */
-function buildInventoryByJobKey(inventory) {
+function buildInventoryByJobKey(inventory: any) {
     const map = new Map();
     for (const i of inventory || []) {
         const jk = (i.job || '').trim().toUpperCase();
@@ -121,9 +121,9 @@ function buildInventoryByJobKey(inventory) {
 }
 
 /** Mirror buildJobEconomics usage-log rules into per–job-key slices (single pass over usageLog). */
-function buildUsageWorkloadByJobKey(usageLog) {
+function buildUsageWorkloadByJobKey(usageLog: any) {
     const map = new Map();
-    const push = (jobKey, item) => {
+    const push = (jobKey: any, item: any) => {
         if (!jobKey) return;
         let arr = map.get(jobKey);
         if (!arr) {
@@ -164,19 +164,19 @@ function buildUsageWorkloadByJobKey(usageLog) {
     return map;
 }
 
-function buildJobEconomicsIndex(inventory, usageLog) {
+function buildJobEconomicsIndex(inventory: any, usageLog: any) {
     return {
         inventoryByJob: buildInventoryByJobKey(inventory),
         usageByJob: buildUsageWorkloadByJobKey(usageLog),
     };
 }
 
-function buildJobEconomics(jobName, index, materials) {
+function buildJobEconomics(jobName: any, index: any, materials: any) {
     const mats = materials || {};
     const jobKey = (jobName || '').trim().toUpperCase();
     const map = new Map();
 
-    const addSheet = (bucket, sheet) => {
+    const addSheet = (bucket: any, sheet: any) => {
         if (!sheet?.materialType) return;
         const k = `${bucket}|${sheet.materialType}|${sheet.length}`;
         const prev = map.get(k) || { bucket, materialType: sheet.materialType, length: sheet.length, qty: 0, costSum: 0 };
@@ -192,9 +192,9 @@ function buildJobEconomics(jobName, index, materials) {
 
     for (const u of index.usageByJob.get(jobKey) || []) {
         if (u.kind === 'scheduled') {
-            (u.log.details || []).forEach((d) => addSheet('scheduled_use', d));
+            (u.log.details || []).forEach((d: any) => addSheet('scheduled_use', d));
         } else if (u.kind === 'used_full_log') {
-            (u.log.details || []).forEach((d) => addSheet('used', d));
+            (u.log.details || []).forEach((d: any) => addSheet('used', d));
         } else if (u.kind === 'used_detail') {
             addSheet('used', u.detail);
         }
@@ -215,7 +215,7 @@ function buildJobEconomics(jobName, index, materials) {
     return { groups, totalSheets, totalCost };
 }
 
-function rollupGroupEconomics(parts, index, materials) {
+function rollupGroupEconomics(parts: any, index: any, materials: any) {
     let totalSheets = 0, totalCost = 0;
     for (const j of parts) {
         const e = buildJobEconomics(j.job, index, materials);
@@ -230,7 +230,7 @@ function rollupGroupEconomics(parts, index, materials) {
  * material+length used across parts (e.g. INT + EXT) is counted up into a single
  * line. Same shape as buildJobEconomics so it renders through EconomicsMatrix.
  */
-function aggregateGroupEconomics(parts, index, materials) {
+function aggregateGroupEconomics(parts: any, index: any, materials: any) {
     const map = new Map();
     for (const j of parts) {
         for (const g of buildJobEconomics(j.job, index, materials).groups) {
@@ -255,7 +255,7 @@ function aggregateGroupEconomics(parts, index, materials) {
     return { groups, totalSheets, totalCost };
 }
 
-function summarizeCustomerJobs(jobs, index, materials) {
+function summarizeCustomerJobs(jobs: any, index: any, materials: any) {
     let totalSheets = 0, totalCost = 0, latestMs = 0, scheduled = 0;
     const masterKeys = new Set();
     for (const job of jobs) {
@@ -273,7 +273,7 @@ function summarizeCustomerJobs(jobs, index, materials) {
 
 // ─── small UI pieces ──────────────────────────────────────────────────────────
 
-function PanelShell({ children, className = '' }) {
+function PanelShell({ children, className = '' }: any) {
     return (
         <div className={`flex flex-col min-h-0 overflow-hidden rounded-xl border border-zinc-700/80 bg-zinc-900 ${className}`}>
             {children}
@@ -281,7 +281,7 @@ function PanelShell({ children, className = '' }) {
     );
 }
 
-function PanelHeader({ children }) {
+function PanelHeader({ children }: any) {
     return (
         <div className="shrink-0 border-b border-zinc-700/80 bg-zinc-900/90 px-3 py-2.5">
             {children}
@@ -289,7 +289,7 @@ function PanelHeader({ children }) {
     );
 }
 
-function EmptyState({ children }) {
+function EmptyState({ children }: any) {
     return (
         <div className="flex flex-1 items-center justify-center px-4 py-10 text-center text-sm text-zinc-500">
             {children}
@@ -299,13 +299,13 @@ function EmptyState({ children }) {
 
 // ─── Column 1: Customer list ──────────────────────────────────────────────────
 
-function CustomerColumn({ options, selectedKey, onSelectKey }) {
+function CustomerColumn({ options, selectedKey, onSelectKey }: any) {
     const [q, setQ] = useState('');
 
     const filtered = useMemo(() => {
         const lq = q.trim().toLowerCase();
         if (!lq) return options;
-        return options.filter((o) => {
+        return options.filter((o: any) => {
             const label = prettify(o.label).toLowerCase();
             return label.includes(lq) || o.label.toLowerCase().includes(lq);
         });
@@ -332,7 +332,7 @@ function CustomerColumn({ options, selectedKey, onSelectKey }) {
                 {filtered.length === 0 && (
                     <li className="py-6 text-center text-xs text-zinc-600">No matches</li>
                 )}
-                {filtered.map((o) => {
+                {filtered.map((o: any) => {
                     const active = o.key === selectedKey;
                     return (
                         <li key={o.key} role="option" aria-selected={active}>
@@ -369,8 +369,8 @@ function PoJobCard({ group, selected, onSelect, jobEconIndex, materials, showArc
     const rollup = multi
         ? rollupGroupEconomics(group.parts, jobEconIndex, materials)
         : buildJobEconomics(group.parts[0].job, jobEconIndex, materials);
-    const hasScheduled = group.parts.some((p) => p.status === 'Scheduled');
-    const latestMs = Math.max(...group.parts.map((p) => new Date(p.date).getTime() || 0), 0);
+    const hasScheduled = group.parts.some((p: any) => p.status === 'Scheduled');
+    const latestMs = Math.max(...group.parts.map((p: any) => new Date(p.date).getTime() || 0), 0);
     const lastLabel = latestMs > 0
         ? new Date(latestMs).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: '2-digit' })
         : null;
@@ -429,7 +429,7 @@ function PoJobCard({ group, selected, onSelect, jobEconIndex, materials, showArc
     );
 }
 
-function JobListColumn({ groups, archivedGroups, selectedBaseKey, onSelectBaseKey, jobEconIndex, materials, onArchive, onRestore, archiveReady, customerLabel, overview }) {
+function JobListColumn({ groups, archivedGroups, selectedBaseKey, onSelectBaseKey, jobEconIndex, materials, onArchive, onRestore, archiveReady, customerLabel, overview }: any) {
     const lastActivity = overview?.lastActivityMs > 0
         ? new Date(overview.lastActivityMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
         : null;
@@ -462,7 +462,7 @@ function JobListColumn({ groups, archivedGroups, selectedBaseKey, onSelectBaseKe
 
                 {groups.length > 0 && (
                     <ul className="p-2 space-y-1">
-                        {groups.map((g) => (
+                        {groups.map((g: any) => (
                             <PoJobCard
                                 key={g.baseKey}
                                 group={g}
@@ -486,7 +486,7 @@ function JobListColumn({ groups, archivedGroups, selectedBaseKey, onSelectBaseKe
                             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">Archived</p>
                         </div>
                         <ul className="p-2 space-y-1">
-                            {archivedGroups.map((g) => (
+                            {archivedGroups.map((g: any) => (
                                 <PoJobCard
                                     key={g.baseKey}
                                     group={g}
@@ -511,12 +511,12 @@ function JobListColumn({ groups, archivedGroups, selectedBaseKey, onSelectBaseKe
 
 // ─── Column 3: PO detail ──────────────────────────────────────────────────────
 
-function lengthColLabel(len) {
+function lengthColLabel(len: any) {
     return Number.isFinite(Number(len)) ? `${len}"` : 'Custom';
 }
 
 /** Pivot flat economics rows into a material(×bucket) × length grid for tabular display. */
-function buildEconomicsMatrix(groups) {
+function buildEconomicsMatrix(groups: any) {
     const lengthSet = new Set<any>();
     const rowMap = new Map();
     for (const g of groups || []) {
@@ -540,8 +540,8 @@ function buildEconomicsMatrix(groups) {
         return String(a).localeCompare(String(b));
     });
     const rows = [...rowMap.values()];
-    const multiBucket = new Set(rows.map((r) => r.bucket)).size > 1;
-    const colTotals = {};
+    const multiBucket = new Set(rows.map((r: any) => r.bucket)).size > 1;
+    const colTotals: Record<string, number> = {};
     let totalCost = 0;
     for (const r of rows) {
         for (const len of lengths) colTotals[len] = (colTotals[len] || 0) + (r.cells[len] || 0);
@@ -551,7 +551,7 @@ function buildEconomicsMatrix(groups) {
 }
 
 /** Material × length sheet grid, styled to match the dashboard category tables. */
-function EconomicsMatrix({ groups }) {
+function EconomicsMatrix({ groups }: any) {
     const { lengths, rows, multiBucket, colTotals, totalCost } = useMemo(() => buildEconomicsMatrix(groups), [groups]);
     if (!rows.length) return <span className="text-zinc-500 text-xs">—</span>;
 
@@ -598,7 +598,7 @@ function EconomicsMatrix({ groups }) {
     );
 }
 
-function JobSectionCard({ job, jobEconIndex, materials }) {
+function JobSectionCard({ job, jobEconIndex, materials }: any) {
     const econ = useMemo(
         () => buildJobEconomics(job.job, jobEconIndex, materials),
         [job.job, jobEconIndex, materials]
@@ -645,7 +645,7 @@ function JobSectionCard({ job, jobEconIndex, materials }) {
 }
 
 /** Combined breakdown across all sections of a multi-section PO. */
-function JobTotalCard({ econ, sectionCount }) {
+function JobTotalCard({ econ, sectionCount }: any) {
     if (!econ.groups.length) return null;
     const cost = formatJobTotalCost(econ.totalCost, econ.totalSheets);
     return (
@@ -669,7 +669,7 @@ function JobTotalCard({ econ, sectionCount }) {
     );
 }
 
-function DetailColumn({ group, jobEconIndex, materials }) {
+function DetailColumn({ group, jobEconIndex, materials }: any) {
     if (!group) {
         return (
             <PanelShell className="flex-1">
@@ -709,7 +709,7 @@ function DetailColumn({ group, jobEconIndex, materials }) {
 
             <div className="overflow-y-auto flex-1 min-h-0 p-3 space-y-3">
                 {multi && rollup && <JobTotalCard econ={rollup} sectionCount={group.parts.length} />}
-                {group.parts.map((job) => (
+                {group.parts.map((job: any) => (
                     <JobSectionCard key={job.id} job={job} jobEconIndex={jobEconIndex} materials={materials} />
                 ))}
             </div>
@@ -733,7 +733,7 @@ export const JobOverviewView = ({
     initialSelectedJob,
     onClearSelectedJob,
     searchQuery,
-}) => {
+}: any) => {
     const [selectedCustomerKey, setSelectedCustomerKey] = useState('');
     const [selectedGroupBaseKey, setSelectedGroupBaseKey] = useState(null);
 
@@ -755,7 +755,7 @@ export const JobOverviewView = ({
         return customerGroups
             .map((s) => {
                 const custMatch = s.customer.toLowerCase().includes(q);
-                const jobs = custMatch ? s.jobs : s.jobs.filter((j) => j.job.toLowerCase().includes(q));
+                const jobs = custMatch ? s.jobs : s.jobs.filter((j: any) => j.job.toLowerCase().includes(q));
                 return { ...s, jobs };
             })
             .filter((s) => s.jobs.length > 0 || s.customer.toLowerCase().includes(q));
@@ -771,7 +771,7 @@ export const JobOverviewView = ({
     const filteredAllJobs = useMemo(() => {
         const q = (searchQuery || '').trim().toLowerCase();
         let jobs = allJobs || [];
-        if (q) jobs = jobs.filter((j) => j.job.toLowerCase().includes(q) || (j.customer || j.supplier || '').toLowerCase().includes(q));
+        if (q) jobs = jobs.filter((j: any) => j.job.toLowerCase().includes(q) || (j.customer || j.supplier || '').toLowerCase().includes(q));
         return jobs;
     }, [allJobs, searchQuery]);
 
@@ -792,7 +792,7 @@ export const JobOverviewView = ({
     }, [selectedCustomerKey, filteredAllJobs, filteredCustomerGroups, filteredOrphanJobs]);
 
     const { activeJobsForCustomer, archivedJobsForCustomer } = useMemo(() => {
-        const active = [], archived = [];
+        const active: any[] = [], archived: any[] = [];
         for (const j of jobsForCustomer) {
             (archivedBaseKeys.has(jobPoArchiveKey(j)) ? archived : active).push(j);
         }
@@ -812,7 +812,7 @@ export const JobOverviewView = ({
     }, [jobGroupsActive, jobGroupsArchived, selectedGroupBaseKey]);
 
     const handleArchivePoBase = useCallback(
-        async (baseKey) => {
+        async (baseKey: any) => {
             await archivePoBase(baseKey);
             setSelectedGroupBaseKey((cur) => (cur === baseKey ? null : cur));
         },
@@ -825,7 +825,7 @@ export const JobOverviewView = ({
         const jk = jobNameKey(initialSelectedJob);
         let ck = null;
         for (const g of customerGroups) {
-            if (g.jobs.some((j) => jobNameKey(j) === jk)) { ck = g.customerKey; break; }
+            if (g.jobs.some((j: any) => jobNameKey(j) === jk)) { ck = g.customerKey; break; }
         }
         if (ck) setSelectedCustomerKey(ck);
         else if (orphanJobs.some((j) => jobNameKey(j) === jk)) setSelectedCustomerKey(OTHER_JOBS_SECTION_KEY);
@@ -871,7 +871,7 @@ export const JobOverviewView = ({
             <CustomerColumn
                 options={customerPickerOptions}
                 selectedKey={selectedCustomerKey}
-                onSelectKey={(key) => { setSelectedCustomerKey(key); setSelectedGroupBaseKey(null); }}
+                onSelectKey={(key: any) => { setSelectedCustomerKey(key); setSelectedGroupBaseKey(null); }}
             />
 
             {selectedCustomerKey ? (
