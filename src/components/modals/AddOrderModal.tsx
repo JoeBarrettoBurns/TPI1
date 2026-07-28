@@ -52,6 +52,7 @@ function formatCustomSheetPriceLabel(item: any, materials: any) {
 
 export const AddOrderModal = ({
     onClose,
+    onBack,
     onSave,
     initialData,
     title = 'Add New Stock',
@@ -468,5 +469,5 @@ export const AddOrderModal = ({
         );
     }
 
-    return <BaseModal onClose={onClose} title={title}>{formBody}</BaseModal>;
+    return <BaseModal onClose={onClose} onBack={onBack} title={title}>{formBody}</BaseModal>;
 };

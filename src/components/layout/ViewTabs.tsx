@@ -23,8 +23,7 @@ export const ViewTabs = ({ activeView, setActiveView, categories }: any) => {
         { label: 'Jobs', view: 'jobs' },
         { label: 'Logs', view: 'logs' },
         { label: 'Price History', view: 'price-history' },
-        { label: 'Sheet Calculator', view: 'sheet-calculator' },
-        { label: 'Reorder', view: 'reorder' }
+        { label: 'Sheet Calculator', view: 'sheet-calculator' }
     ];
 
     const categoryViews = categories || [];

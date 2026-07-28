@@ -396,6 +396,9 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
                     if (data.status !== 'Ordered' || !data.arrivalDate || new Date(data.arrivalDate) > now) continue;
                     batch.update(docRef, {
                         status: 'On Hand',
+                        // Drop the expected arrival date once received, so the sheet
+                        // can't show as an On Hand order still dated in the future.
+                        arrivalDate: null,
                         dateReceived: localDateInputValue(now),
                         lastEditedBy: autoAuditActor(),
                         lastEditedAt: now.toISOString(),

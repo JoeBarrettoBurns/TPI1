@@ -40,7 +40,6 @@ import { DashboardView } from './views/DashboardView';
 const LogsView = lazy(() => import('./views/LogsView').then((m) => ({ default: m.LogsView })));
 const MaterialDetailView = lazy(() => import('./views/MaterialDetailView').then((m) => ({ default: m.MaterialDetailView })));
 const PriceHistoryView = lazy(() => import('./views/PriceHistoryView').then((m) => ({ default: m.PriceHistoryView })));
-const ReorderView = lazy(() => import('./views/ReorderView').then((m) => ({ default: m.ReorderView })));
 const JobOverviewView = lazy(() => import('./views/JobOverviewView').then((m) => ({ default: m.JobOverviewView })));
 const SheetCostCalculatorView = lazy(() => import('./views/SheetCostCalculatorView').then((m) => ({ default: m.SheetCostCalculatorView })));
 
@@ -54,15 +53,12 @@ const BackupModal = lazy(() => import('./components/modals/BackupModal').then((m
 const AuthenticationModal = lazy(() => import('./components/modals/AuthenticationModal').then((m) => ({ default: m.AuthenticationModal })));
 const ManageSuppliersModal = lazy(() => import('./components/modals/ManageSuppliersModal').then((m) => ({ default: m.ManageSuppliersModal })));
 const BuyOrderDraftsModal = lazy(() => import('./components/modals/BuyOrderDraftsModal').then((m) => ({ default: m.BuyOrderDraftsModal })));
+const AddStockModal = lazy(() => import('./components/modals/AddStockModal').then((m) => ({ default: m.AddStockModal })));
 
 const AIAssistant = lazy(() => import('./components/assistant/AIAssistant').then((m) => ({ default: m.AIAssistant })));
 
 const BUY_ORDERS_PATH = `artifacts/${appId}/public/data/buy_orders`;
 const LATEST_BUY_ORDER_LIMIT = 15;
-
-function getTodayDateInputValue() {
-    return localDateInputValue();
-}
 
 function createManualEditSessionId() {
     return `manual-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -340,7 +336,7 @@ export default function App() {
 
         const commands = [
             { type: 'command', name: 'Add Stock', aliases: ['add', 'new', 'order'], action: () => setModal({ type: 'add' }) },
-            { type: 'command', name: 'Buy', aliases: ['purchase', 'email supplier'], action: () => setModal({ type: 'buy' }) },
+            { type: 'command', name: 'Email Suppliers', aliases: ['buy', 'purchase', 'email supplier'], action: () => setModal({ type: 'buy' }) },
             { type: 'command', name: 'Use Stock', aliases: ['use'], action: () => setModal({ type: 'use' }) },
             { type: 'command', name: 'Manage Categories', aliases: ['mc', 'manage cat'], action: () => setModal({ type: 'manage-categories' }) },
             { type: 'command', name: 'Manage Suppliers', aliases: ['ms', 'manage sup'], action: () => setModal({ type: 'manage-suppliers' }) },
@@ -355,7 +351,6 @@ export default function App() {
             { type: 'view', name: 'Logs', id: 'logs' },
             { type: 'view', name: 'Price History', id: 'price-history' },
             { type: 'view', name: 'Sheet Calculator', id: 'sheet-calculator' },
-            { type: 'view', name: 'Reorder', id: 'reorder' },
         ];
 
         const searchDocs = [
@@ -452,50 +447,9 @@ export default function App() {
 
     const onScrollToComplete = useCallback(() => setScrollToMaterial(null), []);
 
-    const buildBuyOrderPrefillFromReorderItem = useCallback((item: any) => {
-        if (!item) return null;
-
-        const matchingPurchases = inventory
-            .filter((inventoryItem) => inventoryItem.materialType === item.materialType)
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-        const recentFromSupplier = item.supplier
-            ? matchingPurchases.find((inventoryItem) => inventoryItem.supplier === item.supplier)
-            : null;
-        const latestPurchase = recentFromSupplier || matchingPurchases[0];
-        const suggestedQty = String(Math.max(5 - (item.count || 0), 1));
-        const supplier = suppliers.includes(item.supplier)
-            ? item.supplier
-            : (latestPurchase?.supplier && suppliers.includes(latestPurchase.supplier) ? latestPurchase.supplier : (suppliers[0] || ''));
-
-        return {
-            supplier,
-            suppliers: supplier ? [supplier] : [],
-            status: 'Ordered',
-            createdAt: getTodayDateInputValue(),
-            items: [{
-                materialType: item.materialType,
-                qty96: item.length === 96 ? suggestedQty : '',
-                qty120: item.length === 120 ? suggestedQty : '',
-                qty144: item.length === 144 ? suggestedQty : '',
-                customWidth: '',
-                customLength: '',
-                customQty: '',
-                costPerPound: latestPurchase?.costPerPound ? String(latestPurchase.costPerPound) : '',
-            }]
-        };
-    }, [inventory, suppliers]);
-
     const handleOpenBuyModal = useCallback((prefill: any = null) => {
         setModal({ type: 'buy', data: prefill ? { prefill } : null });
     }, []);
-
-    const handleRestock = useCallback((item: any) => {
-        const prefill = typeof item === 'string'
-            ? { createdAt: getTodayDateInputValue(), items: [{ materialType: item }], suppliers: suppliers[0] ? [suppliers[0]] : [] }
-            : buildBuyOrderPrefillFromReorderItem(item);
-        handleOpenBuyModal(prefill);
-    }, [buildBuyOrderPrefillFromReorderItem, handleOpenBuyModal, suppliers]);
 
     const handleAddBuyOrderToInventory = useCallback((buyOrder: any) => {
         if (!buyOrder) return;
@@ -518,9 +472,11 @@ export default function App() {
         setModal({ type: 'confirm-clear-buy-orders', data: null });
     }, [openBuyOrders.length]);
 
+    const returnToAddStockList = useCallback(() => setModal({ type: 'add', data: null }), []);
+
     const handleConfirmClearAllBuyOrders = useCallback(async () => {
         if (openBuyOrders.length === 0) {
-            closeModal();
+            returnToAddStockList();
             return;
         }
         const batch = writeBatch(db);
@@ -534,8 +490,8 @@ export default function App() {
         });
 
         await batch.commit();
-        closeModal();
-    }, [openBuyOrders, closeModal]);
+        returnToAddStockList();
+    }, [openBuyOrders, returnToAddStockList]);
 
     const handleDeleteBuyOrder = useCallback((buyOrder: any) => {
         if (!buyOrder?.id) {
@@ -547,7 +503,7 @@ export default function App() {
     const handleConfirmDeleteBuyOrder = useCallback(async () => {
         const buyOrder = modal.data;
         if (!buyOrder?.id) {
-            closeModal();
+            returnToAddStockList();
             return;
         }
         try {
@@ -558,8 +514,8 @@ export default function App() {
         } catch (err) {
             console.error('Failed to remove buy order:', err);
         }
-        closeModal();
-    }, [modal.data, closeModal]);
+        returnToAddStockList();
+    }, [modal.data, returnToAddStockList]);
 
     const handleDragStart = (event: any) => setActiveCategory(event.active.id);
     const handleDragEnd = (event: any) => {
@@ -1223,6 +1179,10 @@ export default function App() {
                 const docRef = doc(db, `artifacts/${appId}/public/data/inventory`, item.id);
                 batch.update(docRef, {
                     status: 'On Hand',
+                    // A received sheet is no longer "incoming", so drop its expected
+                    // arrival date — otherwise it lingers as a future date on an
+                    // On Hand order (see groupInventoryByJob / MaterialDetailItem).
+                    arrivalDate: null,
                     dateReceived: localDateInputValue(),
                     lastEditedBy: auditActor(),
                     lastEditedAt: new Date().toISOString(),
@@ -1740,7 +1700,7 @@ export default function App() {
                                         variant="panel"
                                         onClose={closeModal}
                                         onSave={handleSubmitBuyOrder}
-                                        title="Buy Material"
+                                        title="Email Suppliers"
                                         materialTypes={materialTypes}
                                         materials={materials}
                                         suppliers={suppliers}
@@ -1777,20 +1737,6 @@ export default function App() {
                 return <PriceHistoryView inventory={inventory} materials={materials} searchQuery={searchQuery} />;
             case 'sheet-calculator':
                 return <SheetCostCalculatorView />;
-            case 'reorder':
-                return <ReorderView
-                    inventorySummary={inventorySummary}
-                    materials={materials}
-                    onRestock={handleRestock}
-                    buyOrders={openBuyOrders}
-                    onAddBuyOrderToInventory={handleAddBuyOrderToInventory}
-                    onClearAllBuyOrders={handleClearAllBuyOrders}
-                    onDeleteBuyOrder={handleDeleteBuyOrder}
-                    searchQuery={searchQuery}
-                    inventory={inventory}
-                    suppliers={suppliers}
-                    supplierInfoOverrides={supplierInfo}
-                />;
             default:
                 if (initialCategories.includes(activeView)) {
                     return <MaterialDetailView
@@ -1939,12 +1885,29 @@ export default function App() {
 
 
 
-            {modal.type === 'add' && <AddOrderModal onClose={closeModal} onSave={(jobs: any) => handleAddOrEditOrder(jobs, null, { linkedBuyOrderId: modal.data?.linkedBuyOrderId })} materialTypes={materialTypes} materials={materials} suppliers={suppliers} prefill={modal.data?.prefill} />}
+            {modal.type === 'add' && (
+                <AddStockModal
+                    onClose={closeModal}
+                    onBackToList={() => setModal({ type: 'add', data: null })}
+                    onSaveManual={(jobs: any) => handleAddOrEditOrder(jobs, null, { linkedBuyOrderId: modal.data?.linkedBuyOrderId })}
+                    onAddBuyOrderToInventory={handleAddBuyOrderToInventory}
+                    onAddNonEmailedStock={() => setModal({ type: 'add', data: { manual: true } })}
+                    materialTypes={materialTypes}
+                    materials={materials}
+                    suppliers={suppliers}
+                    buyOrders={openBuyOrders}
+                    onClearAllBuyOrders={handleClearAllBuyOrders}
+                    onDeleteBuyOrder={handleDeleteBuyOrder}
+                    prefill={modal.data?.prefill}
+                    manual={Boolean(modal.data?.manual)}
+                    linkedBuyOrderId={modal.data?.linkedBuyOrderId}
+                />
+            )}
             {modal.type === 'buy' && !buyPanelInDashboard && (
                 <AddOrderModal
                     onClose={closeModal}
                     onSave={handleSubmitBuyOrder}
-                    title="Buy Material"
+                    title="Email Suppliers"
                     materialTypes={materialTypes}
                     materials={materials}
                     suppliers={suppliers}
@@ -1980,7 +1943,7 @@ export default function App() {
             {modal.type === 'confirm-clear-buy-orders' && (
                 <ConfirmationModal
                     isOpen={true}
-                    onClose={closeModal}
+                    onClose={returnToAddStockList}
                     onConfirm={handleConfirmClearAllBuyOrders}
                     title="Clear buy orders"
                     message={`Clear all ${openBuyOrders.length} open buy order${openBuyOrders.length === 1 ? '' : 's'}? They will be marked as cleared and removed from this queue.`}
@@ -1989,7 +1952,7 @@ export default function App() {
             {modal.type === 'confirm-delete-buy-order' && (
                 <ConfirmationModal
                     isOpen={true}
-                    onClose={closeModal}
+                    onClose={returnToAddStockList}
                     onConfirm={handleConfirmDeleteBuyOrder}
                     title="Remove buy order"
                     message="Remove this buy order from the queue? It will be marked as cleared."

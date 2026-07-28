@@ -7,14 +7,32 @@ import { exportToCSV } from '../utils/csvExport';
 import { calculateSheetCost } from '../utils/dataProcessing';
 
 export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => {
-    // State to hold the selected material type for filtering
+    // State to hold the selected category and material (thickness/gauge) for filtering
+    const [selectedCategory, setSelectedCategory] = useState('All');
     const [selectedMaterialType, setSelectedMaterialType] = useState('All');
 
-    // Get a sorted list of unique material types
-    const materialTypesForFilter = useMemo(() => {
-        const types = Object.keys(materials).sort((a, b) => a.localeCompare(b));
-        return ['All', ...types];
+    // Get a sorted list of unique categories
+    const categoriesForFilter = useMemo(() => {
+        const categories = [...new Set(Object.values<any>(materials).map((m) => m.category).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b));
+        return ['All', ...categories];
     }, [materials]);
+
+    // Material (thickness) options, scoped to the selected category
+    const materialTypesForFilter = useMemo(() => {
+        const types = Object.keys(materials)
+            .filter((type) => selectedCategory === 'All' || materials[type]?.category === selectedCategory)
+            .sort((a, b) => a.localeCompare(b));
+        return ['All', ...types];
+    }, [materials, selectedCategory]);
+
+    // Picking a category invalidates a material selection from a different category
+    const handleCategoryChange = (nextCategory: any) => {
+        setSelectedCategory(nextCategory);
+        if (selectedMaterialType !== 'All' && materials[selectedMaterialType]?.category !== nextCategory) {
+            setSelectedMaterialType('All');
+        }
+    };
 
     // Memoized calculation for the price history data
     const priceHistory = useMemo(() => {
@@ -25,6 +43,9 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
             const materialInfo = materials[item.materialType];
             // Ensure the item has the necessary data to be included
             if (!materialInfo || !item.costPerPound || item.costPerPound <= 0) return false;
+
+            // Filter by selected category
+            if (selectedCategory !== 'All' && materialInfo.category !== selectedCategory) return false;
 
             // Filter by selected material type
             const matchesMaterial = selectedMaterialType === 'All' || item.materialType === selectedMaterialType;
@@ -62,7 +83,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
         return Array.from(uniquePricePoints.values())
             .sort((a, b) => new Date(b.dateReceived).getTime() - new Date(a.dateReceived).getTime());
 
-    }, [inventory, materials, selectedMaterialType, searchQuery]);
+    }, [inventory, materials, selectedCategory, selectedMaterialType, searchQuery]);
 
     // Handle exporting the current view to a CSV file
     const handleExport = () => {
@@ -83,13 +104,13 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
         exportToCSV(
             dataToExport,
             headers,
-            `price_history_material_${selectedMaterialType}.csv`
+            `price_history_${selectedCategory}_${selectedMaterialType}.csv`
         );
     };
 
 
     // Lightweight custom select to have full control over menu size and styling
-    const CompactSelect = ({ value, onChange, options, className = '' }: any) => {
+    const CompactSelect = ({ value, onChange, options, allLabel = 'All', className = '' }: any) => {
         const [isOpen, setIsOpen] = useState(false);
         const [highlightIndex, setHighlightIndex] = useState(() => Math.max(0, options.indexOf(value)));
         const containerRef = useRef<any>(null);
@@ -108,7 +129,7 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
             setHighlightIndex(Math.max(0, options.indexOf(value)));
         }, [value, options]);
 
-        const getLabel = (opt: any) => (opt === 'All' ? 'All Materials' : opt);
+        const getLabel = (opt: any) => (opt === 'All' ? allLabel : opt);
 
         const handleKeyDown = (e: any) => {
             if (!isOpen && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
@@ -184,13 +205,22 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
             <div className="mb-4">
                 <div className="flex flex-wrap items-center gap-3 bg-zinc-700/40 border border-zinc-600/40 rounded-md px-3 py-2">
                     <h2 className="text-xl md:text-2xl font-bold text-white mr-3">Price History</h2>
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                        {/* Dropdown for selecting material type */}
+                    <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+                        {/* Dropdown for narrowing to a category first... */}
+                        <CompactSelect
+                            value={selectedCategory}
+                            onChange={handleCategoryChange}
+                            options={categoriesForFilter}
+                            allLabel="All Categories"
+                            className="w-full sm:w-56 min-w-[180px]"
+                        />
+                        {/* ...then picking the specific material (thickness/gauge) within it */}
                         <CompactSelect
                             value={selectedMaterialType}
                             onChange={setSelectedMaterialType}
                             options={materialTypesForFilter}
-                            className="w-full sm:w-72 min-w-[220px]"
+                            allLabel="All Materials"
+                            className="w-full sm:w-64 min-w-[200px]"
                         />
                         <Button onClick={handleExport} variant="secondary" className="shrink-0">
                             <Download size={16} /> <span className="hidden sm:inline">Export</span>

@@ -1,7 +1,7 @@
 // src/components/layout/Header.tsx
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Minus, Edit, Box, Users, LogOut, Database, ShoppingCart, Shield, Settings, FlaskConical } from 'lucide-react';
+import { Plus, Minus, Edit, Box, Users, LogOut, Database, Mail, Shield, Settings, FlaskConical } from 'lucide-react';
 import { Button } from '../common/Button';
 
 // Experimental Features toggle. This is the TypeScript build.
@@ -72,7 +72,7 @@ export const Header = ({
             <div className="pointer-events-auto flex w-full flex-nowrap items-stretch gap-2">
                 <Button onClick={onAdd} className="flex-1 min-w-0 !py-2 !bg-blue-800/70 hover:!bg-blue-700/70 text-sm md:text-base"><Plus size={18} /> <span className="hidden sm:inline">Add Stock</span></Button>
                 <Button onClick={onBuy} variant="secondary" className="flex-1 min-w-0 !py-2 !bg-zinc-700/60 hover:!bg-zinc-600/70 text-sm md:text-base">
-                    <ShoppingCart size={18} /> <span className="hidden sm:inline">Buy</span>
+                    <Mail size={18} /> <span className="hidden sm:inline">Email Suppliers</span>
                 </Button>
                 <Button onClick={onUse} variant="secondary" className="flex-1 min-w-0 !py-2 !bg-zinc-700/50 hover:!bg-zinc-600/70 text-sm md:text-base"><Minus size={18} /> <span className="hidden sm:inline">Use Stock</span></Button>
                 <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className={`flex-1 min-w-0 !py-2 text-sm md:text-base ${isEditMode ? '!bg-green-600/60 hover:!bg-green-500/70' : '!bg-amber-600/60 hover:!bg-amber-500/70'}`}>

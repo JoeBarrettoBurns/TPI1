@@ -159,6 +159,11 @@ export const calculateMaterialTransactions = (materialTypes: string[], inventory
             const group = getInventoryGroup(item);
             if (!group) return;
 
+            // isFuture must reflect ANY still-Ordered sheet in the group, not just the
+            // first one seen (mirrors groupInventoryByJob) — a partially-received order
+            // still has incoming stock.
+            group.isFuture = group.isFuture || item.status === 'Ordered';
+
             if (item.arrivalDate && (!group.arrivalDate || new Date(item.arrivalDate) > new Date(group.arrivalDate))) {
                 group.arrivalDate = item.arrivalDate;
             }

@@ -282,8 +282,11 @@ export const MaterialDetailItem = forwardRef(
                           ? "bg-red-900/20"
                           : "";
 
+                  // Only a still-incoming (Ordered) addition should show its expected
+                  // arrival date; once received it falls back to the order date so a
+                  // stale arrivalDate can't show an On Hand order dated in the future.
                   const displayDate = t.isAddition
-                    ? t.arrivalDate || t.date
+                    ? (t.isFuture ? (t.arrivalDate || t.date) : t.date)
                     : t.usedAt;
 
                   return (
