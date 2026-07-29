@@ -10,8 +10,23 @@ import { exportToCSV } from '../../utils/csvExport';
 import { collection, onSnapshot } from '../../firebase/firestoreWithTracking';
 import { db, appId, auth, onAuthStateChanged } from '../../firebase/config';
 
+/**
+ * A backup that held nothing for a collection leaves that collection untouched.
+ * Say so out loud — otherwise a partial backup looks like a full restore.
+ */
+function describeRestoreResult(backupId: string, result: any) {
+  const base = `Restore complete from ${backupId} — ${result?.restored ?? 0} document(s) written`;
+  const removedNote = result?.removed ? `, ${result.removed} stale document(s) removed` : '';
+  const skipped = result?.skipped || [];
+  if (skipped.length === 0) return `${base}${removedNote}.`;
+  return `${base}${removedNote}. This backup contained nothing for ${skipped.join(', ')}, so ${skipped.length === 1 ? 'that collection was' : 'those collections were'} left untouched.`;
+}
+
 export const BackupModal = ({ onClose }: any) => {
   const [busyMsg, setBusyMsg] = useState('');
+  /** Restore outcome. Kept until dismissed — `busyMsg` self-clears after 4s, which
+   *  is far too fast for "this backup did not cover usage_logs". */
+  const [restoreNotice, setRestoreNotice] = useState('');
   const [error, setError] = useState('');
   const [latest, setLatest] = useState<any>(null);
   const [backups, setBackups] = useState<any[]>([]);
@@ -94,7 +109,7 @@ export const BackupModal = ({ onClose }: any) => {
       if (!window.confirm('This will overwrite current data with the latest backup. Continue?')) return;
       setBusyMsg('Restoring from latest backup...');
       setProgress(0);
-      await restoreCollectionsFromBackup(db, appId, latest.id, ['materials', 'inventory', 'usage_logs'], (p) => {
+      const result = await restoreCollectionsFromBackup(db, appId, latest.id, ['materials', 'inventory', 'usage_logs'], (p) => {
         if (!p) return;
         if (p.phase === 'read') setBusyMsg(`Restoring ${p.collection}: found ${p.count} docs...`);
         if (p.phase?.includes('progress')) setBusyMsg(`Restoring ${p.collection}...`);
@@ -106,7 +121,7 @@ export const BackupModal = ({ onClose }: any) => {
         setProgress((prev) => Math.min(100, Math.max(prev, Math.floor(base + bump))));
       });
       setProgress(100);
-      setBusyMsg(`Restore complete from ${latest.id}`);
+      setRestoreNotice(describeRestoreResult(latest.id, result));
     } catch (e: any) {
       setBusyMsg('');
       setError(e.message || 'Restore failed');
@@ -121,7 +136,7 @@ export const BackupModal = ({ onClose }: any) => {
       if (!window.confirm(`Overwrite current data with backup ${selectedBackupId}?`)) return;
       setBusyMsg(`Restoring ${selectedBackupId}...`);
       setProgress(0);
-      await restoreCollectionsFromBackup(db, appId, selectedBackupId, ['materials', 'inventory', 'usage_logs'], (p) => {
+      const result = await restoreCollectionsFromBackup(db, appId, selectedBackupId, ['materials', 'inventory', 'usage_logs'], (p) => {
         if (!p) return;
         if (p.phase === 'read') setBusyMsg(`Restoring ${p.collection}: found ${p.count} docs...`);
         if (p.phase?.includes('progress')) setBusyMsg(`Restoring ${p.collection}...`);
@@ -132,7 +147,7 @@ export const BackupModal = ({ onClose }: any) => {
         setProgress((prev) => Math.min(100, Math.max(prev, Math.floor(base + bump))));
       });
       setProgress(100);
-      setBusyMsg(`Restore complete from ${selectedBackupId}`);
+      setRestoreNotice(describeRestoreResult(selectedBackupId, result));
     } catch (e: any) {
       setBusyMsg('');
       setError(e.message || 'Restore failed');
@@ -326,6 +341,18 @@ export const BackupModal = ({ onClose }: any) => {
           <p className="text-sm text-zinc-400">Latest: {latest.id} • {latest.createdAt} • {latest.totalDocs} docs</p>
         )}
         {!!busyMsg && <p className="text-xs text-zinc-400">{busyMsg}</p>}
+        {!!restoreNotice && (
+          <div role="status" className="flex items-start gap-3 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-100">
+            <span className="flex-1">{restoreNotice}</span>
+            <button
+              type="button"
+              onClick={() => setRestoreNotice('')}
+              className="shrink-0 rounded px-2 py-0.5 font-semibold text-sky-200 hover:bg-sky-500/20"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {progress > 0 && (
           <div className="w-full h-2 bg-zinc-800 rounded overflow-hidden">
             <div className="h-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />

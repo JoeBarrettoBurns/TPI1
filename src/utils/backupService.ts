@@ -65,39 +65,46 @@ export async function getLatestBackupInfo(db: any, appId: string) {
   return snap.data();
 }
 
+/**
+ * Restore collections from a backup.
+ *
+ * Two safety rules, both learned the hard way:
+ *
+ * 1. A backup that holds NO documents for a collection never clears that
+ *    collection. Older backups predate some collections, and a backup run can
+ *    fail part-way, so "the source is empty" must mean "nothing to restore
+ *    here", not "delete everything the business currently has".
+ * 2. Restored documents are written BEFORE stale ones are pruned. Firestore has
+ *    no multi-collection transaction, so a restore is always interruptible; this
+ *    ordering means an interruption leaves extra documents (visible and
+ *    removable) instead of a hole where the live data used to be.
+ *
+ * Skipped collections are returned so the caller can tell the user plainly.
+ */
 export async function restoreCollectionsFromBackup(db: any, appId: string, backupId: string, collectionsToRestore: string[], onProgress?: (info: any) => void) {
   const rootPath = `artifacts/${appId}/public/data/backups/${backupId}`;
   let restored = 0;
+  let removed = 0;
+  const skipped: string[] = [];
 
   for (const coll of collectionsToRestore) {
-    const srcRef = collection(db, `${rootPath}/${coll}`);
-    const snap = await getDocs(srcRef);
+    const collectionPath = `artifacts/${appId}/public/data/${coll}`;
+    const snap = await getDocs(collection(db, `${rootPath}/${coll}`));
     onProgress?.({ phase: 'read', collection: coll, count: snap.size });
 
-    // Clear existing documents in the destination collection before restore
-    const dstRef = collection(db, `artifacts/${appId}/public/data/${coll}`);
-    const existingSnap = await getDocs(dstRef);
-    if (!existingSnap.empty) {
-      let delBatch = writeBatch(db);
-      let dels = 0;
-      for (const d of existingSnap.docs) {
-        delBatch.delete(doc(db, `artifacts/${appId}/public/data/${coll}`, d.id));
-        dels += 1;
-        if (dels >= 450) {
-          await delBatch.commit();
-          delBatch = writeBatch(db);
-          dels = 0;
-          onProgress?.({ phase: 'delete-progress', collection: coll });
-        }
-      }
-      if (dels > 0) await delBatch.commit();
+    if (snap.empty) {
+      skipped.push(coll);
+      onProgress?.({ phase: 'skipped-empty', collection: coll });
+      continue;
     }
 
+    // WRITE first: upsert every document the backup holds.
+    const restoredIds = new Set<string>();
     let batch = writeBatch(db);
     let ops = 0;
     for (const docSnap of snap.docs) {
-      const dstRef = doc(db, `artifacts/${appId}/public/data/${coll}`, docSnap.id);
-      batch.set(dstRef, docSnap.data());
+      restoredIds.add(docSnap.id);
+      batch.set(doc(db, collectionPath, docSnap.id), docSnap.data());
       ops += 1;
       restored += 1;
       if (ops >= 450) {
@@ -107,13 +114,30 @@ export async function restoreCollectionsFromBackup(db: any, appId: string, backu
         onProgress?.({ phase: 'write-progress', collection: coll, restored });
       }
     }
-    if (ops > 0) {
-      await batch.commit();
+    if (ops > 0) await batch.commit();
+
+    // PRUNE second: drop only live documents the backup does not contain.
+    const existingSnap = await getDocs(collection(db, collectionPath));
+    let delBatch = writeBatch(db);
+    let dels = 0;
+    for (const d of existingSnap.docs) {
+      if (restoredIds.has(d.id)) continue;
+      delBatch.delete(doc(db, collectionPath, d.id));
+      dels += 1;
+      removed += 1;
+      if (dels >= 450) {
+        await delBatch.commit();
+        delBatch = writeBatch(db);
+        dels = 0;
+        onProgress?.({ phase: 'delete-progress', collection: coll });
+      }
     }
+    if (dels > 0) await delBatch.commit();
+
     onProgress?.({ phase: 'collection-complete', collection: coll });
   }
 
-  return { restored };
+  return { restored, removed, skipped };
 }
 
 export async function repairInventoryMaterialKeys(db: any, appId: string, materialsKeys: any[]) {
