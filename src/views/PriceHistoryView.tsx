@@ -133,7 +133,6 @@ export const PriceHistoryView = ({ inventory, usageLog = [], materials, searchQu
     // Handle exporting the current view to a CSV file
     const handleExport = () => {
         const headers = [
-            { label: 'Job/PO', key: 'job' },
             { label: 'Material', key: 'materialType' },
             { label: 'Supplier', key: 'supplier' },
             { label: 'Date Received', key: 'dateReceived' },
@@ -211,17 +210,16 @@ export const PriceHistoryView = ({ inventory, usageLog = [], materials, searchQu
             </div>
 
             <div className="overflow-x-auto">
-                <table className="w-full text-sm md:text-base text-left">
+                <table className="w-full text-sm md:text-base text-center">
                     <thead>
                         <tr className="border-b border-zinc-700">
                             <th className="p-2 font-semibold text-zinc-400">Date</th>
-                            <th className="p-2 font-semibold text-zinc-400">Job/PO</th>
                             <th className="p-2 font-semibold text-zinc-400">Supplier</th>
                             <th className="p-2 font-semibold text-zinc-400">Material</th>
-                            <th className="p-2 font-semibold text-zinc-400 text-right">Cost Per Pound</th>
-                            <th className="p-2 font-semibold text-zinc-400 text-right">96</th>
-                            <th className="p-2 font-semibold text-zinc-400 text-right">120</th>
-                            <th className="p-2 font-semibold text-zinc-400 text-right">144</th>
+                            <th className="p-2 font-semibold text-zinc-400">Cost Per Pound</th>
+                            <th className="p-2 font-semibold text-zinc-400">96</th>
+                            <th className="p-2 font-semibold text-zinc-400">120</th>
+                            <th className="p-2 font-semibold text-zinc-400">144</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -232,13 +230,12 @@ export const PriceHistoryView = ({ inventory, usageLog = [], materials, searchQu
                             return (
                                 <tr key={order.id || index} className={`border-b border-zinc-700 last:border-b-0 ${index % 2 === 0 ? 'bg-zinc-800' : 'bg-zinc-800/50'}`}>
                                     <td className="p-2">{new Date(order.dateReceived).toLocaleDateString()}</td>
-                                    <td className="p-2">{order.job}</td>
                                     <td className="p-2">{order.supplier}</td>
                                     <td className="p-2">{order.materialType}</td>
-                                    <td className="p-2 text-right font-mono text-green-400">${order.costPerPound.toFixed(2)}</td>
-                                    <td className="p-2 text-right font-mono">${Math.round(price96)}</td>
-                                    <td className="p-2 text-right font-mono">${Math.round(price120)}</td>
-                                    <td className="p-2 text-right font-mono">${Math.round(price144)}</td>
+                                    <td className="p-2 font-mono text-green-400">${order.costPerPound.toFixed(2)}</td>
+                                    <td className="p-2 font-mono">${Math.round(price96)}</td>
+                                    <td className="p-2 font-mono">${Math.round(price120)}</td>
+                                    <td className="p-2 font-mono">${Math.round(price144)}</td>
                                 </tr>
                             );
                         })}

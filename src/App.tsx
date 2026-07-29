@@ -364,6 +364,17 @@ export default function App() {
             return;
         }
 
+        if (query.trim().toLowerCase() === 'j') {
+            const recentJobs = allJobs.slice(0, 5);
+            if (recentJobs.length > 0) {
+                setSearchResults(recentJobs.map((recentJob: any, index: number) => ({
+                    item: { type: 'job', name: recentJob.job, customer: recentJob.customer, data: recentJob },
+                    refIndex: index,
+                })));
+                return;
+            }
+        }
+
         if (fuse) {
             const results = fuse.search(query).slice(0, 10);
             setSearchResults(results);

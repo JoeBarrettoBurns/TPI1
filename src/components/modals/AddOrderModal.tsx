@@ -218,11 +218,8 @@ export const AddOrderModal = ({
                 <div className={scrollRegionClass}>
                     <div className="p-4 border border-zinc-700 rounded-lg bg-zinc-900/50 relative space-y-4">
                         <div
-                            className={`grid grid-cols-1 ${mode === 'buy' ? 'md:grid-cols-2 md:items-start' : 'md:grid-cols-3'} gap-4`}
+                            className={`grid grid-cols-1 md:grid-cols-2 ${mode === 'buy' ? 'md:items-start' : ''} gap-4`}
                         >
-                            {mode !== 'buy' && (
-                                <FormInput label={`Job/PO #`} name="jobName" value={job.jobName} onChange={(e: any) => setJobField(jobIndex, 'jobName', (e.target.value || '').toUpperCase())} placeholder="e.g. 12345 or Stock" style={{ textTransform: 'uppercase' }} />
-                            )}
                             {mode === 'buy' ? (
                                 <div className="md:col-span-1 min-w-0">
                                     <div className="flex items-baseline justify-between gap-2">

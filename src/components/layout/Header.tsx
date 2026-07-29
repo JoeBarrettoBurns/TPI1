@@ -70,13 +70,13 @@ export const Header = ({
         // are re-enabled here so the wrapper's fade zone never swallows clicks.
         <header>
             <div className="pointer-events-auto flex w-full flex-nowrap items-stretch gap-2">
-                <Button onClick={onAdd} className="flex-1 min-w-0 !py-2 !bg-blue-800/70 hover:!bg-blue-700/70 text-sm md:text-base"><Plus size={18} /> <span className="hidden sm:inline">Add Stock</span></Button>
-                <Button onClick={onBuy} variant="secondary" className="flex-1 min-w-0 !py-2 !bg-zinc-700/60 hover:!bg-zinc-600/70 text-sm md:text-base">
-                    <Mail size={18} /> <span className="hidden sm:inline">Email Suppliers</span>
+                <Button onClick={onAdd} className="flex-1 min-w-0 !py-2 !bg-blue-800/70 hover:!bg-blue-700/70 text-sm md:text-base"><Plus size={18} className="shrink-0" /> <span className="hidden sm:inline whitespace-nowrap">Add Stock</span></Button>
+                <Button onClick={onBuy} variant="secondary" className="flex-none whitespace-nowrap !px-4 !py-2 !bg-zinc-700/60 hover:!bg-zinc-600/70 text-sm md:text-base">
+                    <span className="hidden sm:inline whitespace-nowrap">Email Suppliers</span>
                 </Button>
-                <Button onClick={onUse} variant="secondary" className="flex-1 min-w-0 !py-2 !bg-zinc-700/50 hover:!bg-zinc-600/70 text-sm md:text-base"><Minus size={18} /> <span className="hidden sm:inline">Use Stock</span></Button>
+                <Button onClick={onUse} variant="secondary" className="flex-1 min-w-0 !py-2 !bg-zinc-700/50 hover:!bg-zinc-600/70 text-sm md:text-base"><Minus size={18} className="shrink-0" /> <span className="hidden sm:inline whitespace-nowrap">Use Stock</span></Button>
                 <Button onClick={onEdit} variant={isEditMode ? 'success' : 'warning'} className={`flex-1 min-w-0 !py-2 text-sm md:text-base ${isEditMode ? '!bg-green-600/60 hover:!bg-green-500/70' : '!bg-amber-600/60 hover:!bg-amber-500/70'}`}>
-                    <Edit size={18} /> <span className="hidden sm:inline">{isEditMode ? 'Finish Editing' : 'Edit'}</span>
+                    <Edit size={18} className="shrink-0" /> <span className="hidden sm:inline whitespace-nowrap">{isEditMode ? 'Finish' : 'Edit'}</span>
                 </Button>
 
                 <div className="relative flex-1 min-w-0" ref={moreMenuRef}>
@@ -89,8 +89,8 @@ export const Header = ({
                         aria-label={moreOpen ? 'Close settings menu' : 'Open settings menu'}
                         onClick={() => setMoreOpen((o) => !o)}
                     >
-                        <Settings size={18} />
-                        <span className="hidden sm:inline">Settings</span>
+                        <Settings size={18} className="shrink-0" />
+                        <span className="hidden sm:inline whitespace-nowrap">Settings</span>
                     </Button>
                     {moreOpen && (
                         <div
