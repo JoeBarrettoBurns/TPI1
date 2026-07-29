@@ -65,6 +65,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
 
     const [editingCell, setEditingCell] = useState<any>(null);
     const [editValue, setEditValue] = useState('');
+    const [editError, setEditError] = useState('');
     const saveInFlightRef = useRef(false);
     const normalizedIndicatorSettingsByMaterial = useMemo(
         () => Object.fromEntries(
@@ -76,21 +77,40 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
         [materialIndicatorSettings, materialTypes, safeMaterials]
     );
 
+    /** Opening or cancelling a cell always clears a stale error from the last attempt. */
+    const startEditingCell = (cell: any) => {
+        setEditError('');
+        setEditingCell(cell);
+    };
+
     const handleEditSave = async () => {
         if (!editingCell || saveInFlightRef.current) return;
         const { matType, len } = editingCell;
-        const newQuantity = parseInt(editValue, 10);
 
-        if (isNaN(newQuantity) || newQuantity < 0) {
+        // Clearing the field and clicking away cancels, as it always has — only a
+        // non-empty value that is not a valid count is worth complaining about.
+        if (editValue.trim() === '') {
+            setEditError('');
             setEditingCell(null);
             return;
         }
 
+        const newQuantity = parseInt(editValue, 10);
+        if (isNaN(newQuantity) || newQuantity < 0) {
+            setEditError(`Enter a whole number of ${len}" sheets (0 or more).`);
+            return;
+        }
+
         saveInFlightRef.current = true;
+        setEditError('');
         try {
             await onSave(matType, len, newQuantity, "Manual Edit");
-        } catch (err) {
+            setEditError('');
+        } catch (err: any) {
+            // A failed edit used to be console-only, so "Only 3 available" never
+            // reached the person typing. Keep the cell open with the reason shown.
             console.error('Manual stock edit failed:', err);
+            setEditError(err?.message || 'Could not save that quantity. Please try again.');
             return;
         } finally {
             saveInFlightRef.current = false;
@@ -174,6 +194,14 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                     </button>
                 )}
             </div>
+            {editError && (
+                <div
+                    role="alert"
+                    className="mx-6 mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+                >
+                    {editError}
+                </div>
+            )}
             <div className="overflow-x-auto px-6 pb-6">
                 {materialsInCategory.length > 0 ? (
                     <DndContext
@@ -206,7 +234,7 @@ export const MaterialCategoryCard = ({ id, category, inventorySummary, incomingS
                                             incomingSummary={incomingSummary}
                                             scheduledOutgoingSummary={scheduledOutgoingSummary}
                                             editingCell={editingCell}
-                                            setEditingCell={setEditingCell}
+                                            setEditingCell={startEditingCell}
                                             editValue={editValue}
                                             setEditValue={setEditValue}
                                             handleEditSave={handleEditSave}

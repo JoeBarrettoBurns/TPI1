@@ -118,4 +118,15 @@ describe('auditCounts', () => {
         const result = auditCounts([], [log]);
         expect(result.ok).toBe(true);
     });
+
+    // A live sheet a log edit returned to stock used to be skipped by BOTH the raw
+    // recount and the display recount, so the auditor reported "verified" while the
+    // dashboard counted a sheet the Incoming Stock Log never showed.
+    test('counts a live sheet that a log edit returned to stock', () => {
+        const returned = makeSheet({ job: 'MODIFICATION: ADD', supplier: 'Manual Edit', returnedByLogEdit: true });
+        const result = auditCounts([makeSheet(), returned], []);
+
+        expect(result.ok).toBe(true);
+        expect(result.stats.sheetsChecked).toBe(2);
+    });
 });

@@ -1,4 +1,5 @@
 import { STANDARD_LENGTHS } from '../constants/materials';
+import { localDateInputValue, startOfDayIso } from './dates';
 import type { Sheet, UsageLog, MaterialsMap } from '../types';
 
 /**
@@ -9,6 +10,42 @@ import type { Sheet, UsageLog, MaterialsMap } from '../types';
  */
 type SheetLike = Record<string, any>;
 type LogLike = Record<string, any>;
+
+/**
+ * Day bucket an incoming order is grouped under, as a LOCAL calendar date.
+ *
+ * Sheets are stamped with a full ISO timestamp, but editing an order re-stamps
+ * it to local midnight (`startOfDayIso`). Grouping on the raw UTC date part
+ * therefore moved an edited order into a different bucket than the used-sheet
+ * snapshots it left behind. Both the Incoming Stock Log and the per-material
+ * timeline use this so an order stays one row across an edit.
+ */
+export const orderDayKey = (createdAt: unknown): string => {
+    if (!createdAt) return 'unknown-date';
+    return localDateInputValue(createdAt as any) || 'unknown-date';
+};
+
+/**
+ * The `createdAt` an order's sheets should carry after an add or an edit.
+ *
+ * Saving an edit deletes and recreates the order's live sheets. Re-stamping them
+ * to local midnight moved them into a different timeline bucket than the used
+ * sheets the order had already given up, so one order rendered as two rows. When
+ * the user did not actually change the order date, the ORIGINAL timestamp is
+ * kept; a genuinely changed date still moves the order to that day's start.
+ */
+export const resolveOrderCreatedAt = (
+    formDate: unknown,
+    { isEditing = false, originalCreatedAt = null as unknown }: { isEditing?: boolean; originalCreatedAt?: unknown } = {}
+): string | null => {
+    if (!formDate) {
+        return isEditing ? ((originalCreatedAt as string) || null) : new Date().toISOString();
+    }
+    if (isEditing && originalCreatedAt && startOfDayIso(originalCreatedAt as any) === startOfDayIso(formDate as any)) {
+        return originalCreatedAt as string;
+    }
+    return startOfDayIso(formDate as any);
+};
 
 export const getGaugeFromMaterial = (materialType: string | null | undefined): number | null => {
     if (!materialType) return null;
@@ -134,6 +171,10 @@ export const calculateMaterialTransactions = (materialTypes: string[], inventory
             if (item.materialType !== matType) return;
             if (skipInventoryItemInMaterialTimeline(item)) return;
 
+            // Keyed on the exact timestamp so two separate orders placed the same
+            // day stay separate rows. Editing an order must therefore preserve its
+            // original createdAt (see resolveOrderCreatedAt) or the surviving live
+            // sheets split away from the used snapshots they left behind.
             const key = `${item.createdAt}-${item.job || 'stock'}-${item.supplier}`;
             if (!groupedInventory[key]) {
                 groupedInventory[key] = {
@@ -202,7 +243,14 @@ export const calculateMaterialTransactions = (materialTypes: string[], inventory
             });
 
         const groupedUsage: Record<string, any> = {};
-        (usageLog || []).filter(log => Array.isArray(log.details) && log.details.some(d => d.materialType === matType)).forEach(log => {
+        (usageLog || []).filter(log => {
+            // Only live logs move stock. Retired ones (`Archived`, or `Voided` via a
+            // ledger void amendment) are ignored everywhere else — without this they
+            // kept subtracting from the per-material timeline alone.
+            const status = log.status || 'Completed';
+            if (status !== 'Completed' && status !== 'Scheduled') return false;
+            return Array.isArray(log.details) && log.details.some(d => d.materialType === matType);
+        }).forEach(log => {
             const isModification = (log.job || '').startsWith('MODIFICATION');
             if (isModification && log.qty >= 0) return;
 
@@ -250,7 +298,11 @@ export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] 
     const grouped: Record<string, any> = {};
 
     const getGroupKey = (item: SheetLike) => {
-        const createdDate = item.createdAt ? item.createdAt.split('T')[0] : 'unknown-date';
+        // LOCAL calendar date, not the UTC date embedded in the ISO string. Order
+        // dates are entered and re-saved as local days (startOfDayIso), so keying
+        // on `createdAt.split('T')[0]` split an order entered after ~8pm local into
+        // two rows the moment it was edited.
+        const createdDate = orderDayKey(item.createdAt);
         if ((item.job || '').startsWith('MODIFICATION')) {
             const editSessionKey = item.manualEditSessionId || createdDate;
             return `${item.job}|${editSessionKey}`;
@@ -333,8 +385,11 @@ export const groupInventoryByJob = (inventory: SheetLike[], usageLog: LogLike[] 
         pushUniqueDetail(group.displayDetails, group._displayDetailIds, item);
     };
 
+    // Every LIVE sheet is shown, including one a log edit returned to stock
+    // (`returnedByLogEdit`). It is real stock that the dashboard already counts,
+    // so hiding it here made the Incoming Stock Log show fewer sheets than are
+    // on hand. Only the stale SNAPSHOT of such a sheet is skipped further below.
     inventory.forEach(item => {
-        if ((item.job || '').startsWith('MODIFICATION') && item.returnedByLogEdit) return;
         addInventoryItemToGroup(item);
     });
 

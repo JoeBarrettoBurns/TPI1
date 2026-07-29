@@ -169,32 +169,44 @@ export function useOrderForm(initialData: any, materialTypes: string[], supplier
         setJobs([createNewJob()]);
     }, [createNewJob]);
 
+    // These copy the job/item being changed rather than mutating it in place. The
+    // previous versions shallow-copied only the outer array and then wrote through
+    // to objects still referenced by the current state, so React could render a
+    // half-updated form (and any memoised child would miss the change entirely).
     const setJobField = (jobIndex: number, field: string, value: any) => {
-        const newJobs = [...jobs];
-        (newJobs[jobIndex] as any)[field] = value;
-        setJobs(newJobs);
+        setJobs((current) => current.map((job, index) =>
+            index === jobIndex ? { ...job, [field]: value } : job
+        ));
     };
 
     const setItemField = (jobIndex: number, itemIndex: number, field: string, value: any) => {
-        const newJobs = [...jobs];
-        newJobs[jobIndex].items[itemIndex][field] = value;
-        setJobs(newJobs);
+        setJobs((current) => current.map((job, index) => {
+            if (index !== jobIndex) return job;
+            return {
+                ...job,
+                items: job.items.map((item: any, i: number) =>
+                    i === itemIndex ? { ...item, [field]: value } : item
+                ),
+            };
+        }));
     };
 
     const addJob = () => setJobs([...jobs, createNewJob()]);
     const removeJob = (jobIndex: number) => setJobs(jobs.filter((_, i) => i !== jobIndex));
 
     const addMaterial = (jobIndex: number) => {
-        const newJobs = [...jobs];
-        const defaultArrivalDate = newJobs[jobIndex].items[0]?.arrivalDate || newJobs[jobIndex].arrivalDate || '';
-        newJobs[jobIndex].items.push(createNewItem(null, {}, defaultArrivalDate));
-        setJobs(newJobs);
+        setJobs((current) => current.map((job, index) => {
+            if (index !== jobIndex) return job;
+            const defaultArrivalDate = job.items[0]?.arrivalDate || job.arrivalDate || '';
+            return { ...job, items: [...job.items, createNewItem(null, {}, defaultArrivalDate)] };
+        }));
     };
 
     const removeMaterial = (jobIndex: number, itemIndex: number) => {
-        const newJobs = [...jobs];
-        newJobs[jobIndex].items.splice(itemIndex, 1);
-        setJobs(newJobs);
+        setJobs((current) => current.map((job, index) => {
+            if (index !== jobIndex) return job;
+            return { ...job, items: job.items.filter((_: any, i: number) => i !== itemIndex) };
+        }));
     };
 
     return { jobs, setJobs, setJobField, setItemField, addJob, removeJob, addMaterial, removeMaterial, resetForm };

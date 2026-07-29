@@ -15,11 +15,20 @@ import {
     calculateScheduledOutgoingSummary,
     formatUseStockJobLabel,
     getGaugeFromMaterial,
-    groupLogsByJob
+    groupLogsByJob,
+    resolveOrderCreatedAt
 } from './utils/dataProcessing';
 import { STANDARD_LENGTHS } from './constants/materials';
 import { buildBuyOrderEmailBody, createSupplierMailtoLink } from './utils/buyOrderUtils';
 import { repairCountIssues } from './utils/countRepair';
+import { commitOptimistically } from './utils/optimisticCommit';
+import {
+    StockConflictError,
+    reserveOnHandSheets,
+    planSheetRequirement,
+    countRequirementsByKey,
+    type SheetRequirement,
+} from './utils/stockClaim';
 import { buildMaterialIndicatorSettingsMap, normalizeCategoryIndicatorSettings } from './utils/categoryIndicatorSettings';
 import { localDateInputValue, parseLocalDate, startOfDayIso, endOfDayIso } from './utils/dates';
 import { AI_ASSISTANT_ENABLED } from './constants/featureFlags';
@@ -97,62 +106,6 @@ function triggerMailto(mailto: any) {
     link.remove();
 }
 
-/** Thrown when stock changed between the in-memory snapshot and the transactional write. */
-class StockConflictError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = 'StockConflictError';
-    }
-}
-
-/**
- * Atomically reserve On Hand sheets inside a Firestore transaction.
- *
- * Sheets are pre-selected FIFO from the in-memory snapshot (the caller supplies
- * `candidateIds`, ideally a few more than `qty` as a buffer). This re-reads each
- * candidate inside the transaction and returns, per requirement, the first `qty`
- * that are STILL `On Hand` and not already chosen in this transaction — so two
- * clients can never consume the same physical sheet. It only READS, so it must be
- * called before any `tx` writes (Firestore requires all reads before writes).
- *
- * Throws {@link StockConflictError} when a requirement can no longer be satisfied
- * (candidates were consumed elsewhere since the snapshot was taken).
- */
-async function reserveOnHandSheets(
-    tx: any,
-    inventoryCollectionRef: any,
-    requirements: Array<{ materialType: string; length: number; qty: number; candidateIds: string[] }>
-): Promise<any[][]> {
-    const uniqueIds = Array.from(new Set(requirements.flatMap((r) => r.candidateIds)));
-    const snaps = await Promise.all(uniqueIds.map((id) => tx.get(doc(inventoryCollectionRef, id))));
-    const dataById = new Map<string, any>();
-    snaps.forEach((snap: any, i: number) => {
-        dataById.set(uniqueIds[i], snap.exists() ? { id: snap.id, ...snap.data() } : null);
-    });
-
-    const claimedInTxn = new Set<string>();
-    const picksPerRequirement: any[][] = [];
-    for (const req of requirements) {
-        const picked: any[] = [];
-        for (const id of req.candidateIds) {
-            if (picked.length === req.qty) break;
-            if (claimedInTxn.has(id)) continue;
-            const data = dataById.get(id);
-            if (data && data.status === 'On Hand') {
-                claimedInTxn.add(id);
-                picked.push(data);
-            }
-        }
-        if (picked.length < req.qty) {
-            throw new StockConflictError(
-                `Stock for ${req.materialType} @ ${req.length}" changed before it could be saved (needed ${req.qty}, only ${picked.length} still available). Please refresh and try again.`
-            );
-        }
-        picksPerRequirement.push(picked);
-    }
-    return picksPerRequirement;
-}
-
 export default function App() {
     useEffect(() => {
         try {
@@ -185,6 +138,7 @@ export default function App() {
         inventorySummaryData,
         incomingSummaryData,
         inventoryReady,
+        inventoryIsLive,
         loading,
         error,
         userId,
@@ -198,6 +152,34 @@ export default function App() {
 
     /** Audit identity stamped on log/inventory writes — the signed-in account. */
     const auditActor = () => authUser?.email || authUser?.displayName || 'Unknown';
+
+    /**
+     * A write that reached the local cache but never made it to the server. The
+     * UI already moved on, so this banner is the only way the user finds out.
+     */
+    const [syncError, setSyncError] = useState('');
+
+    /**
+     * Commit a batch without blocking the UI on the server round trip.
+     *
+     * Firestore's offline cache applies the write immediately, so waiting for the
+     * server acknowledgement only made submit buttons hang while the data was
+     * already saved. Stock-consuming paths deliberately do NOT use this — they run
+     * in transactions and must wait for a real result.
+     */
+    const commitBatch = useCallback(
+        (batch: any, label: string) =>
+            commitOptimistically(() => batch.commit(), {
+                label,
+                onSyncError: (err: any, failedLabel: string) => {
+                    console.error(`Sync failed for ${failedLabel}:`, err);
+                    setSyncError(
+                        `Your ${failedLabel} was saved on this device but could not reach the server${err?.message ? ` (${err.message})` : ''}. It will retry automatically — keep this tab open and check your connection.`
+                    );
+                },
+            }),
+        []
+    );
 
     const { suppliers, setSuppliers, supplierInfo, setSupplierInfo } = useSuppliersSync(userId);
 
@@ -489,9 +471,9 @@ export default function App() {
             });
         });
 
-        await batch.commit();
+        await commitBatch(batch, 'buy order clear-out');
         returnToAddStockList();
-    }, [openBuyOrders, returnToAddStockList]);
+    }, [openBuyOrders, returnToAddStockList, commitBatch]);
 
     const handleDeleteBuyOrder = useCallback((buyOrder: any) => {
         if (!buyOrder?.id) {
@@ -511,8 +493,13 @@ export default function App() {
                 workflowStatus: 'cleared',
                 clearedAt: new Date().toISOString(),
             });
-        } catch (err) {
+        } catch (err: any) {
+            // This used to fail silently and still send the user back to the list,
+            // where the order was still sitting there with no explanation.
             console.error('Failed to remove buy order:', err);
+            setSyncError(
+                `That buy order could not be removed${err?.message ? ` (${err.message})` : ''}. It is still in the list — please try again.`
+            );
         }
         returnToAddStockList();
     }, [modal.data, returnToAddStockList]);
@@ -650,38 +637,27 @@ export default function App() {
                     batch.set(logDocRef, logEntry);
                 }
             }
-            await batch.commit();
+            await commitBatch(batch, 'scheduled use');
             return;
         }
 
         // Use Now: select FIFO from the in-memory snapshot, then CLAIM in a transaction
         // that re-reads each sheet and verifies it is still On Hand — so two clients (or
         // tabs) can never consume the same physical sheet. `allocatedSnapshotIds` keeps a
-        // submission's own items from picking the same sheet twice; the extra candidates
-        // (qty + buffer) let the transaction self-heal when a few snapshot sheets were
-        // taken since the last refresh.
-        const CLAIM_CANDIDATE_BUFFER = 5;
+        // submission's own items from picking the same sheet twice.
         const allocatedSnapshotIds = new Set<string>();
         const jobPlans = jobs
             .map((job: any) => {
-                const requirements: Array<{ materialType: string; length: number; qty: number; candidateIds: string[] }> = [];
+                const requirements: SheetRequirement[] = [];
                 for (const item of job.items) {
                     for (const len of STANDARD_LENGTHS) {
                         const qty = parseInt(item[`qty${len}`] || '0', 10);
                         if (qty <= 0) continue;
-                        const matchingSheets = inventory
-                            .filter((i: any) => i.materialType === item.materialType && i.length === len && i.status === 'On Hand' && !allocatedSnapshotIds.has(i.id))
-                            .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-                        if (matchingSheets.length < qty) {
-                            throw new Error(`Not enough stock for ${qty}x ${item.materialType} @ ${len}". Only ${matchingSheets.length} available.`);
-                        }
-                        matchingSheets.slice(0, qty).forEach((s: any) => allocatedSnapshotIds.add(s.id));
-                        requirements.push({
-                            materialType: item.materialType,
-                            length: len,
-                            qty,
-                            candidateIds: matchingSheets.slice(0, qty + CLAIM_CANDIDATE_BUFFER).map((s: any) => s.id),
-                        });
+                        requirements.push(planSheetRequirement(
+                            inventory,
+                            { materialType: item.materialType, length: len, qty },
+                            allocatedSnapshotIds
+                        ));
                     }
                 }
                 return { job, logRef: doc(usageLogCollectionRef), requirements };
@@ -740,34 +716,11 @@ export default function App() {
             const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
             const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, logToFulfill.id);
 
-            const itemsNeeded: Record<string, number> = (logToFulfill.details || []).reduce((acc: Record<string, number>, item: any) => {
-                const key = `${item.materialType}|${item.length}`;
-                acc[key] = (acc[key] || 0) + 1;
-                return acc;
-            }, {});
-
             // Select FIFO from the in-memory snapshot (plus a buffer); the actual claim
             // re-verifies each sheet inside the transaction.
-            const CLAIM_CANDIDATE_BUFFER = 5;
             const allocatedSnapshotIds = new Set<string>();
-            const requirements: Array<{ materialType: string; length: number; qty: number; candidateIds: string[] }> = [];
-            for (const [key, qty] of Object.entries(itemsNeeded)) {
-                const [materialType, lengthStr] = key.split('|');
-                const length = parseInt(lengthStr, 10);
-                const availableSheets = inventory
-                    .filter((i: any) => i.materialType === materialType && i.length === length && i.status === 'On Hand' && !allocatedSnapshotIds.has(i.id))
-                    .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-                if (availableSheets.length < qty) {
-                    throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
-                }
-                availableSheets.slice(0, qty).forEach((s: any) => allocatedSnapshotIds.add(s.id));
-                requirements.push({
-                    materialType,
-                    length,
-                    qty,
-                    candidateIds: availableSheets.slice(0, qty + CLAIM_CANDIDATE_BUFFER).map((s: any) => s.id),
-                });
-            }
+            const requirements = countRequirementsByKey(logToFulfill.details || [])
+                .map((need) => planSheetRequirement(inventory, need, allocatedSnapshotIds));
 
             const nowIso = new Date().toISOString();
             await runTransaction(db, async (tx: any) => {
@@ -1018,7 +971,10 @@ export default function App() {
                     gauge: getGaugeFromMaterial(item.materialType),
                     supplier: job.supplier,
                     costPerPound: parseFloat(item.costPerPound || 0),
-                    createdAt: (job.createdAt ? startOfDayIso(job.createdAt) : (isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : new Date().toISOString())),
+                    createdAt: resolveOrderCreatedAt(job.createdAt, {
+                        isEditing,
+                        originalCreatedAt: isEditing ? (originalOrderGroup.date || originalOrderGroup.dateOrdered) : null,
+                    }),
                     job: jobName,
                     status: job.status,
                     // Incoming stock becomes available at the START of its arrival day.
@@ -1054,7 +1010,7 @@ export default function App() {
             });
         }
 
-        await batch.commit();
+        await commitBatch(batch, 'stock order');
     };
 
     const handleSubmitBuyOrder = useCallback(async (jobs: any) => {
@@ -1137,7 +1093,7 @@ export default function App() {
         sourceLogIds.forEach((logId: any) => {
             batch.delete(doc(db, `artifacts/${appId}/public/data/usage_logs`, logId));
         });
-        await batch.commit();
+        await commitBatch(batch, 'order deletion');
     };
 
     const handleDeleteLog = async (logId: any) => {
@@ -1169,7 +1125,7 @@ export default function App() {
         }
 
         batch.delete(logDocRef);
-        await batch.commit();
+        await commitBatch(batch, 'log deletion');
     };
 
     const handleReceiveOrder = async (orderGroup: any) => {
@@ -1189,11 +1145,23 @@ export default function App() {
                 });
             }
         });
-        await batch.commit();
+        await commitBatch(batch, 'order receipt');
     };
 
     const handleStockEdit = async (materialType: any, length: any, newQuantity: any) => {
-        const currentQuantity = inventorySummary[materialType]?.[length] || 0;
+        // A manual edit is a DELTA against the current count, so it must never be
+        // computed from `inventorySummary` — that can still be the sessionStorage
+        // seed (up to 10 minutes old) before the listeners report, which would add
+        // or remove the wrong number of sheets.
+        if (!inventoryIsLive) {
+            throw new Error('Stock data is still loading. Wait a moment and try again.');
+        }
+
+        const currentQuantity = inventory.filter((item: any) =>
+            item.materialType === materialType &&
+            item.length === length &&
+            item.status === 'On Hand'
+        ).length;
         const diff = newQuantity - currentQuantity;
 
         if (diff === 0) return;
@@ -1226,32 +1194,14 @@ export default function App() {
                 const newDocRef = doc(inventoryCollectionRef);
                 batch.set(newDocRef, stockData);
             }
-            await batch.commit();
+            await commitBatch(batch, 'stock addition');
             return;
         }
 
         // diff < 0: claim the sheets to remove transactionally, re-verifying each is
         // still On Hand so a manual edit can never consume a sheet another client just used.
         const sheetsToRemove = Math.abs(diff);
-        const CLAIM_CANDIDATE_BUFFER = 5;
-        const candidates = inventory
-            .filter((item: any) =>
-                item.materialType === materialType &&
-                item.length === length &&
-                item.status === 'On Hand'
-            )
-            .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-        if (candidates.length < sheetsToRemove) {
-            throw new Error(`Cannot remove ${sheetsToRemove} sheets. Only ${candidates.length} available.`);
-        }
-
-        const removeRequirement = {
-            materialType,
-            length,
-            qty: sheetsToRemove,
-            candidateIds: candidates.slice(0, sheetsToRemove + CLAIM_CANDIDATE_BUFFER).map((s: any) => s.id),
-        };
+        const removeRequirement = planSheetRequirement(inventory, { materialType, length, qty: sheetsToRemove });
         const logDocRef = doc(usageLogCollectionRef);
         await runTransaction(db, async (tx: any) => {
             const [reservedSheets] = await reserveOnHandSheets(tx, inventoryCollectionRef, [removeRequirement]);
@@ -1318,53 +1268,46 @@ export default function App() {
             // If the scheduled date is fully in the past, fulfill immediately.
             if (dueNow) {
                 const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
-                const batch = writeBatch(db);
 
-                // Determine items needed by type/length
-                const itemsNeeded: Record<string, number> = newDetails.reduce((acc: Record<string, number>, d: any) => {
-                    const key = `${d.materialType}|${d.length}`;
-                    acc[key] = (acc[key] || 0) + 1;
-                    return acc;
-                }, {});
+                // Plan FIFO from the snapshot, then claim transactionally — same
+                // guarantee as Use Now and manual fulfilment, so rescheduling a use
+                // into the past can never consume a sheet another client just took.
+                const allocatedSnapshotIds = new Set<string>();
+                const requirements = countRequirementsByKey(newDetails)
+                    .map((need) => planSheetRequirement(inventory, need, allocatedSnapshotIds));
 
-                const selectedSheets = [];
-                for (const [key, qty] of Object.entries(itemsNeeded)) {
-                    const [materialType, lengthStr] = key.split('|');
-                    const length = parseInt(lengthStr, 10);
-                    const availableSheets = inventory
-                        .filter(i => i.materialType === materialType && i.length === length && i.status === 'On Hand')
-                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-                    if (availableSheets.length < qty) {
-                        throw new Error(`Cannot fulfill: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`);
-                    }
-                    selectedSheets.push(...availableSheets.slice(0, qty));
-                }
-
-                // Store the concrete sheet snapshots so the inventory timeline can keep the original add counts.
                 const usedAtIso = new Date().toISOString();
-                for (const sheet of selectedSheets) {
-                    batch.update(doc(inventoryCollectionRef, sheet.id), {
-                        status: 'Used',
-                        usageLogId: latestLog.id,
-                        jobNameUsed: newLogData.jobName.trim() || 'N/A',
-                        customerUsed: newLogData.customer,
+                await runTransaction(db, async (tx: any) => {
+                    const freshLog = await tx.get(logDocRef);
+                    if (!freshLog.exists() || (freshLog.data().status || 'Completed') !== 'Scheduled') {
+                        throw new StockConflictError('This scheduled order was already fulfilled or changed elsewhere. Reload and try again.');
+                    }
+
+                    const selectedSheets = (await reserveOnHandSheets(tx, inventoryCollectionRef, requirements)).flat();
+
+                    for (const sheet of selectedSheets) {
+                        tx.update(doc(inventoryCollectionRef, sheet.id), {
+                            status: 'Used',
+                            usageLogId: latestLog.id,
+                            jobNameUsed: newLogData.jobName.trim() || 'N/A',
+                            customerUsed: newLogData.customer,
+                            usedAt: usedAtIso,
+                        });
+                    }
+
+                    // Store the concrete sheet snapshots so the inventory timeline can keep the original add counts.
+                    tx.update(logDocRef, {
+                        job: newLogData.jobName.trim() || 'N/A',
+                        customer: newLogData.customer,
+                        status: 'Completed',
+                        details: selectedSheets.map((s: any) => ({ ...s, status: 'Used' })),
+                        qty: -selectedSheets.length,
                         usedAt: usedAtIso,
+                        fulfilledAt: usedAtIso,
+                        lastEditedBy: auditActor(),
+                        lastEditedAt: usedAtIso,
                     });
-                }
-
-                batch.update(logDocRef, {
-                    job: newLogData.jobName.trim() || 'N/A',
-                    customer: newLogData.customer,
-                    status: 'Completed',
-                    details: selectedSheets.map(s => ({ ...s, status: 'Used' })),
-                    qty: -selectedSheets.length,
-                    usedAt: usedAtIso,
-                    fulfilledAt: usedAtIso,
-                    lastEditedBy: auditActor(),
-                    lastEditedAt: usedAtIso,
                 });
-
-                await batch.commit();
             } else {
                 // Save as scheduled at end-of-day. Use a transaction so the new date
                 // can't be silently lost to a concurrent auto-fulfill: if the log was
@@ -1481,45 +1424,15 @@ export default function App() {
                     lastEditedAt: nowIso,
                 });
 
-                await batch.commit();
+                await commitBatch(batch, 'log reschedule');
                 return;
             }
 
             const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
 
-                const netChange: Record<string, number> = {};
-                (latestLog.details || []).forEach((item: any) => {
-                    const key = `${item.materialType}|${item.length}`;
-                    netChange[key] = (netChange[key] || 0) + 1;
-                });
-                newLogData.items.forEach((item: any) => {
-                    STANDARD_LENGTHS.forEach(len => {
-                        const qty = parseInt(item[`qty${len}`] || 0, 10);
-                        if (qty > 0) {
-                            const key = `${item.materialType}|${len}`;
-                            netChange[key] = (netChange[key] || 0) - qty;
-                        }
-                    });
-                });
-
-                for (const key in netChange) {
-                    if (netChange[key] < 0) {
-                        const [materialType, lengthStr] = key.split('|');
-                        const length = parseInt(lengthStr, 10);
-                        const needed = Math.abs(netChange[key]);
-
-                        const currentStock = inventory.filter(i =>
-                            i.materialType === materialType &&
-                            i.length === length &&
-                            i.status === 'On Hand'
-                        ).length;
-
-                        if (currentStock < needed) {
-                            throw new Error(`Not enough stock for ${materialType} @ ${length}". Needed: ${needed}, Available: ${currentStock}.`);
-                        }
-                    }
-                }
-
+                // Availability is checked once, by planSheetRequirement below — it is the
+                // single source of truth for "is there enough stock" across every path,
+                // and unlike a separate pre-check it cannot drift from what is claimed.
                 const originalDetails = (latestLog.details || []).filter((d: any) => d.id);
                 const originalItemIds = originalDetails.map((d: any) => d.id);
                 const originalItemsByKey: Record<string, any[]> = {};
@@ -1558,41 +1471,24 @@ export default function App() {
                     details.slice(keepCount).forEach((detail: any) => returnDetailIds.add(detail.id));
                 });
 
-                const keptOriginalRefs = keptOriginalDetails.map(detail => doc(inventoryCollectionRef, detail.id));
-                const returnRefs = Array.from(returnDetailIds).map(id => doc(inventoryCollectionRef, id));
-
-                // Only allocate additional stock for the deficit after reusing matching sheets already on this log.
-                const plannedNewRefs: any[] = [];
+                // Only allocate additional stock for the deficit after reusing matching
+                // sheets already on this log. Sheets already on the log are excluded from
+                // the candidates — they are being kept, not claimed afresh.
+                const originalItemIdSet = new Set(originalItemIds);
+                const allocatedSnapshotIds = new Set<string>(originalItemIds);
+                const requirements: SheetRequirement[] = [];
                 Object.entries<any>(desiredCounts).forEach(([key, desiredQty]) => {
                     const keptCount = keptOriginalDetails.filter(detail => `${detail.materialType}|${detail.length}` === key).length;
                     const neededQty = desiredQty - keptCount;
                     if (neededQty <= 0) return;
 
                     const [materialType, lengthStr] = key.split('|');
-                    const len = parseInt(lengthStr, 10);
-                    const matchingSheets = inventory
-                        .filter(i => i.materialType === materialType && i.length === len && i.status === 'On Hand' && !originalItemIds.includes(i.id))
-                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-                    const sheetsToUse = matchingSheets.slice(0, neededQty);
-                    if (sheetsToUse.length < neededQty) {
-                        throw new Error(`Concurrency Error: Not enough stock for ${materialType} @ ${len}" during edit.`);
-                    }
-                    sheetsToUse.forEach(sheet => plannedNewRefs.push(doc(inventoryCollectionRef, sheet.id)));
+                    requirements.push(planSheetRequirement(
+                        inventory,
+                        { materialType, length: parseInt(lengthStr, 10), qty: neededQty },
+                        allocatedSnapshotIds
+                    ));
                 });
-
-                const batch = writeBatch(db);
-                
-                const keptItemsForLog = keptOriginalDetails;
-                const updatedUsedItemsForLog = [];
-                const validReturnRefs = returnRefs;
-
-                for (const r of plannedNewRefs) {
-                    const sheet = inventory.find(i => i.id === r.id);
-                    if (sheet) {
-                        updatedUsedItemsForLog.push({ ...sheet, id: r.id });
-                    }
-                }
 
                 const usedAtIso = newLogData.date
                     ? startOfDayIso(newLogData.date)
@@ -1606,39 +1502,59 @@ export default function App() {
                     returnedByLogEdit: null,
                 };
 
-                // WRITES: return extras, refresh kept items, then use newly allocated sheets
-                for (const r of validReturnRefs) {
-                    batch.update(r, {
-                        status: 'On Hand',
-                        usageLogId: null,
-                        jobNameUsed: null,
-                        customerUsed: null,
-                        usedAt: null,
-                        returnedByLogEdit: true,
+                // Transactional so the extra sheets this edit pulls in cannot be ones
+                // another client consumed in the meantime, and so a concurrent edit of
+                // the SAME log is detected instead of silently overwritten.
+                await runTransaction(db, async (tx: any) => {
+                    // READS FIRST (Firestore requires all reads before any write).
+                    const freshLogSnap = await tx.get(logDocRef);
+                    if (!freshLogSnap.exists()) {
+                        throw new StockConflictError('This log no longer exists. Reload and try again.');
+                    }
+                    const freshDetailIds = (freshLogSnap.data().details || [])
+                        .map((d: any) => d.id)
+                        .filter(Boolean);
+                    const sameSheets =
+                        freshDetailIds.length === originalItemIdSet.size &&
+                        freshDetailIds.every((id: string) => originalItemIdSet.has(id));
+                    if (!sameSheets) {
+                        throw new StockConflictError('This log was changed somewhere else while you were editing it. Reload and try again.');
+                    }
+
+                    const reservedSheets = (await reserveOnHandSheets(tx, inventoryCollectionRef, requirements)).flat();
+
+                    // WRITES: return extras, refresh kept items, then use newly allocated sheets
+                    returnDetailIds.forEach((id: any) => {
+                        tx.update(doc(inventoryCollectionRef, id), {
+                            status: 'On Hand',
+                            usageLogId: null,
+                            jobNameUsed: null,
+                            customerUsed: null,
+                            usedAt: null,
+                            returnedByLogEdit: true,
+                        });
                     });
-                }
 
-                for (const r of keptOriginalRefs) {
-                    batch.update(r, usageUpdate);
-                }
+                    keptOriginalDetails.forEach(detail => {
+                        tx.update(doc(inventoryCollectionRef, detail.id), usageUpdate);
+                    });
 
-                for (const r of plannedNewRefs) {
-                    batch.update(r, usageUpdate);
-                }
+                    reservedSheets.forEach((sheet: any) => {
+                        tx.update(doc(inventoryCollectionRef, sheet.id), usageUpdate);
+                    });
 
-                const finalUsedItemsForLog = [...keptItemsForLog, ...updatedUsedItemsForLog]
-                    .map(d => ({ ...d, status: 'Used' }));
-                batch.update(logDocRef, {
-                    job: newLogData.jobName,
-                    customer: newLogData.customer,
-                    details: finalUsedItemsForLog,
-                    qty: -finalUsedItemsForLog.length,
-                    usedAt: usedAtIso,
-                    lastEditedBy: auditActor(),
-                    lastEditedAt: new Date().toISOString(),
+                    const finalUsedItemsForLog = [...keptOriginalDetails, ...reservedSheets]
+                        .map(d => ({ ...d, status: 'Used' }));
+                    tx.update(logDocRef, {
+                        job: newLogData.jobName,
+                        customer: newLogData.customer,
+                        details: finalUsedItemsForLog,
+                        qty: -finalUsedItemsForLog.length,
+                        usedAt: usedAtIso,
+                        lastEditedBy: auditActor(),
+                        lastEditedAt: new Date().toISOString(),
+                    });
                 });
-                
-                await batch.commit();
         }
     };
 
@@ -1734,7 +1650,7 @@ export default function App() {
                     onRepairCountIssues={(issues: any) => repairCountIssues(db, appId, issues, usageLog, `Count Repair (${auditActor()})`)}
                 />;
             case 'price-history':
-                return <PriceHistoryView inventory={inventory} materials={materials} searchQuery={searchQuery} />;
+                return <PriceHistoryView inventory={inventory} usageLog={usageLog} materials={materials} searchQuery={searchQuery} />;
             case 'sheet-calculator':
                 return <SheetCostCalculatorView />;
             default:
@@ -1810,6 +1726,18 @@ export default function App() {
                     </div>
                 </div>
                 {error && <ErrorMessage message={error} />}
+                {syncError && (
+                    <div role="alert" className="mb-4 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                        <span className="flex-1">{syncError}</span>
+                        <button
+                            type="button"
+                            onClick={() => setSyncError('')}
+                            className="shrink-0 rounded px-2 py-0.5 font-semibold text-amber-200 hover:bg-amber-500/20"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                )}
 
                 {showLoading ? <LoadingSpinner /> : (
                     <Suspense fallback={<LoadingSpinner />}>

@@ -52,12 +52,19 @@ export const EditOutgoingLogModal = ({ isOpen, onClose, logEntry, onSave, invent
         }
     }, [logEntry]);
 
-    if (!isOpen) return null;
+    // `logEntry` is read unguarded below; without this a missing entry blanks the
+    // whole app instead of just not opening.
+    if (!isOpen || !logEntry) return null;
 
+    // Copy the item being changed instead of mutating it in place — the previous
+    // version wrote through to the object still held by the current state.
     const handleItemChange = (itemIndex: any, field: any, value: any) => {
-        const newItems = [...jobData.items];
-        newItems[itemIndex][field] = value;
-        setJobData((prev: any) => ({ ...prev, items: newItems }));
+        setJobData((prev: any) => ({
+            ...prev,
+            items: prev.items.map((item: any, index: number) =>
+                index === itemIndex ? { ...item, [field]: value } : item
+            ),
+        }));
     };
 
     const handleSubmit = async (e: any) => {

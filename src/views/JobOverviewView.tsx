@@ -164,20 +164,34 @@ function buildUsageWorkloadByJobKey(usageLog: any) {
     return map;
 }
 
-function buildJobEconomicsIndex(inventory: any, usageLog: any) {
+export function buildJobEconomicsIndex(inventory: any, usageLog: any) {
     return {
         inventoryByJob: buildInventoryByJobKey(inventory),
         usageByJob: buildUsageWorkloadByJobKey(usageLog),
     };
 }
 
-function buildJobEconomics(jobName: any, index: any, materials: any) {
+/**
+ * Per-job material/cost breakdown.
+ *
+ * A sheet ordered under PO `J5851` but consumed by section `J5851_EXT` is
+ * deliberately attributed to BOTH job names — each job's own card should show
+ * it. That double attribution must not survive a rollup across several jobs,
+ * so callers that sum multiple jobs pass a shared `seenSheetIds` set: a
+ * physical sheet is then counted by whichever job is visited first and skipped
+ * afterwards. Omit the set for a single job's view to keep both attributions.
+ */
+export function buildJobEconomics(jobName: any, index: any, materials: any, seenSheetIds?: Set<string>) {
     const mats = materials || {};
     const jobKey = (jobName || '').trim().toUpperCase();
     const map = new Map();
 
     const addSheet = (bucket: any, sheet: any) => {
         if (!sheet?.materialType) return;
+        if (seenSheetIds && sheet.id) {
+            if (seenSheetIds.has(sheet.id)) return;
+            seenSheetIds.add(sheet.id);
+        }
         const k = `${bucket}|${sheet.materialType}|${sheet.length}`;
         const prev = map.get(k) || { bucket, materialType: sheet.materialType, length: sheet.length, qty: 0, costSum: 0 };
         prev.qty += 1;
@@ -217,8 +231,9 @@ function buildJobEconomics(jobName: any, index: any, materials: any) {
 
 function rollupGroupEconomics(parts: any, index: any, materials: any) {
     let totalSheets = 0, totalCost = 0;
+    const seenSheetIds = new Set<string>();
     for (const j of parts) {
-        const e = buildJobEconomics(j.job, index, materials);
+        const e = buildJobEconomics(j.job, index, materials, seenSheetIds);
         totalSheets += e.totalSheets;
         totalCost += e.totalCost;
     }
@@ -230,10 +245,11 @@ function rollupGroupEconomics(parts: any, index: any, materials: any) {
  * material+length used across parts (e.g. INT + EXT) is counted up into a single
  * line. Same shape as buildJobEconomics so it renders through EconomicsMatrix.
  */
-function aggregateGroupEconomics(parts: any, index: any, materials: any) {
+export function aggregateGroupEconomics(parts: any, index: any, materials: any) {
     const map = new Map();
+    const seenSheetIds = new Set<string>();
     for (const j of parts) {
-        for (const g of buildJobEconomics(j.job, index, materials).groups) {
+        for (const g of buildJobEconomics(j.job, index, materials, seenSheetIds).groups) {
             const prev = map.get(g.key);
             if (prev) {
                 prev.qty += g.qty;
@@ -255,11 +271,12 @@ function aggregateGroupEconomics(parts: any, index: any, materials: any) {
     return { groups, totalSheets, totalCost };
 }
 
-function summarizeCustomerJobs(jobs: any, index: any, materials: any) {
+export function summarizeCustomerJobs(jobs: any, index: any, materials: any) {
     let totalSheets = 0, totalCost = 0, latestMs = 0, scheduled = 0;
     const masterKeys = new Set();
+    const seenSheetIds = new Set<string>();
     for (const job of jobs) {
-        const econ = buildJobEconomics(job.job, index, materials);
+        const econ = buildJobEconomics(job.job, index, materials, seenSheetIds);
         totalSheets += econ.totalSheets;
         totalCost += econ.totalCost;
         const t = new Date(job.date).getTime();

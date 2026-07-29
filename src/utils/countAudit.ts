@@ -124,8 +124,10 @@ export function auditCounts(inventory: any[], usageLog: any[]): CountAuditResult
         totals[key] = (totals[key] || 0) + 1;
     };
 
+    // Live sheets always count, even ones a log edit returned to stock — they are
+    // physically on hand and the dashboard counts them. `skipDetail` applies only
+    // to the stale used-snapshots below, mirroring groupInventoryByJob.
     liveInventory.forEach(item => {
-        if (skipDetail(item)) return;
         if (item.id) {
             if (countedIds.has(item.id)) return;
             countedIds.add(item.id);

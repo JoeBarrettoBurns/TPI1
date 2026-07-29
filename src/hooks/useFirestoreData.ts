@@ -11,8 +11,10 @@ import {
     getDoc,
     setDoc,
     writeBatch,
-    getDocs
+    getDocs,
+    runTransaction
 } from '../firebase/firestoreWithTracking';
+import { reserveOnHandSheets, planSheetRequirement, countRequirementsByKey } from '../utils/stockClaim';
 import { db, appId, auth, onAuthStateChanged, signInWithCustomToken, signOut } from '../firebase/config';
 import { STANDARD_LENGTHS } from '../constants/materials';
 import { localDateInputValue } from '../utils/dates';
@@ -59,6 +61,17 @@ function writeCachedAllowlist(emails: string[]) {
         localStorage.setItem(ALLOWLIST_CACHE_KEY, JSON.stringify(emails));
     } catch {
         // Ignore cache write failures
+    }
+}
+
+/**
+ * Aborts an auto-fulfil transaction when the log is no longer a Scheduled use that
+ * is due — a normal outcome (someone rescheduled or fulfilled it), not an error.
+ */
+class SkipFulfillment extends Error {
+    constructor() {
+        super('Scheduled log is no longer due');
+        this.name = 'SkipFulfillment';
     }
 }
 
@@ -236,6 +249,13 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
     const [inventorySummaryData, setInventorySummaryData] = useState<Record<string, any>>({});
     const [incomingSummaryData, setIncomingSummaryData] = useState<Record<string, any>>({});
     const [inventoryReady, setInventoryReady] = useState(false);
+    /**
+     * True only once BOTH inventory listeners have delivered a real snapshot.
+     * `inventoryReady` can be satisfied by the sessionStorage seed (up to 10
+     * minutes old), which is fine for painting but must never be the basis for a
+     * write that computes a delta against the current count.
+     */
+    const [inventoryIsLive, setInventoryIsLive] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [userId, setUserId] = useState<string | null>(null);
@@ -420,98 +440,83 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             (log: any) =>
                 log.status === 'Scheduled' &&
                 new Date(log.usedAt) <= now &&
+                Array.isArray(log.details) &&
+                log.details.length > 0 &&
                 !scheduledFulfillInFlightRef.current.has(log.id)
         );
 
         if (logsToFulfill.length === 0) return;
 
+        const inventoryCollectionRef = collection(db, `artifacts/${appId}/public/data/inventory`);
+
         for (const log of logsToFulfill) {
             scheduledFulfillInFlightRef.current.add(log.id);
-            // Sheets claimed by an earlier log in this pass (or a still-pending
-            // write from a previous pass) must not be selected again, or two
-            // logs would consume the same physical sheet.
+            // Sheets planned for an earlier log in this pass (or a still-pending write
+            // from a previous pass) must not be planned again. This only narrows the
+            // FIFO pick — the transaction below is what actually guarantees exclusivity.
             const claimedSheetIds = autoFulfillClaimedSheetIdsRef.current;
             const sheetIdsForThisLog: string[] = [];
             (async () => {
                 try {
-                    const batch = writeBatch(db);
-                    const itemsNeeded: Record<string, number> = log.details.reduce((acc: Record<string, number>, item: any) => {
-                        const key = `${item.materialType}|${item.length}`;
-                        acc[key] = (acc[key] || 0) + 1;
-                        return acc;
-                    }, {} as Record<string, number>);
-
-                    let canFulfill = true;
-                    const selectedSheets = [];
-
-                    for (const [key, qty] of Object.entries(itemsNeeded)) {
-                        const [materialType, lengthStr] = key.split('|');
-                        const length = parseInt(lengthStr, 10);
-
-                        const availableSheets = currentInventory
-                            .filter((i: any) => i.materialType === materialType && i.length === length && i.status === 'On Hand' && !claimedSheetIds.has(i.id))
-                            .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-                        if (availableSheets.length < qty) {
-                            canFulfill = false;
-                            console.warn(
-                                `Cannot fulfill scheduled log ${log.id}: Not enough stock for ${qty}x ${materialType} @ ${length}". Only ${availableSheets.length} available.`
-                            );
-                            break;
-                        }
-                        selectedSheets.push(...availableSheets.slice(0, qty));
-                    }
-
-                    if (!canFulfill) return;
-
-                    selectedSheets.forEach((s) => {
-                        claimedSheetIds.add(s.id);
-                        sheetIdsForThisLog.push(s.id);
+                    // Reservations are recorded as each requirement is planned, so a
+                    // later one running short still releases the earlier ones in
+                    // `finally` instead of pinning them for the rest of the session.
+                    const requirements = countRequirementsByKey(log.details).map((need) => {
+                        const requirement = planSheetRequirement(currentInventory, need, claimedSheetIds);
+                        requirement.reservedIds.forEach((id) => sheetIdsForThisLog.push(id));
+                        return requirement;
                     });
-
-                    const usedAtIso = now.toISOString();
-
-                    for (const s of selectedSheets) {
-                        const r = doc(db, `artifacts/${appId}/public/data/inventory`, s.id);
-                        batch.update(r, {
-                            status: 'Used',
-                            usageLogId: log.id,
-                            jobNameUsed: log.job || 'N/A',
-                            customerUsed: log.customer || 'N/A',
-                            usedAt: usedAtIso,
-                        });
-                    }
 
                     const logDocRef = doc(db, `artifacts/${appId}/public/data/usage_logs`, log.id);
-                    batch.update(logDocRef, {
-                        status: 'Completed',
-                        details: selectedSheets.map((s) => ({ ...s, status: 'Used' })),
-                        qty: -selectedSheets.length,
-                        fulfilledAt: usedAtIso,
-                        lastEditedBy: autoAuditActor(),
-                        lastEditedAt: usedAtIso,
-                    });
+                    const usedAtIso = now.toISOString();
 
-                    // Final freshness check before committing. The snapshot/usage ref
-                    // that triggered this pass can lag a just-saved reschedule, so a log
-                    // that was pushed to a future date (or already fulfilled) could still
-                    // look "due" here. Re-read the doc and bail if it's no longer a
-                    // Scheduled log that is due now — this is what stops a pushed-back
-                    // use from running on its old date.
-                    const freshSnap = await getDoc(logDocRef);
-                    const fresh = freshSnap.exists() ? freshSnap.data() : null;
-                    if (!fresh || fresh.status !== 'Scheduled' || new Date(fresh.usedAt) > now) {
+                    // Transactional claim. Previously this was a write batch, so two
+                    // clients running the auto-fulfiller at the same time could each
+                    // consume the same physical sheet. Re-reading every candidate inside
+                    // the transaction makes that impossible; the freshness check on the
+                    // log itself is what stops a pushed-back use firing on its old date.
+                    await runTransaction(db, async (tx: any) => {
+                        const freshSnap = await tx.get(logDocRef);
+                        const fresh = freshSnap.exists() ? freshSnap.data() : null;
+                        if (!fresh || fresh.status !== 'Scheduled' || new Date(fresh.usedAt) > now) {
+                            throw new SkipFulfillment();
+                        }
+
+                        const selectedSheets = (await reserveOnHandSheets(tx, inventoryCollectionRef, requirements)).flat();
+
+                        for (const s of selectedSheets) {
+                            tx.update(doc(inventoryCollectionRef, s.id), {
+                                status: 'Used',
+                                usageLogId: log.id,
+                                jobNameUsed: log.job || 'N/A',
+                                customerUsed: log.customer || 'N/A',
+                                usedAt: usedAtIso,
+                            });
+                        }
+
+                        tx.update(logDocRef, {
+                            status: 'Completed',
+                            details: selectedSheets.map((s: any) => ({ ...s, status: 'Used' })),
+                            qty: -selectedSheets.length,
+                            fulfilledAt: usedAtIso,
+                            lastEditedBy: autoAuditActor(),
+                            lastEditedAt: usedAtIso,
+                        });
+                    });
+                } catch (error: any) {
+                    // Not enough stock, or the log moved on — both are expected and get
+                    // retried on the next snapshot rather than surfaced to the user.
+                    if (error instanceof SkipFulfillment) return;
+                    if (error?.name === 'StockConflictError') {
+                        console.warn(`Cannot auto-fulfill scheduled log ${log.id} yet: ${error.message}`);
                         return;
                     }
-
-                    await batch.commit();
-                } catch (error) {
                     console.error(`Auto-fulfill failed for log ${log.id}:`, error);
                 } finally {
                     scheduledFulfillInFlightRef.current.delete(log.id);
-                    // Release claims once the write has settled — after a successful
-                    // commit the snapshot refresh excludes these sheets anyway, and
-                    // after a failure they are genuinely available again.
+                    // Release the planning reservation once the write has settled — after
+                    // a successful commit the snapshot refresh excludes these sheets
+                    // anyway, and after a failure they are genuinely available again.
                     sheetIdsForThisLog.forEach((id) => claimedSheetIds.delete(id));
                 }
             })();
@@ -710,6 +715,9 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
         const onHandRef: { current: any[] } = { current: [] };
         const orderedRef: { current: any[] } = { current: [] };
+        // Both queries must have reported before `inventory` is a complete picture.
+        let onHandDelivered = false;
+        let orderedDelivered = false;
 
         const loadInventoryFallback = async () => {
             const [onHandSnap, orderedSnap] = await Promise.all([
@@ -737,6 +745,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             handleAutoReceive(deduped);
             handleAutoFulfillScheduledUsage(usageLogDataRef.current, deduped);
             setInventoryReady(true);
+            setInventoryIsLive(true);
         };
 
         const mergeSnapshotsAndApply = () => {
@@ -758,6 +767,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             // scheduled fulfillment now that stock data exists.
             handleAutoFulfillScheduledUsage(usageLogDataRef.current, deduped);
             setInventoryReady(true);
+            if (onHandDelivered && orderedDelivered) setInventoryIsLive(true);
         };
 
         let snapshotErrorHandled = false;
@@ -786,6 +796,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             qOnHand,
             (snap: any) => {
                 onHandRef.current = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+                onHandDelivered = true;
                 mergeSnapshotsAndApply();
             },
             handleInventorySnapshotError
@@ -795,6 +806,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
             qOrdered,
             (snap: any) => {
                 orderedRef.current = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+                orderedDelivered = true;
                 mergeSnapshotsAndApply();
             },
             handleInventorySnapshotError
@@ -807,6 +819,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
 
         return () => {
             isActive = false;
+            setInventoryIsLive(false);
             if (inventoryUnsubRef.current) {
                 inventoryUnsubRef.current();
                 inventoryUnsubRef.current = null;
@@ -838,6 +851,7 @@ export function useFirestoreData({ loadInventoryDetails = true } = {}) {
         inventorySummaryData,
         incomingSummaryData,
         inventoryReady,
+        inventoryIsLive,
         loading,
         error,
         userId,

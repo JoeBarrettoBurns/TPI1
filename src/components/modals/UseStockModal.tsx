@@ -54,20 +54,20 @@ export const UseStockModal = ({ onClose, onSave, materialTypes, materials, inven
             onClose();
         } catch (err: any) {
             console.error('Transaction failed:', err);
-            setError(err.message || 'Failed to update stock.');
+            // `err` is not always an Error — reading `.message` off a bare rejection
+            // used to throw inside this handler, so the user saw nothing at all.
+            const message = typeof err?.message === 'string' ? err.message : '';
+            setError(message || 'Failed to update stock.');
 
-            const match = err.message.match(/for \d+x (.*?) @/);
-            if (match && match[1]) {
-                const materialType = match[1];
-                const incoming = incomingSummary[materialType];
-                if (incoming && incoming.totalCount > 0 && incoming.latestArrivalDate) {
-                    const arrivalDate = localDateInputValue(incoming.latestArrivalDate);
-                    setScheduleSuggestion({
-                        materialType: materialType,
-                        count: incoming.totalCount,
-                        date: arrivalDate
-                    });
-                }
+            const match = message.match(/for \d+x (.*?) @/);
+            const materialType = match?.[1];
+            const incoming = materialType ? incomingSummary?.[materialType] : null;
+            if (incoming?.totalCount > 0 && incoming.latestArrivalDate) {
+                setScheduleSuggestion({
+                    materialType,
+                    count: incoming.totalCount,
+                    date: localDateInputValue(incoming.latestArrivalDate),
+                });
             }
         } finally {
             setIsSubmitting(false);
