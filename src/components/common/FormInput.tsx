@@ -10,7 +10,9 @@ export const FormInput = ({ label, name, type = "text", value, onChange, require
         const element = inputRef.current;
         if (!element || element.disabled || element.readOnly) return;
         try {
-            if (navigator && navigator.userActivation && !navigator.userActivation.isActive) {
+            // UserActivation isn't in TS 4's bundled DOM lib (added in a later TypeScript release).
+            const nav = navigator as Navigator & { userActivation?: { isActive: boolean } };
+            if (nav && nav.userActivation && !nav.userActivation.isActive) {
                 element.focus();
                 return;
             }

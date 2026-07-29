@@ -1,7 +1,7 @@
 // src/views/PriceHistoryView.tsx
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Download, ChevronDown, Check } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Download } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { exportToCSV } from '../utils/csvExport';
 import { calculateSheetCost } from '../utils/dataProcessing';
@@ -109,123 +109,56 @@ export const PriceHistoryView = ({ inventory, materials, searchQuery }: any) => 
     };
 
 
-    // Lightweight custom select to have full control over menu size and styling
-    const CompactSelect = ({ value, onChange, options, allLabel = 'All', className = '' }: any) => {
-        const [isOpen, setIsOpen] = useState(false);
-        const [highlightIndex, setHighlightIndex] = useState(() => Math.max(0, options.indexOf(value)));
-        const containerRef = useRef<any>(null);
-
-        useEffect(() => {
-            const handleClickOutside = (event: any) => {
-                if (containerRef.current && !containerRef.current.contains(event.target)) {
-                    setIsOpen(false);
-                }
-            };
-            document.addEventListener('mousedown', handleClickOutside);
-            return () => document.removeEventListener('mousedown', handleClickOutside);
-        }, []);
-
-        useEffect(() => {
-            setHighlightIndex(Math.max(0, options.indexOf(value)));
-        }, [value, options]);
-
-        const getLabel = (opt: any) => (opt === 'All' ? allLabel : opt);
-
-        const handleKeyDown = (e: any) => {
-            if (!isOpen && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault();
-                setIsOpen(true);
-                return;
-            }
-            if (!isOpen) return;
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setHighlightIndex((prev) => Math.min(options.length - 1, prev + 1));
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setHighlightIndex((prev) => Math.max(0, prev - 1));
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                onChange(options[highlightIndex]);
-                setIsOpen(false);
-            } else if (e.key === 'Escape') {
-                setIsOpen(false);
-            }
-        };
-
-        return (
-            <div ref={containerRef} className={`relative ${className}`}>
-                <button
-                    type="button"
-                    aria-haspopup="listbox"
-                    aria-expanded={isOpen}
-                    onClick={() => setIsOpen((o) => !o)}
-                    onKeyDown={handleKeyDown}
-                    className="w-full bg-zinc-800 text-white border border-zinc-600 rounded-md px-3 py-1.5 text-sm flex items-center justify-between shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
-                >
-                    <span className="truncate">{getLabel(value)}</span>
-                    <ChevronDown className="w-4 h-4 text-zinc-300 ml-2" />
-                </button>
-
-                {isOpen && (
-                    <ul
-                        role="listbox"
-                        className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-zinc-700 bg-zinc-800 shadow-lg text-sm custom-scrollbar"
-                    >
-                        {options.map((opt: any, idx: any) => {
-                            const selected = opt === value;
-                            const highlighted = idx === highlightIndex;
-                            return (
-                                <li
-                                    key={opt}
-                                    role="option"
-                                    aria-selected={selected}
-                                    onMouseEnter={() => setHighlightIndex(idx)}
-                                    onMouseDown={(e) => {
-                                        // onMouseDown to prevent blur before click registers
-                                        e.preventDefault();
-                                        onChange(opt);
-                                        setIsOpen(false);
-                                    }}
-                                    className={`px-3 py-1.5 cursor-pointer flex items-center gap-2 ${highlighted ? 'bg-blue-800 text-white' : 'hover:bg-zinc-700/60'} ${selected ? 'font-semibold' : ''}`}
-                                >
-                                    {selected ? <Check className="w-4 h-4" /> : <span className="w-4 h-4" />}
-                                    <span className="truncate">{getLabel(opt)}</span>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </div>
-        );
-    };
-
     return (
         <div className="bg-zinc-800 rounded-lg shadow-lg p-4 md:p-6 border border-zinc-700">
-            <div className="mb-4">
-                <div className="flex flex-wrap items-center gap-3 bg-zinc-700/40 border border-zinc-600/40 rounded-md px-3 py-2">
-                    <h2 className="text-xl md:text-2xl font-bold text-white mr-3">Price History</h2>
-                    <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
-                        {/* Dropdown for narrowing to a category first... */}
-                        <CompactSelect
-                            value={selectedCategory}
-                            onChange={handleCategoryChange}
-                            options={categoriesForFilter}
-                            allLabel="All Categories"
-                            className="w-full sm:w-56 min-w-[180px]"
-                        />
-                        {/* ...then picking the specific material (thickness/gauge) within it */}
-                        <CompactSelect
-                            value={selectedMaterialType}
-                            onChange={setSelectedMaterialType}
-                            options={materialTypesForFilter}
-                            allLabel="All Materials"
-                            className="w-full sm:w-64 min-w-[200px]"
-                        />
-                        <Button onClick={handleExport} variant="secondary" className="shrink-0">
-                            <Download size={16} /> <span className="hidden sm:inline">Export</span>
-                        </Button>
-                    </div>
+            <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-xl md:text-2xl font-bold text-white">Price History</h2>
+                    <Button onClick={handleExport} variant="secondary" className="shrink-0">
+                        <Download size={16} /> <span className="hidden sm:inline">Export</span>
+                    </Button>
+                </div>
+
+                {/* Materials, as selectable buttons... */}
+                <div className="flex flex-wrap gap-2">
+                    {categoriesForFilter.map((category) => {
+                        const isActive = category === selectedCategory;
+                        return (
+                            <button
+                                key={category}
+                                type="button"
+                                onClick={() => handleCategoryChange(category)}
+                                className={`flex-1 min-w-[8rem] px-3 py-1.5 rounded-md text-sm font-semibold text-center transition-colors duration-200 ${
+                                    isActive
+                                        ? 'bg-blue-800/60 text-white'
+                                        : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/80 hover:text-white'
+                                }`}
+                            >
+                                {category === 'All' ? 'All Materials' : category}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* ...then the thicknesses of that material, as smaller buttons below */}
+                <div className="flex flex-wrap gap-1.5 pl-1">
+                    {materialTypesForFilter.map((type) => {
+                        const isActive = type === selectedMaterialType;
+                        return (
+                            <button
+                                key={type}
+                                type="button"
+                                onClick={() => setSelectedMaterialType(type)}
+                                className={`shrink-0 px-2.5 py-1 rounded text-xs font-medium transition-colors duration-200 ${
+                                    isActive
+                                        ? 'bg-purple-800/70 text-white'
+                                        : 'bg-zinc-700/30 text-zinc-400 hover:bg-zinc-600/60 hover:text-zinc-100'
+                                }`}
+                            >
+                                {type === 'All' ? 'All Thicknesses' : type}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
