@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { background:#18181b; padding:24px; font-family:sans-serif; }
+  /* container = overflow-x-auto mt-6 bg-zinc-800 rounded-xl border border-zinc-700 */
+  .cont { overflow-x:auto; margin-top:1.5rem; background:#27272a; border-radius:0.75rem; border:1px solid #3f3f46; max-width:760px; }
+  /* table = w-full text-center table-auto + preflight border-collapse:collapse */
+  table { width:100%; text-align:center; table-layout:auto; border-collapse:collapse; }
+  thead tr { background:rgba(24,24,27,.6); border-bottom:1px solid #3f3f46; }
+  th { padding:1rem 0.75rem; font-weight:600; color:#a1a1aa; }
+  th.left { text-align:left; }
+  /* data row = border-b border-zinc-700 */
+  tr.drow { border-bottom:1px solid #3f3f46; }
+  td { padding:0.5rem 0.75rem; vertical-align:top; }
+  td.date { color:#d4d4d8; white-space:nowrap; }
+  td.cust { color:#d4d4d8; }
+  td.mat  { text-align:left; color:#e4e4e7; font-weight:500; white-space:nowrap; }
+  td.qty  { color:#f87171; font-family:monospace; text-align:center; }
+  /* spacer = td p-0 > div h-3 (EMPTY, height 0.75rem = 12px) */
+  td.sp { padding:0; }
+  td.sp > div { height:0.75rem; }
+</style>
+</head>
+<body>
+<div class="cont">
+  <table>
+    <thead>
+      <tr>
+        <th>DATE</th><th>CUSTOMER</th><th class="left">MATERIAL</th><th>QTY</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr aria-hidden="true"><td colspan="99" class="sp"><div></div></td></tr>
+      <tr class="drow"><td class="date">06/12</td><td class="cust">Acme Co</td><td class="mat">2x2x14GA GALV</td><td class="qty">-8</td></tr>
+      <tr aria-hidden="true"><td colspan="99" class="sp"><div></div></td></tr>
+    </tbody>
+
+    <tbody>
+      <tr class="drow"><td class="date">06/14</td><td class="cust">Borg Ltd</td><td class="mat">3x3x12GA GALV</td><td class="qty">-4</td></tr>
+      <tr aria-hidden="true"><td colspan="99" class="sp"><div></div></td></tr>
+    </tbody>
+
+    <tbody>
+      <tr class="drow"><td class="date">06/16</td><td class="cust">Cyrus Inc</td><td class="mat">1.5x1.5x16GA</td><td class="qty">-2</td></tr>
+      <tr aria-hidden="true"><td colspan="99" class="sp"><div></div></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p style="color:#a1a1aa;margin-top:28px;font-size:13px">Does 12px of space appear below order 3's bottom border before the container's rounded edge?</p>
+</body>
+</html>

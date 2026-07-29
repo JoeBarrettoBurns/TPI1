@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gaptest",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve", "_gaptest", "-l", "4321"],
+      "port": 4321
+    },
+    {
+      "name": "app",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["cross-env", "PORT=3030", "BROWSER=none", "react-scripts", "start"],
+      "port": 3030
+    }
+  ]
+}
